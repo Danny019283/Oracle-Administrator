@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  oracle-db:
+    image: container-registry.oracle.com/database/express:21.3.0-xe
+    container_name: oracle21c
+    ports:
+      - "1521:1521"
+      - "5500:5500"
+    environment:
+      # Docker Compose reemplaza esto automáticamente con el valor del archivo .env
+      - ORACLE_PWD=${ORACLE_DATABASE_PASSWORD}
+      - ORACLE_CHARACTERSET=AL32UTF8
+    volumes:
+      - oracle_data:/opt/oracle/oradata
+    restart: always
+
+volumes:
+  oracle_data:
