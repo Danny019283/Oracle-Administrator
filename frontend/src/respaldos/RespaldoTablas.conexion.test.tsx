@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { RespaldoTablas } from './RespaldoTablas'
 
-const CREDENCIALES = { usuario: 'HR', password: 's3creta!', servicio: 'XEPDB1' }
+const TOKEN = 'tok-123'
 
 const respuesta = (cuerpo: unknown, status = 200) => ({
   ok: status < 400,
@@ -29,7 +29,7 @@ afterEach(() => {
 describe('backend que no responde', () => {
   it('sin respuesta alguna muestra el mensaje y el código ERR_CONEXION', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('Failed to fetch'))))
-    render(<RespaldoTablas credenciales={CREDENCIALES} />)
+    render(<RespaldoTablas token={TOKEN} />)
 
     const alerta = await screen.findByRole('alert')
 
@@ -39,7 +39,7 @@ describe('backend que no responde', () => {
 
   it.each([502, 503, 504])('si el proxy responde %i muestra ese código', async (codigo) => {
     vi.stubGlobal('fetch', vi.fn(async () => respuestaDelProxy(codigo)))
-    render(<RespaldoTablas credenciales={CREDENCIALES} />)
+    render(<RespaldoTablas token={TOKEN} />)
 
     const alerta = await screen.findByRole('alert')
 
@@ -50,7 +50,7 @@ describe('backend que no responde', () => {
 
   it('el aviso es uno solo aunque fallen la carga de tablas y la de directorios', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('Failed to fetch'))))
-    render(<RespaldoTablas credenciales={CREDENCIALES} />)
+    render(<RespaldoTablas token={TOKEN} />)
 
     const alerta = await screen.findByRole('alert')
 
@@ -66,7 +66,7 @@ describe('backend que no responde', () => {
         return respuesta({ directorios: [{ nombre: 'RESPALDO', ruta: '/opt/oracle/Respaldos' }] })
       }),
     )
-    render(<RespaldoTablas credenciales={CREDENCIALES} />)
+    render(<RespaldoTablas token={TOKEN} />)
     await screen.findByRole('option', { name: /RESPALDO/ })
 
     fireEvent.click(screen.getByRole('button', { name: 'Respaldar' }))
@@ -86,7 +86,7 @@ describe('backend que no responde', () => {
         return respuesta({ directorios: [{ nombre: 'RESPALDO', ruta: '/opt/oracle/Respaldos' }] })
       }),
     )
-    render(<RespaldoTablas credenciales={CREDENCIALES} />)
+    render(<RespaldoTablas token={TOKEN} />)
     await screen.findByRole('option', { name: /RESPALDO/ })
 
     fireEvent.click(screen.getByRole('button', { name: 'Respaldar' }))

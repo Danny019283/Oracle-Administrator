@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { avisoDeConexion, cabeceras, ErrorConexion, pedir, type Credenciales } from './api'
+import { avisoDeConexion, cabeceras, ErrorConexion, pedir } from './api'
 
 type Directorio = { nombre: string; ruta: string }
 
@@ -17,11 +17,11 @@ export type TipoObjeto = {
 }
 
 type Props = {
-  credenciales: Credenciales
+  token: string
   tipo: TipoObjeto
 }
 
-export function RespaldoObjetos({ credenciales, tipo }: Props) {
+export function RespaldoObjetos({ token, tipo }: Props) {
   const { recurso } = tipo
   const [objetos, setObjetos] = useState<string[]>([])
   const [directorios, setDirectorios] = useState<Directorio[]>([])
@@ -32,11 +32,12 @@ export function RespaldoObjetos({ credenciales, tipo }: Props) {
   const [errorDirectorios, setErrorDirectorios] = useState<string | null>(null)
   const [resultado, setResultado] = useState<Resultado | null>(null)
   const [errorConexion, setErrorConexion] = useState<string | null>(null)
+  const [respaldando, setRespaldando] = useState(false)
   const ayudaNombre = useId()
   const encabezado = useRef<HTMLHeadingElement>(null)
 
   useEffect(() => {
-    const headers = cabeceras(credenciales)
+    const headers = cabeceras(token)
     const alFallarLaConexion = (error: unknown) => {
       if (error instanceof ErrorConexion) setErrorConexion(avisoDeConexion(error))
     }
@@ -54,7 +55,7 @@ export function RespaldoObjetos({ credenciales, tipo }: Props) {
         else setErrorDirectorios(cuerpo.detail)
       })
       .catch(alFallarLaConexion)
-  }, [credenciales, recurso])
+  }, [token, recurso])
 
   const todosMarcados = objetos.length > 0 && seleccionados.length === objetos.length
 
@@ -66,10 +67,11 @@ export function RespaldoObjetos({ credenciales, tipo }: Props) {
   const respaldar = async () => {
     setResultado(null)
     setErrorConexion(null)
+    setRespaldando(true)
     try {
       const { ok, status, cuerpo } = await pedir(`/respaldos/${recurso}`, {
         method: 'POST',
-        headers: { ...cabeceras(credenciales), 'Content-Type': 'application/json' },
+        headers: { ...cabeceras(token), 'Content-Type': 'application/json' },
         body: JSON.stringify({ [recurso]: seleccionados, directorio, nombre }),
       })
       if (ok && cuerpo.dmp) setResultado({ tipo: 'ok', dmp: cuerpo.dmp, log: cuerpo.log })
@@ -80,6 +82,8 @@ export function RespaldoObjetos({ credenciales, tipo }: Props) {
       }
     } catch (error) {
       if (error instanceof ErrorConexion) setErrorConexion(avisoDeConexion(error))
+    } finally {
+      setRespaldando(false)
     }
   }
 
@@ -165,7 +169,16 @@ export function RespaldoObjetos({ credenciales, tipo }: Props) {
         </p>
       </div>
 
-      <button type="button" className="accion" onClick={respaldar}>
+      {respaldando && (
+        <div aria-live="polite" className="progreso">
+          <p>Respaldando...</p>
+          <div className="progreso-pista" aria-hidden="true">
+            <div className="progreso-bloque" />
+          </div>
+        </div>
+      )}
+
+      <button type="button" className="accion" onClick={respaldar} disabled={respaldando}>
         Respaldar
       </button>
     </section>

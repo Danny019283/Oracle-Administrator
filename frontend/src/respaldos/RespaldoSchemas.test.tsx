@@ -2,12 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { RespaldoSchemas } from './RespaldoSchemas'
 
-const CREDENCIALES = { usuario: 'SYSTEM', password: 's3creta!', servicio: 'XEPDB1' }
-const CABECERAS = {
-  'X-Oracle-User': 'SYSTEM',
-  'X-Oracle-Password': 's3creta!',
-  'X-Oracle-Service': 'XEPDB1',
-}
+const TOKEN = 'tok-123'
+const CABECERAS = { Authorization: `Bearer ${TOKEN}` }
 const DIRECTORIOS = { directorios: [{ nombre: 'RESPALDO', ruta: '/opt/oracle/Respaldos' }] }
 const EXITO = { dmp: 'ventas_20261017_153045.dmp', log: 'ventas_20261017_153045.log' }
 const MENSAJE_CONEXION =
@@ -44,7 +40,7 @@ const montar = ({ schemas, directorios, respaldo }: Escenario = {}) => {
     throw new Error(`URL inesperada: ${url}`)
   })
   vi.stubGlobal('fetch', fetchFalso)
-  render(<RespaldoSchemas credenciales={CREDENCIALES} />)
+  render(<RespaldoSchemas token={TOKEN} />)
 }
 
 const casilla = (nombre: string) =>
@@ -196,7 +192,7 @@ describe('resultado del respaldo de schemas', () => {
 describe('backend que no responde en la pantalla de schemas', () => {
   it('sin respuesta alguna muestra un solo aviso con el código ERR_CONEXION', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('Failed to fetch'))))
-    render(<RespaldoSchemas credenciales={CREDENCIALES} />)
+    render(<RespaldoSchemas token={TOKEN} />)
 
     const alerta = await screen.findByRole('alert')
 
@@ -207,7 +203,7 @@ describe('backend que no responde en la pantalla de schemas', () => {
 
   it.each([502, 503, 504])('si el proxy responde %i muestra ese código', async (codigo) => {
     vi.stubGlobal('fetch', vi.fn(async () => respuestaDelProxy(codigo)))
-    render(<RespaldoSchemas credenciales={CREDENCIALES} />)
+    render(<RespaldoSchemas token={TOKEN} />)
 
     const alerta = await screen.findByRole('alert')
 

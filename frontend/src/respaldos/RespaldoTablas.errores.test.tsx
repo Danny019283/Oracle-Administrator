@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { RespaldoTablas } from './RespaldoTablas'
 
-const CREDENCIALES = { usuario: 'HR', password: 's3creta!', servicio: 'XEPDB1' }
+const TOKEN = 'tok-123'
 
 const respuesta = (cuerpo: unknown, status = 200) => ({
   ok: status < 400,
@@ -30,7 +30,7 @@ const montar = ({ tablas, directorios, respaldo }: Escenario = {}) => {
       return directorios ?? porDefecto.directorios
     }),
   )
-  render(<RespaldoTablas credenciales={CREDENCIALES} />)
+  render(<RespaldoTablas token={TOKEN} />)
 }
 
 const respaldar = async () => {

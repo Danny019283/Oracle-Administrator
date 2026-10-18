@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { RespaldoObjetos, type TipoObjeto } from './RespaldoObjetos'
+import { alCambiarSesion, expirarSesion, iniciarSesion, type EventoSesion } from '../sesion/sesion'
 
-const CREDENCIALES = { usuario: 'HR', password: 's3creta!', servicio: 'XEPDB1' }
+const TOKEN = 'tok-123'
 const TABLAS: TipoObjeto = {
   recurso: 'tablas',
   titulo: 'Respaldar tablas',
@@ -44,12 +45,102 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+describe('autenticación con el token de la sesión', () => {
+  it('envía Authorization Bearer en las consultas y en el respaldo, y ninguna cabecera X-Oracle', async () => {
+    render(<RespaldoObjetos token={TOKEN} tipo={TABLAS} />)
+    await screen.findByRole('checkbox', { name: 'UNO' })
+    await screen.findByRole('option', { name: /RESPALDO/ })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'UNO' }))
+    fireEvent.change(screen.getByLabelText('Directorio'), { target: { value: 'RESPALDO' } })
+    fireEvent.change(screen.getByLabelText('Nombre del dumpfile'), { target: { value: 'ventas' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Respaldar' }))
+    await screen.findByRole('status')
+
+    expect(fetchFalso.mock.calls).toHaveLength(3)
+    for (const [, opciones] of fetchFalso.mock.calls) {
+      expect(opciones.headers.Authorization).toBe('Bearer tok-123')
+      expect(Object.keys(opciones.headers).some((c) => c.startsWith('X-Oracle'))).toBe(false)
+    }
+  })
+
+  it('el respaldo conserva Content-Type junto con Authorization', async () => {
+    render(<RespaldoObjetos token={TOKEN} tipo={TABLAS} />)
+    await screen.findByRole('checkbox', { name: 'UNO' })
+    fireEvent.click(screen.getByRole('button', { name: 'Respaldar' }))
+    await waitFor(() => expect(fetchFalso.mock.calls.some(([, o]) => o?.method === 'POST')).toBe(true))
+
+    const [, opciones] = fetchFalso.mock.calls.find(([, o]) => o?.method === 'POST')!
+    expect(opciones.headers).toEqual({
+      Authorization: 'Bearer tok-123',
+      'Content-Type': 'application/json',
+    })
+  })
+})
+
+describe('sesión expirada (401)', () => {
+  let eventos: EventoSesion[]
+  let dejarDeEscuchar: () => void
+
+  beforeEach(async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => respuesta({ token: TOKEN, usuario: 'HR', sysdba: false })))
+    await iniciarSesion({
+      host: 'h',
+      puerto: '1521',
+      servicio: 'S',
+      usuario: 'HR',
+      password: 'x',
+      sysdba: false,
+    })
+    eventos = []
+    dejarDeEscuchar = alCambiarSesion((e) => eventos.push(e))
+  })
+
+  afterEach(() => {
+    dejarDeEscuchar()
+    expirarSesion()
+  })
+
+  it('un 401 al cargar las listas expira la sesión', async () => {
+    fetchFalso = vi.fn(async () => respuesta({ detail: 'Sesión no válida o expirada' }, 401))
+    vi.stubGlobal('fetch', fetchFalso)
+
+    render(<RespaldoObjetos token={TOKEN} tipo={TABLAS} />)
+
+    await waitFor(() => expect(eventos).toEqual([{ estado: 'expirada' }]))
+  })
+
+  it('un 401 al respaldar expira la sesión', async () => {
+    fetchFalso = vi.fn(async (url: string, opciones?: { method?: string }) => {
+      if (opciones?.method === 'POST') return respuesta({ detail: 'Sesión no válida o expirada' }, 401)
+      if (url === '/respaldos/directorios') return respuesta({ directorios: [] }, 404)
+      return respuesta({ tablas: ['UNO'] })
+    })
+    vi.stubGlobal('fetch', fetchFalso)
+    render(<RespaldoObjetos token={TOKEN} tipo={TABLAS} />)
+    await screen.findByRole('checkbox', { name: 'UNO' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Respaldar' }))
+
+    await waitFor(() => expect(eventos).toEqual([{ estado: 'expirada' }]))
+  })
+
+  it('otros errores del servidor no expiran la sesión', async () => {
+    fetchFalso = vi.fn(async () => respuesta({ detail: 'No hay tablas en el schema' }, 404))
+    vi.stubGlobal('fetch', fetchFalso)
+
+    render(<RespaldoObjetos token={TOKEN} tipo={TABLAS} />)
+    await screen.findByRole('alert')
+
+    expect(eventos).toEqual([])
+  })
+})
+
 describe.each([
   [TABLAS, 'tablas'],
   [SCHEMAS, 'schemas'],
 ])('pantalla común de respaldo (%#)', (tipo, recurso) => {
   it('muestra el título, la descripción y el encabezado del tipo', async () => {
-    render(<RespaldoObjetos credenciales={CREDENCIALES} tipo={tipo} />)
+    render(<RespaldoObjetos token={TOKEN} tipo={tipo} />)
     await screen.findByRole('checkbox', { name: 'UNO' })
 
     expect(screen.getByRole('heading', { name: tipo.titulo })).not.toBeNull()
@@ -59,14 +150,14 @@ describe.each([
   })
 
   it('lista los objetos de /respaldos/<recurso>', async () => {
-    render(<RespaldoObjetos credenciales={CREDENCIALES} tipo={tipo} />)
+    render(<RespaldoObjetos token={TOKEN} tipo={tipo} />)
 
     expect(await screen.findByRole('checkbox', { name: 'DOS' })).not.toBeNull()
     expect(fetchFalso.mock.calls.map(([url]) => url)).toContain(`/respaldos/${recurso}`)
   })
 
   it('envía la selección en el campo con el nombre del recurso', async () => {
-    render(<RespaldoObjetos credenciales={CREDENCIALES} tipo={tipo} />)
+    render(<RespaldoObjetos token={TOKEN} tipo={tipo} />)
     await screen.findByRole('checkbox', { name: 'UNO' })
     await screen.findByRole('option', { name: /RESPALDO/ })
 

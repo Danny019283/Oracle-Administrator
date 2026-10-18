@@ -1,14 +1,6 @@
-export type Credenciales = {
-  usuario: string
-  password: string
-  servicio: string
-}
+import { expirarSesion } from '../sesion/sesion'
 
-export const cabeceras = ({ usuario, password, servicio }: Credenciales) => ({
-  'X-Oracle-User': usuario,
-  'X-Oracle-Password': password,
-  'X-Oracle-Service': servicio,
-})
+export const cabeceras = (token: string) => ({ Authorization: `Bearer ${token}` })
 
 export class ErrorConexion extends Error {
   codigo: string
@@ -33,5 +25,6 @@ export async function pedir(url: string, opciones?: RequestInit) {
     throw new ErrorConexion('ERR_CONEXION')
   }
   if (CODIGOS_DEL_PROXY.includes(r.status)) throw new ErrorConexion(String(r.status))
+  if (r.status === 401) expirarSesion()
   return { ok: r.ok, status: r.status, cuerpo: await r.json() }
 }

@@ -2,12 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { RespaldoTablas } from './RespaldoTablas'
 
-const CREDENCIALES = { usuario: 'HR', password: 's3creta!', servicio: 'XEPDB1' }
-const CABECERAS = {
-  'X-Oracle-User': 'HR',
-  'X-Oracle-Password': 's3creta!',
-  'X-Oracle-Service': 'XEPDB1',
-}
+const TOKEN = 'tok-123'
+const CABECERAS = { Authorization: `Bearer ${TOKEN}` }
 
 const respuesta = (cuerpo: unknown, status = 200) => ({
   ok: status < 400,
@@ -33,7 +29,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-const pantalla = () => render(<RespaldoTablas credenciales={CREDENCIALES} />)
+const pantalla = () => render(<RespaldoTablas token={TOKEN} />)
 const casilla = (nombre: string) => screen.getByRole('checkbox', { name: nombre }) as HTMLInputElement
 
 describe('pantalla de respaldo de tablas', () => {

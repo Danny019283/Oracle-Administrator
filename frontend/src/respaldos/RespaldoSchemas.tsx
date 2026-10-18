@@ -1,4 +1,3 @@
-import type { Credenciales } from './api'
 import { RespaldoObjetos, type TipoObjeto } from './RespaldoObjetos'
 
 const SCHEMAS: TipoObjeto = {
@@ -9,6 +8,6 @@ const SCHEMAS: TipoObjeto = {
   seleccionarTodos: 'Seleccionar todos',
 }
 
-export function RespaldoSchemas({ credenciales }: { credenciales: Credenciales }) {
-  return <RespaldoObjetos credenciales={credenciales} tipo={SCHEMAS} />
+export function RespaldoSchemas({ token }: { token: string }) {
+  return <RespaldoObjetos token={token} tipo={SCHEMAS} />
 }

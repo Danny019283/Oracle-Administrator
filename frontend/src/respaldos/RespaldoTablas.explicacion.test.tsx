@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { RespaldoTablas } from './RespaldoTablas'
 
-const CREDENCIALES = { usuario: 'HR', password: 's3creta!', servicio: 'XEPDB1' }
+const TOKEN = 'tok-123'
 
 const respuesta = (cuerpo: unknown, status = 200) => ({
   ok: status < 400,
@@ -22,7 +22,7 @@ const montarConFallo = (cuerpo: Record<string, string>) => {
       return respuesta({ directorios: [{ nombre: 'RESPALDO', ruta: '/opt/oracle/Respaldos' }] })
     }),
   )
-  render(<RespaldoTablas credenciales={CREDENCIALES} />)
+  render(<RespaldoTablas token={TOKEN} />)
 }
 
 const respaldar = async () => {
