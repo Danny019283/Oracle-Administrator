@@ -1,17 +1,14 @@
-from collections.abc import Callable, Sequence
-from typing import Any
-
-Consulta = Callable[..., Sequence[Sequence[Any]]]
+from src.services.respaldo import Consulta, SinObjetos, listar_objetos
 
 
-class SinSchemas(Exception):
+class SinSchemas(SinObjetos):
     pass
 
 
 def listar_schemas(consulta: Consulta) -> list[str]:
-    filas = consulta(
-        "SELECT username FROM all_users WHERE oracle_maintained = 'N' ORDER BY username"
+    return listar_objetos(
+        consulta,
+        "SELECT username FROM all_users WHERE oracle_maintained = 'N' ORDER BY username",
+        "No hay schemas de usuario",
+        SinSchemas,
     )
-    if not filas:
-        raise SinSchemas("No hay schemas de usuario")
-    return [fila[0] for fila in filas]

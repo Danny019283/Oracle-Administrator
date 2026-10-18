@@ -1,30 +1,23 @@
 from collections.abc import Collection
-from dataclasses import dataclass
 from datetime import datetime
 
-from src.services.dumpfile import NombreInvalido, construir_nombres
-from src.services.errores_oracle import explicar_error
-from src.services.expdp_runner import Conexion, Ejecutor, ejecutar_expdp
+from src.services.expdp_runner import Conexion, Ejecutor
+from src.services.respaldo import (
+    TABLAS,
+    RespaldoFallido,
+    ResultadoRespaldo,
+    SolicitudInvalida,
+    respaldar,
+    validar_solicitud as validar_objetos,
+)
 
-
-class RespaldoFallido(Exception):
-    def __init__(self, codigo: int, log: str):
-        super().__init__(f"El respaldo falló: expdp terminó con código {codigo}")
-        self.codigo = codigo
-        self.log = log
-        self.explicacion = explicar_error(log)
-
-
-@dataclass(frozen=True)
-class ResultadoRespaldo:
-    dmp: str
-    log: str
-
-
-class SolicitudInvalida(Exception):
-    def __init__(self, errores: list[str]):
-        super().__init__("; ".join(errores))
-        self.errores = errores
+__all__ = [
+    "RespaldoFallido",
+    "ResultadoRespaldo",
+    "SolicitudInvalida",
+    "respaldar_tablas",
+    "validar_solicitud",
+]
 
 
 def validar_solicitud(
@@ -34,29 +27,7 @@ def validar_solicitud(
     tablas_disponibles: Collection[str],
     directorios_disponibles: Collection[str],
 ) -> None:
-    errores = []
-
-    if not tablas:
-        errores.append("Debes seleccionar al menos una tabla")
-    for tabla in tablas:
-        if tabla not in tablas_disponibles:
-            errores.append(f"La tabla {tabla} no pertenece al schema del usuario")
-
-    if not directorio:
-        errores.append("Debes elegir un directorio")
-    elif directorio not in directorios_disponibles:
-        errores.append(f"El directorio {directorio} no está disponible")
-
-    if not nombre:
-        errores.append("Debes ingresar un nombre de dumpfile")
-    else:
-        try:
-            construir_nombres(nombre, datetime.now())
-        except NombreInvalido as error:
-            errores.append(str(error))
-
-    if errores:
-        raise SolicitudInvalida(errores)
+    validar_objetos(TABLAS, tablas, directorio, nombre, tablas_disponibles, directorios_disponibles)
 
 
 def respaldar_tablas(
@@ -69,23 +40,6 @@ def respaldar_tablas(
     ahora: datetime,
     ruta_directorio: str | None = None,
 ) -> ResultadoRespaldo:
-    nombres = construir_nombres(nombre, ahora)
-    salida = ejecutar_expdp(
-        contenedor,
-        conexion,
-        [
-            f"TABLES={','.join(tablas)}",
-            f"DIRECTORY={directorio}",
-            f"DUMPFILE={nombres.dmp}",
-            f"LOGFILE={nombres.log}",
-        ],
-        ejecutar,
+    return respaldar(
+        TABLAS, conexion, tablas, directorio, nombre, contenedor, ejecutar, ahora, ruta_directorio
     )
-    if salida.codigo != 0:
-        log = salida.texto
-        if ruta_directorio is not None:
-            log = ejecutar(
-                ["docker", "exec", contenedor, "cat", f"{ruta_directorio}/{nombres.log}"]
-            ).texto
-        raise RespaldoFallido(salida.codigo, log)
-    return ResultadoRespaldo(dmp=nombres.dmp, log=nombres.log)

@@ -1,0 +1,109 @@
+PROBLEMAS DEL HARNESS tdd-sdd (primera versión)
+Proyecto: Administrador-Oracle | Caso de uso: respaldar-schemas | Fecha: 2026-10-18
+
+=====================================================================
+PROBLEMA 1: no se puede iniciar un check de puro refactor
+=====================================================================
+
+Síntoma
+  Check 5 del plan ("Refactor DRY backend") y check 8 ("Refactor DRY frontend")
+  no tienen forma de empezar. /tdd-sdd:refactor responde:
+
+    [tdd-sdd] NO APLICADO: El refactor solo se habilita desde la revisión
+    (fase plan_approved).
+
+Causa
+  El flujo exige esta secuencia por check: rojo -> verde -> revisión -> /refactor.
+  Un check de refactor no cambia comportamiento, así que no existe un test que
+  pueda fallar antes. Por eso:
+
+    $ tdd-sdd test
+    [tdd-sdd] Los tests pasan sin implementación: el test nuevo no está
+    demostrando nada. Escribe un test que falle.      (la fase sigue en plan_approved)
+
+    $ tdd-sdd review
+    La revisión se pide en verde (fase plan_approved).
+
+  Resultado: la fase nunca sale de plan_approved y /refactor nunca se habilita.
+  Es un círculo cerrado.
+
+Lo que se probó y NO sirve
+  - /tdd-sdd:override PRODUCTION_REQUIRES_RED_TEST: se registra bien, pero solo
+    levanta el bloqueo de editar producción sin rojo. No cambia la regla de que
+    `review` y `/refactor` requieren haber pasado por verde.
+  - Editar un archivo del check (crear backend/src/services/respaldo.py) y volver
+    a correr `tdd-sdd test`: el harness sigue diciendo que los tests pasan sin
+    implementación y no cambia de fase.
+  - Solo queda escribir un test artificial que falle (con el override OUT_OF_SCOPE
+    porque el test no está en la lista de archivos del check). Es un rodeo, no
+    el flujo previsto.
+
+Por qué importa
+  El refactor es parte del diseño del caso de uso (RNF-2: DRY). Aquí es
+  obligatorio y se ve venir desde el plan: dos checks de refactor de nueve.
+  El caso anterior (respaldar-tablas) acabó con 4 overrides activos
+  (OUT_OF_SCOPE, SPEC_FROZEN, PLAN_FROZEN, PRODUCTION_REQUIRES_RED_TEST),
+  probablemente por esto mismo en su check 18 (rediseño visual como refactor).
+
+Propuestas (de menor a mayor cambio)
+  1. Permitir /refactor también desde plan_approved cuando el check actual del
+     plan está marcado como tipo "refactor" y los tests actuales están en verde.
+  2. Nuevo tipo de check en plan.md, por ejemplo "- [ ] 5. (refactor) ...":
+     el harness no pide rojo; exige que `tdd-sdd test` pase antes de empezar y
+     congela los tests existentes mientras dura. Termina con `refactor-done`.
+  3. Un comando `tdd-sdd start-refactor` (o /refactor sin fase previa) que
+     verifique "tests en verde ahora mismo" y abra la fase refactor.
+  4. Que el override PRODUCTION_REQUIRES_RED_TEST también deje pasar de
+     plan_approved a la revisión/refactor cuando los tests están en verde.
+
+=====================================================================
+PROBLEMA 2: el refactor DRY es inevitable entre casos de uso con código parecido
+=====================================================================
+
+Contexto
+  respaldar-schemas es "lo mismo que tablas pero con schemas". El flujo exige
+  que cada check llegue primero en verde, lo cual obliga a duplicar el código
+  de tablas (validación, respaldo, endpoints, componente React) y a limpiar la
+  duplicación después en un check de refactor. Con el Problema 1 sin resolver,
+  esa limpieza no se puede hacer.
+
+Propuesta
+  Permitir que un caso de uso declare un "refactor previo" que prepare el
+  terreno antes de los checks de comportamiento (extraer lo común y luego
+  añadir el nuevo caso sobre la abstracción), con los tests actuales como red.
+
+=====================================================================
+PROBLEMA 3 (menor): las ediciones de spec.md se bloquean por Bash pero no por Write
+=====================================================================
+
+  Al rellenar spec.md en fase spec_draft, el comando Bash (cat > spec.md)
+  fue rechazado por PRODUCTION_REQUIRES_RED_TEST, pero la herramienta Write
+  sobre el mismo archivo funcionó sin problema. La regla se aplica distinto
+  según la herramienta; spec.md no es código de producción y no debería
+  entrar en esa regla en ninguno de los dos casos.
+
+=====================================================================
+PROBLEMA 4 (menor): se puede aprobar la spec con puntos "pendiente"
+=====================================================================
+
+  /approve spec se aplicó con RN-1 marcada "Criterio exacto: pendiente".
+  El comando de inicio dice que lo pendiente "bloquea la aprobación", pero el
+  harness no lo comprueba. Conviene validar que no queden marcas "pendiente"
+  antes de congelar la spec.
+
+=====================================================================
+PROBLEMA 5 (menor): archivos auxiliares fuera de la lista del check
+=====================================================================
+
+  Escribir una nota en la raíz (este mismo archivo) se bloquea con OUT_OF_SCOPE
+  mientras haya un check abierto. Una nota que no es código ni test del caso de
+  uso obliga a pedir un override. Convendría una lista de rutas siempre
+  permitidas (por ejemplo notas, docs o *.txt en la raíz).
+
+=====================================================================
+ESTADO ACTUAL DEL CASO DE USO
+=====================================================================
+
+  Checks 1 a 4 hechos y commiteados (4b18098, 88ba768, 832a33c, f718c8c).
+  Check 5 (refactor DRY backend) bloqueado por el Problema 1.
+  Fase: plan_approved | Overrides: PRODUCTION_REQUIRES_RED_TEST, OUT_OF_SCOPE

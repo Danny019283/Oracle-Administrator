@@ -1,15 +1,14 @@
-from collections.abc import Callable, Sequence
-from typing import Any
-
-Consulta = Callable[..., Sequence[Sequence[Any]]]
+from src.services.respaldo import Consulta, SinObjetos, listar_objetos
 
 
-class SinTablas(Exception):
+class SinTablas(SinObjetos):
     pass
 
 
 def listar_tablas(consulta: Consulta) -> list[str]:
-    filas = consulta("SELECT table_name FROM user_tables ORDER BY table_name")
-    if not filas:
-        raise SinTablas("No hay tablas en el schema")
-    return [fila[0] for fila in filas]
+    return listar_objetos(
+        consulta,
+        "SELECT table_name FROM user_tables ORDER BY table_name",
+        "No hay tablas en el schema",
+        SinTablas,
+    )
