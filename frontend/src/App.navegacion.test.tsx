@@ -1,21 +1,27 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import App from './App'
+import { expirarSesion, iniciarSesion } from './sesion/sesion'
 
 const respuesta = (cuerpo: unknown) => ({ ok: true, status: 200, json: async () => cuerpo })
 
-beforeEach(() => {
+const DATOS = { host: 'h', puerto: '1521', servicio: 'XEPDB1', usuario: 'HR', password: 'x', sysdba: false }
+
+beforeEach(async () => {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (url: string) =>
-      url === '/respaldos/tablas'
+    vi.fn(async (url: string) => {
+      if (url === '/sesion') return respuesta({ token: 'tok-123', usuario: 'HR', sysdba: false })
+      return url === '/respaldos/tablas'
         ? respuesta({ tablas: ['CLIENTES'] })
-        : respuesta({ directorios: [{ nombre: 'RESPALDO', ruta: '/opt/oracle/Respaldos' }] }),
-    ),
+        : respuesta({ directorios: [{ nombre: 'RESPALDO', ruta: '/opt/oracle/Respaldos' }] })
+    }),
   )
+  await iniciarSesion(DATOS)
 })
 
 afterEach(() => {
+  expirarSesion()
   cleanup()
   vi.unstubAllGlobals()
 })

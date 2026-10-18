@@ -77,6 +77,7 @@ button {
 .fila,
 .volver,
 .tema,
+.cerrar-sesion,
 .accion {
   border: 0;
   background: var(--superficie);
@@ -90,6 +91,7 @@ button {
 .fila:active,
 .volver:active,
 .tema:active,
+.cerrar-sesion:active,
 .accion:active {
   box-shadow: var(--hundido);
   transform: none;
@@ -147,7 +149,8 @@ button {
 }
 
 .volver,
-.tema {
+.tema,
+.cerrar-sesion {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -494,4 +497,30 @@ select {
 
 input[aria-invalid='true'] {
   border-color: var(--error);
+}
+
+/* Top bar: usuario con sesión iniciada */
+.barra-acciones {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.usuario {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--texto);
+}
+
+.etiqueta-sysdba {
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--linea-panel);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--texto-suave);
 }

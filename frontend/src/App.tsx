@@ -1,17 +1,11 @@
-import { useState, type ReactNode } from 'react'
+import { useState, useSyncExternalStore, type ReactNode } from 'react'
 import './App.css'
 import { MenuPrincipal, MenuRespaldos } from './menu/Menu'
-import type { Credenciales } from './respaldos/api'
 import { RespaldoSchemas } from './respaldos/RespaldoSchemas'
 import { RespaldoTablas } from './respaldos/RespaldoTablas'
+import { ModalLogin } from './sesion/ModalLogin'
+import { alCambiarSesion, sesionActual, type Sesion } from './sesion/sesion'
 import { ToggleTema } from './tema/ToggleTema'
-
-// Provisional hasta que exista la pantalla de ingreso a Oracle.
-const CREDENCIALES: Credenciales = {
-  usuario: import.meta.env.VITE_ORACLE_USER ?? '',
-  password: import.meta.env.VITE_ORACLE_PASSWORD ?? '',
-  servicio: import.meta.env.VITE_ORACLE_SERVICE ?? '',
-}
 
 type Vista = 'principal' | 'respaldos' | 'tablas' | 'schemas'
 
@@ -34,15 +28,32 @@ function MarcaBaseDeDatos() {
   )
 }
 
-function Marco({ children }: { children: ReactNode }) {
+const suscribirse = (avisar: () => void) => alCambiarSesion(() => avisar())
+
+const useSesion = () => useSyncExternalStore(suscribirse, sesionActual)
+
+function Marco({ children, sesion }: { children: ReactNode; sesion: Sesion | null }) {
   return (
-    <div className="app">
+    <div className="app" inert={!sesion}>
       <header className="barra">
         <span className="marca">
           <MarcaBaseDeDatos />
           Administrador Oracle
         </span>
-        <ToggleTema />
+        <div className="barra-acciones">
+          {sesion && (
+            <>
+              <span className="usuario">
+                {sesion.usuario}
+                {sesion.sysdba && <span className="etiqueta-sysdba">SYSDBA</span>}
+              </span>
+              <button type="button" className="cerrar-sesion">
+                Cerrar sesión
+              </button>
+            </>
+          )}
+          <ToggleTema />
+        </div>
       </header>
       <main className="hoja">{children}</main>
     </div>
@@ -68,37 +79,45 @@ function FlechaAtras() {
   )
 }
 
-function App() {
+// La pantalla abierta pertenece a la sesión: al cambiar el token se vuelve al menú principal.
+function Navegador({ sesion }: { sesion: Sesion | null }) {
   const [vista, setVista] = useState<Vista>('principal')
 
-  if (vista === 'tablas' || vista === 'schemas') {
+  if (sesion && (vista === 'tablas' || vista === 'schemas')) {
     const Pantalla = vista === 'tablas' ? RespaldoTablas : RespaldoSchemas
     return (
-      <Marco>
+      <>
         <button type="button" className="volver" onClick={() => setVista('respaldos')}>
           <FlechaAtras />
           Volver
         </button>
-        <Pantalla credenciales={CREDENCIALES} />
-      </Marco>
+        <Pantalla token={sesion.token} />
+      </>
     )
   }
 
   if (vista === 'respaldos') {
     return (
-      <Marco>
-        <MenuRespaldos
-          onElegirRespaldo={(tipo) => (tipo === 'tablas' || tipo === 'schemas') && setVista(tipo)}
-          onVolver={() => setVista('principal')}
-        />
-      </Marco>
+      <MenuRespaldos
+        onElegirRespaldo={(tipo) => (tipo === 'tablas' || tipo === 'schemas') && setVista(tipo)}
+        onVolver={() => setVista('principal')}
+      />
     )
   }
 
+  return <MenuPrincipal onAbrirRespaldos={() => setVista('respaldos')} />
+}
+
+function App() {
+  const sesion = useSesion()
+
   return (
-    <Marco>
-      <MenuPrincipal onAbrirRespaldos={() => setVista('respaldos')} />
-    </Marco>
+    <>
+      <Marco sesion={sesion}>
+        <Navegador key={sesion?.token ?? 'sin-sesion'} sesion={sesion} />
+      </Marco>
+      {!sesion && <ModalLogin />}
+    </>
   )
 }
 

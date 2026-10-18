@@ -1,8 +1,29 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import App from '../App'
+import { expirarSesion, iniciarSesion } from '../sesion/sesion'
 
-afterEach(cleanup)
+const respuesta = (cuerpo: unknown) => ({ ok: true, status: 200, json: async () => cuerpo })
+
+const DATOS = { host: 'h', puerto: '1521', servicio: 'XEPDB1', usuario: 'HR', password: 'x', sysdba: false }
+
+beforeEach(async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) => {
+      if (url === '/sesion') return respuesta({ token: 'tok-123', usuario: 'HR', sysdba: false })
+      if (url === '/respaldos/directorios') return respuesta({ directorios: [] })
+      return respuesta({ tablas: [], schemas: [] })
+    }),
+  )
+  await iniciarSesion(DATOS)
+})
+
+afterEach(() => {
+  expirarSesion()
+  cleanup()
+  vi.unstubAllGlobals()
+})
 
 const boton = (nombre: string) => screen.queryByRole('button', { name: nombre })
 
