@@ -12,11 +12,20 @@ _EXPLICACIONES = {
     "ORA-01017": "Usuario o contraseña de Oracle incorrectos",
     "ORA-12514": "El servicio de Oracle indicado no existe",
     "ORA-39002": "La operación no es válida; revisa el DIRECTORY y los permisos",
+    "ORA-12541": "No hay un listener de Oracle escuchando en ese host y puerto",
+    "ORA-01031": "El usuario no tiene el privilegio necesario (¿SYSDBA?)",
+    "ORA-28000": "La cuenta de Oracle está bloqueada",
+    "ORA-28001": "La contraseña de Oracle ha expirado",
+    "DPY-6005": "No se pudo alcanzar el servidor de Oracle en ese host y puerto",
 }
 
 # Oracle envuelve casi todos los fallos de Data Pump con este código; solo
 # explica cuando no hay otro más específico.
 _ENVOLTORIO = "ORA-39002"
+
+
+def explicacion_de(codigo: str) -> str | None:
+    return _EXPLICACIONES.get(codigo)
 
 
 def explicar_error(log: str) -> str:

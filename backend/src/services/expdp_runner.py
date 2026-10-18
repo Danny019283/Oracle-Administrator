@@ -1,5 +1,6 @@
+import os
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import uuid4
 
 
@@ -8,6 +9,9 @@ class Conexion:
     usuario: str
     password: str
     servicio: str
+    host: str = field(default_factory=lambda: os.environ.get("ORACLE_HOST", "localhost"))
+    puerto: int = field(default_factory=lambda: int(os.environ.get("ORACLE_PORT", "1521")))
+    sysdba: bool = False
 
 
 @dataclass(frozen=True)
