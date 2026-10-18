@@ -186,6 +186,55 @@ def test_traduce_el_error_de_oracle_a_mensaje_claro_mas_codigo(
     assert PASSWORD not in str(fallo)
 
 
+def test_con_el_check_sysdba_y_ora_01017_el_mensaje_sugiere_revisar_el_privilegio():
+    # Por red Oracle no distingue «sin privilegio SYSDBA» de credenciales inválidas.
+    with pytest.raises(LoginFallido) as capturado:
+        iniciar_sesion(
+            solicitud(sysdba=True),
+            AlmacenEspia(),
+            ConectorFalso(Exception(f"ORA-01017: invalid username/password {PASSWORD}")),
+        )
+
+    fallo = capturado.value
+    assert fallo.mensaje == (
+        "Usuario o contraseña de Oracle incorrectos, "
+        "o el usuario no tiene privilegio SYSDBA (ORA-01017)"
+    )
+    assert fallo.codigo == "ORA-01017"
+    assert fallo.inalcanzable is False
+    assert PASSWORD not in fallo.mensaje
+
+
+def test_sin_el_check_sysdba_ora_01017_conserva_el_mensaje_de_credenciales():
+    with pytest.raises(LoginFallido) as capturado:
+        iniciar_sesion(
+            solicitud(sysdba=False),
+            AlmacenEspia(),
+            ConectorFalso(Exception("ORA-01017: invalid username/password")),
+        )
+
+    assert capturado.value.mensaje == "Usuario o contraseña de Oracle incorrectos (ORA-01017)"
+
+
+def test_sys_sin_el_check_sysdba_pide_marcar_la_casilla():
+    almacen = AlmacenEspia()
+
+    with pytest.raises(LoginFallido) as capturado:
+        iniciar_sesion(
+            solicitud(usuario="SYS", sysdba=False),
+            almacen,
+            ConectorFalso(Exception("ORA-28009: connection as SYS should be as SYSDBA or SYSOPER")),
+        )
+
+    fallo = capturado.value
+    assert fallo.mensaje == (
+        "SYS debe conectarse como SYSDBA: marca la casilla «Iniciar como SYSDBA» (ORA-28009)"
+    )
+    assert fallo.codigo == "ORA-28009"
+    assert fallo.inalcanzable is False
+    assert almacen.creadas == 0
+
+
 def test_un_error_de_oracle_no_catalogado_conserva_su_codigo():
     with pytest.raises(LoginFallido) as capturado:
         iniciar_sesion(

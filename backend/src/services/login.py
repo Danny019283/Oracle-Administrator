@@ -25,6 +25,10 @@ PUERTO_MAXIMO = 65535
 _CODIGO = re.compile(r"ORA-\d{5}|DPY-\d{4}")
 _INALCANZABLES = {"ORA-12541", "ORA-12514", "DPY-6005"}
 _MENSAJE_GENERICO = "No se pudo iniciar sesión"
+# Por red Oracle responde ORA-01017 tanto a credenciales inválidas como a un usuario sin SYSDBA.
+_MENSAJE_SYSDBA_SIN_PRIVILEGIO = (
+    "Usuario o contraseña de Oracle incorrectos, o el usuario no tiene privilegio SYSDBA"
+)
 
 
 @dataclass(frozen=True)
@@ -106,11 +110,13 @@ def conectar_oracle(pedido: SolicitudLogin, driver: Any = oracledb) -> None:
     conexion.close()
 
 
-def _traducir(error: Exception) -> LoginFallido:
+def _traducir(error: Exception, sysdba: bool) -> LoginFallido:
     encontrado = _CODIGO.search(str(error))
     codigo = encontrado.group() if encontrado else None
     if codigo is None:
         return LoginFallido(_MENSAJE_GENERICO, None, False)
+    if sysdba and codigo == "ORA-01017":
+        return LoginFallido(f"{_MENSAJE_SYSDBA_SIN_PRIVILEGIO} ({codigo})", codigo, False)
     explicacion = explicacion_de(codigo) or _MENSAJE_GENERICO
     return LoginFallido(f"{explicacion} ({codigo})", codigo, codigo in _INALCANZABLES)
 
@@ -123,7 +129,7 @@ def iniciar_sesion(
     try:
         conectar(pedido)
     except Exception as error:
-        raise _traducir(error) from None
+        raise _traducir(error, pedido.sysdba) from None
     token = almacen.crear(
         Conexion(
             usuario=pedido.usuario,

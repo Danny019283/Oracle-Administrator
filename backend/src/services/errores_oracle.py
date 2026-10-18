@@ -16,6 +16,7 @@ _EXPLICACIONES = {
     "ORA-01031": "El usuario no tiene el privilegio necesario (¿SYSDBA?)",
     "ORA-28000": "La cuenta de Oracle está bloqueada",
     "ORA-28001": "La contraseña de Oracle ha expirado",
+    "ORA-28009": "SYS debe conectarse como SYSDBA: marca la casilla «Iniciar como SYSDBA»",
     "DPY-6005": "No se pudo alcanzar el servidor de Oracle en ese host y puerto",
 }
 
