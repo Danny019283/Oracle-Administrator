@@ -1,7 +1,9 @@
 import { useState, type ReactNode } from 'react'
 import './App.css'
 import { MenuPrincipal, MenuRespaldos } from './menu/Menu'
-import { RespaldoTablas, type Credenciales } from './respaldos/RespaldoTablas'
+import type { Credenciales } from './respaldos/api'
+import { RespaldoSchemas } from './respaldos/RespaldoSchemas'
+import { RespaldoTablas } from './respaldos/RespaldoTablas'
 import { ToggleTema } from './tema/ToggleTema'
 
 // Provisional hasta que exista la pantalla de ingreso a Oracle.
@@ -69,28 +71,15 @@ function FlechaAtras() {
 function App() {
   const [vista, setVista] = useState<Vista>('principal')
 
-  if (vista === 'tablas') {
+  if (vista === 'tablas' || vista === 'schemas') {
+    const Pantalla = vista === 'tablas' ? RespaldoTablas : RespaldoSchemas
     return (
       <Marco>
         <button type="button" className="volver" onClick={() => setVista('respaldos')}>
           <FlechaAtras />
           Volver
         </button>
-        <RespaldoTablas credenciales={CREDENCIALES} />
-      </Marco>
-    )
-  }
-
-  if (vista === 'schemas') {
-    return (
-      <Marco>
-        <button type="button" className="volver" onClick={() => setVista('respaldos')}>
-          <FlechaAtras />
-          Volver
-        </button>
-        <section className="vista">
-          <h1>Respaldar schemas</h1>
-        </section>
+        <Pantalla credenciales={CREDENCIALES} />
       </Marco>
     )
   }
