@@ -30,7 +30,9 @@ def ejecutar_expdp(
     ejecutar: Ejecutor,
 ) -> Salida:
     ruta = f"/tmp/expdp_{uuid4().hex}.par"
-    userid = f"USERID={conexion.usuario}/{conexion.password}@{conexion.servicio}"
+    credenciales = f"{conexion.usuario}/{conexion.password}@{conexion.servicio}"
+    # expdp rechaza «AS SYSDBA» sin comillas en el parfile (LRM-00112).
+    userid = f'USERID="{credenciales} AS SYSDBA"' if conexion.sysdba else f"USERID={credenciales}"
     contenido = "\n".join([userid, *parametros]) + "\n"
     docker = ["docker", "exec", contenedor]
 
