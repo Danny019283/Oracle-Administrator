@@ -22,6 +22,32 @@ const cabeceras = ({ usuario, password, servicio }: Credenciales) => ({
   'X-Oracle-Service': servicio,
 })
 
+class ErrorConexion extends Error {
+  codigo: string
+
+  constructor(codigo: string) {
+    super(codigo)
+    this.codigo = codigo
+  }
+}
+
+const CODIGOS_DEL_PROXY = [502, 503, 504]
+
+const avisoDeConexion = ({ codigo }: ErrorConexion) =>
+  `No se pudo conectar con el servidor. Verifica que el backend esté en ejecución (código ${codigo})`
+
+// Distingue un backend caído (sin respuesta o 502/503/504 del proxy) de una respuesta normal.
+async function pedir(url: string, opciones?: RequestInit) {
+  let r: Response
+  try {
+    r = await fetch(url, opciones)
+  } catch {
+    throw new ErrorConexion('ERR_CONEXION')
+  }
+  if (CODIGOS_DEL_PROXY.includes(r.status)) throw new ErrorConexion(String(r.status))
+  return { ok: r.ok, status: r.status, cuerpo: await r.json() }
+}
+
 export function RespaldoTablas({ credenciales }: Props) {
   const [tablas, setTablas] = useState<string[]>([])
   const [directorios, setDirectorios] = useState<Directorio[]>([])
@@ -31,25 +57,27 @@ export function RespaldoTablas({ credenciales }: Props) {
   const [errorTablas, setErrorTablas] = useState<string | null>(null)
   const [errorDirectorios, setErrorDirectorios] = useState<string | null>(null)
   const [resultado, setResultado] = useState<Resultado | null>(null)
+  const [errorConexion, setErrorConexion] = useState<string | null>(null)
 
   useEffect(() => {
     const headers = cabeceras(credenciales)
+    const alFallarLaConexion = (error: unknown) => {
+      if (error instanceof ErrorConexion) setErrorConexion(avisoDeConexion(error))
+    }
 
-    fetch('/respaldos/tablas', { headers })
-      .then(async (r) => {
-        const cuerpo = await r.json()
-        if (r.ok) setTablas(cuerpo.tablas)
+    pedir('/respaldos/tablas', { headers })
+      .then(({ ok, cuerpo }) => {
+        if (ok) setTablas(cuerpo.tablas)
         else setErrorTablas(cuerpo.detail)
       })
-      .catch(() => {})
+      .catch(alFallarLaConexion)
 
-    fetch('/respaldos/directorios', { headers })
-      .then(async (r) => {
-        const cuerpo = await r.json()
-        if (r.ok) setDirectorios(cuerpo.directorios)
+    pedir('/respaldos/directorios', { headers })
+      .then(({ ok, cuerpo }) => {
+        if (ok) setDirectorios(cuerpo.directorios)
         else setErrorDirectorios(cuerpo.detail)
       })
-      .catch(() => {})
+      .catch(alFallarLaConexion)
   }, [credenciales])
 
   const todasMarcadas = tablas.length > 0 && seleccionadas.length === tablas.length
@@ -61,25 +89,27 @@ export function RespaldoTablas({ credenciales }: Props) {
 
   const respaldar = async () => {
     setResultado(null)
+    setErrorConexion(null)
     try {
-      const r = await fetch('/respaldos/tablas', {
+      const { ok, status, cuerpo } = await pedir('/respaldos/tablas', {
         method: 'POST',
         headers: { ...cabeceras(credenciales), 'Content-Type': 'application/json' },
         body: JSON.stringify({ tablas: seleccionadas, directorio, nombre }),
       })
-      const cuerpo = await r.json()
-      if (r.ok && cuerpo.dmp) setResultado({ tipo: 'ok', dmp: cuerpo.dmp, log: cuerpo.log })
-      else if (r.status === 422) setResultado({ tipo: 'error', mensajes: cuerpo.errores })
-      else if (!r.ok) {
+      if (ok && cuerpo.dmp) setResultado({ tipo: 'ok', dmp: cuerpo.dmp, log: cuerpo.log })
+      else if (status === 422) setResultado({ tipo: 'error', mensajes: cuerpo.errores })
+      else if (!ok) {
         const mensajes = [cuerpo.mensaje, cuerpo.explicacion].filter(Boolean)
         setResultado({ tipo: 'error', mensajes, log: cuerpo.log })
       }
-    } catch {
-      // sin respuesta del servidor: no hay nada que mostrar todavía
+    } catch (error) {
+      if (error instanceof ErrorConexion) setErrorConexion(avisoDeConexion(error))
     }
   }
 
-  const avisos = [errorTablas, errorDirectorios].filter((a): a is string => a !== null)
+  const avisos = [errorConexion, errorTablas, errorDirectorios].filter(
+    (a): a is string => a !== null,
+  )
   const mensajes = [...avisos, ...(resultado?.tipo === 'error' ? resultado.mensajes : [])]
 
   return (
