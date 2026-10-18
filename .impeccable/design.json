@@ -1,0 +1,253 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-18T12:00:00.000Z",
+  "title": "Design System: Administrador Oracle",
+  "extensions": {
+    "colorMeta": {
+      "surface": {
+        "role": "neutral",
+        "displayName": "Superficie gris azulada",
+        "canonical": "#eef1f5",
+        "tonalRamp": [
+          "#1f2933",
+          "#3a4650",
+          "#5a6772",
+          "#7f8b96",
+          "#a6afb8",
+          "#c7ced5",
+          "#e0e5ea",
+          "#eef1f5"
+        ]
+      },
+      "primary": {
+        "role": "primary",
+        "displayName": "Azul de acción",
+        "canonical": "#1967d2",
+        "tonalRamp": [
+          "#0b2a57",
+          "#10407f",
+          "#1556a8",
+          "#1967d2",
+          "#4d8ae0",
+          "#7aa8ea",
+          "#a9c6f2",
+          "#d6e4f9"
+        ]
+      },
+      "error": {
+        "role": "tertiary",
+        "displayName": "Error",
+        "canonical": "#b3261e",
+        "tonalRamp": [
+          "#4a0f0b",
+          "#74180f",
+          "#971f19",
+          "#b3261e",
+          "#cf5a52",
+          "#e08a84",
+          "#efb9b5",
+          "#f9e0de"
+        ]
+      },
+      "success": {
+        "role": "tertiary",
+        "displayName": "Éxito",
+        "canonical": "#137333",
+        "tonalRamp": [
+          "#08301a",
+          "#0c4a24",
+          "#105f2c",
+          "#137333",
+          "#3d9558",
+          "#6db583",
+          "#a0d3b0",
+          "#d3ebdb"
+        ]
+      },
+      "page-ground": {
+        "role": "neutral",
+        "displayName": "Fondo de página",
+        "canonical": "#d5dce5",
+        "tonalRamp": [
+          "#1b1e23",
+          "#363c45",
+          "#566069",
+          "#79858f",
+          "#9ba6b0",
+          "#bcc5ce",
+          "#d5dce5",
+          "#e8edf2"
+        ]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "Panel",
+        "canonical": "#e6eaf0",
+        "tonalRamp": [
+          "#25292f",
+          "#3d434b",
+          "#5d6770",
+          "#80898f",
+          "#a3abb3",
+          "#c5cbd2",
+          "#e6eaf0",
+          "#f3f5f8"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Título de pantalla",
+        "purpose": "Una por pantalla; ligero y directo."
+      },
+      "title": {
+        "displayName": "Título de panel",
+        "purpose": "Encabezado de cada panel."
+      },
+      "body": {
+        "displayName": "Texto",
+        "purpose": "Apoyo y descripciones."
+      },
+      "label": {
+        "displayName": "Etiqueta",
+        "purpose": "Campos, volver y tema."
+      },
+      "code": {
+        "displayName": "Código",
+        "purpose": "Solo el log de Oracle."
+      }
+    },
+    "shadows": [
+      {
+        "name": "hoja",
+        "value": "18px 18px 42px rgba(120,138,164,.6), -14px -14px 34px rgba(255,255,255,.75)",
+        "purpose": "Solo la hoja central; delimita la parte útil."
+      },
+      {
+        "name": "relieve",
+        "value": "7px 7px 16px rgba(150,164,186,.55), -7px -7px 16px rgba(255,255,255,.95)",
+        "purpose": "Filas activas y paneles."
+      },
+      {
+        "name": "relieve-suave",
+        "value": "4px 4px 10px rgba(150,164,186,.55), -4px -4px 10px rgba(255,255,255,.95)",
+        "purpose": "Botones y píldoras."
+      },
+      {
+        "name": "hundido",
+        "value": "inset 3px 3px 7px rgba(150,164,186,.55), inset -3px -3px 7px rgba(255,255,255,.95)",
+        "purpose": "Campos, casillas, avisos y estado pulsado."
+      }
+    ],
+    "motion": [
+      {
+        "name": "salida",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Entrada de vista (320ms) y cambios de estado (160-200ms)."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compacto",
+        "value": "30rem"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Fila de módulo",
+      "kind": "custom",
+      "refersTo": "row",
+      "description": "Fila activa de menú con relieve y flecha azul.",
+      "html": "<button class=\"ds-fila\"><span>Creación de respaldos</span><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m9 18 6-6-6-6\"/></svg></button>",
+      "css": ".ds-fila{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:60px;padding:12px 20px;border:0;border-radius:16px;background:#eef1f5;color:#1f2933;font:500 16px Roboto,system-ui,sans-serif;cursor:pointer;box-shadow:7px 7px 16px rgba(150,164,186,.55),-7px -7px 16px rgba(255,255,255,.95);transition:box-shadow .16s cubic-bezier(.16,1,.3,1)} .ds-fila svg{color:#1967d2} .ds-fila:hover{transform:translateY(-1px)} .ds-fila:active{transform:none;box-shadow:inset 3px 3px 7px rgba(150,164,186,.55),inset -3px -3px 7px rgba(255,255,255,.95)} .ds-fila:focus-visible{outline:2px solid #1967d2;outline-offset:3px}"
+    },
+    {
+      "name": "Botón principal",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Acción principal de la pantalla, en azul.",
+      "html": "<button class=\"ds-primario\">Respaldar</button>",
+      "css": ".ds-primario{width:100%;min-height:52px;padding:12px 24px;border:0;border-radius:999px;background:#1967d2;color:#fff;font:500 16px Roboto,system-ui,sans-serif;letter-spacing:.01em;cursor:pointer;box-shadow:4px 4px 10px rgba(150,164,186,.55),-4px -4px 10px rgba(255,255,255,.95)} .ds-primario:hover{transform:translateY(-1px)} .ds-primario:active{transform:none;box-shadow:inset 3px 3px 8px rgba(0,0,0,.3)} .ds-primario:focus-visible{outline:2px solid #1967d2;outline-offset:3px}"
+    },
+    {
+      "name": "Botón volver",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Regresa un nivel; píldora con relieve suave.",
+      "html": "<button class=\"ds-volver\"><svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m15 18-6-6 6-6\"/></svg>Volver</button>",
+      "css": ".ds-volver{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:6px 16px 6px 12px;border:0;border-radius:999px;background:#eef1f5;color:#1f2933;font:500 14px Roboto,system-ui,sans-serif;cursor:pointer;box-shadow:4px 4px 10px rgba(150,164,186,.55),-4px -4px 10px rgba(255,255,255,.95)} .ds-volver svg{color:#1967d2} .ds-volver:active{box-shadow:inset 3px 3px 7px rgba(150,164,186,.55),inset -3px -3px 7px rgba(255,255,255,.95)} .ds-volver:focus-visible{outline:2px solid #1967d2;outline-offset:3px}"
+    },
+    {
+      "name": "Campo de texto",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Campo hundido con borde de línea de control.",
+      "html": "<label class=\"ds-campo\">Nombre del dumpfile<input value=\"ventas\"></label>",
+      "css": ".ds-campo{display:grid;gap:8px;font:500 14px Roboto,system-ui,sans-serif;color:#4a5662} .ds-campo input{min-height:48px;padding:8px 16px;border:1.5px solid #6f7c8a;border-radius:12px;background:#eef1f5;color:#1f2933;font:400 16px Roboto,system-ui,sans-serif;box-shadow:inset 3px 3px 7px rgba(150,164,186,.55),inset -3px -3px 7px rgba(255,255,255,.95);caret-color:#1967d2} .ds-campo input:focus-visible{outline:2px solid #1967d2;outline-offset:3px}"
+    },
+    {
+      "name": "Aviso de error",
+      "kind": "custom",
+      "refersTo": "colors.error",
+      "description": "Aviso de fallo con tinte rojo, hundido.",
+      "html": "<div class=\"ds-error\"><p>El respaldo falló: expdp terminó con código 5</p></div>",
+      "css": ".ds-error{padding:16px 20px;border-radius:16px;background:rgba(179,38,30,.1);color:#b3261e;font:400 16px Roboto,system-ui,sans-serif;box-shadow:inset 3px 3px 7px rgba(150,164,186,.55),inset -3px -3px 7px rgba(255,255,255,.95)} .ds-error p{margin:0}"
+    }
+  ],
+  "narrative": {
+    "northStar": "El panel táctil",
+    "overview": "Una herramienta de administración que se siente tranquila y al alcance de la mano. Cada pantalla ofrece una sola tarea sobre una superficie del mismo tono que el fondo; lo que se pulsa sale con relieve suave y los campos donde se escribe se hunden.",
+    "keyCharacteristics": [
+      "Una hoja central de 60rem máximo, elevada sobre un fondo más hundido; una pantalla a la vez, siempre con camino de vuelta.",
+      "Superficie única gris azulada; la profundidad la dan dos sombras, no el color.",
+      "Un solo acento azul; el rojo se reserva a los errores.",
+      "Tema claro y oscuro; el contraste del texto no depende del relieve."
+    ],
+    "rules": [
+      {
+        "name": "The One Blue Rule",
+        "body": "El azul es la única acción de color de la pantalla.",
+        "section": "colors"
+      },
+      {
+        "name": "The Reserved Red Rule",
+        "body": "El rojo solo aparece cuando algo falló.",
+        "section": "colors"
+      },
+      {
+        "name": "The Monospace Is Data Rule",
+        "body": "La fuente monoespaciada solo se usa para contenido real de log.",
+        "section": "typography"
+      },
+      {
+        "name": "The Press Inverts Rule",
+        "body": "Todo elemento con relieve se hunde al pulsarlo.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Contrast Outranks Depth Rule",
+        "body": "El relieve nunca sustituye al contraste: texto 4,5:1, borde en campos y foco azul de 2px.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Sheet Rule",
+        "body": "Solo hay una hoja elevada por pantalla y todo lo útil vive dentro de ella.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do mantener una sola pantalla a la vez, con «Volver» arriba a la izquierda.",
+      "Do usar relieve solo en lo que se pulsa y hundido solo en lo que se escribe o se lee.",
+      "Do dejar texto en español y mensajes que nombren el problema y el siguiente paso.",
+      "Do probar cada cambio en tema claro y oscuro."
+    ],
+    "donts": [
+      "Don't usar el relieve como único indicio de un control: añade borde o color.",
+      "Don't introducir un segundo color de acento ni usar el rojo fuera de los errores.",
+      "Don't construir cuadrículas de tarjetas iguales ni un panel SaaS genérico.",
+      "Don't usar sombras de bloque duro ni degradados.",
+      "Don't poner a la misma profundidad el fondo, la hoja y los controles: sin escalón de nivel no se ve el borde de lo útil."
+    ]
+  }
+}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 
 export type Credenciales = {
   usuario: string
@@ -58,6 +58,8 @@ export function RespaldoTablas({ credenciales }: Props) {
   const [errorDirectorios, setErrorDirectorios] = useState<string | null>(null)
   const [resultado, setResultado] = useState<Resultado | null>(null)
   const [errorConexion, setErrorConexion] = useState<string | null>(null)
+  const ayudaNombre = useId()
+  const encabezado = useRef<HTMLHeadingElement>(null)
 
   useEffect(() => {
     const headers = cabeceras(credenciales)
@@ -112,12 +114,18 @@ export function RespaldoTablas({ credenciales }: Props) {
   )
   const mensajes = [...avisos, ...(resultado?.tipo === 'error' ? resultado.mensajes : [])]
 
+  // El botón queda al final de la página y los avisos arriba: se llevan a la vista.
+  useEffect(() => {
+    if (resultado) encabezado.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+  }, [resultado])
+
   return (
-    <section>
-      <h1>Respaldar tablas</h1>
+    <section className="vista">
+      <h1 ref={encabezado}>Respaldar tablas</h1>
+      <p className="apoyo">Elige las tablas, el directorio de destino y el nombre del respaldo.</p>
 
       {mensajes.length > 0 && (
-        <div role="alert">
+        <div role="alert" className="aviso error">
           {mensajes.map((mensaje) => (
             <p key={mensaje}>{mensaje}</p>
           ))}
@@ -125,52 +133,65 @@ export function RespaldoTablas({ credenciales }: Props) {
         </div>
       )}
       {resultado?.tipo === 'ok' && (
-        <p role="status">
+        <p role="status" className="aviso exito">
           Respaldo creado: {resultado.dmp} (log: {resultado.log})
         </p>
       )}
 
-      <label>
-        <input
-          type="checkbox"
-          checked={todasMarcadas}
-          onChange={() => setSeleccionadas(todasMarcadas ? [] : tablas)}
-        />
-        Seleccionar todas
-      </label>
-      <ul>
-        {tablas.map((tabla) => (
-          <li key={tabla}>
-            <label>
-              <input
-                type="checkbox"
-                checked={seleccionadas.includes(tabla)}
-                onChange={() => alternar(tabla)}
-              />
-              {tabla}
-            </label>
-          </li>
-        ))}
-      </ul>
-
-      <label>
-        Directorio
-        <select value={directorio} onChange={(e) => setDirectorio(e.target.value)}>
-          <option value="">Selecciona un directorio</option>
-          {directorios.map((d) => (
-            <option key={d.nombre} value={d.nombre}>
-              {d.nombre} ({d.ruta})
-            </option>
+      <div className="panel">
+        <h2>Tablas</h2>
+        <label className="opcion todas">
+          <input
+            type="checkbox"
+            checked={todasMarcadas}
+            onChange={() => setSeleccionadas(todasMarcadas ? [] : tablas)}
+          />
+          Seleccionar todas
+        </label>
+        <ul className="opciones">
+          {tablas.map((tabla) => (
+            <li key={tabla}>
+              <label className="opcion">
+                <input
+                  type="checkbox"
+                  checked={seleccionadas.includes(tabla)}
+                  onChange={() => alternar(tabla)}
+                />
+                {tabla}
+              </label>
+            </li>
           ))}
-        </select>
-      </label>
+        </ul>
+      </div>
 
-      <label>
-        Nombre del dumpfile
-        <input value={nombre} onChange={(e) => setNombre(e.target.value)} />
-      </label>
+      <div className="panel">
+        <h2>Destino</h2>
+        <label className="campo">
+          Directorio
+          <select value={directorio} onChange={(e) => setDirectorio(e.target.value)}>
+            <option value="">Selecciona un directorio</option>
+            {directorios.map((d) => (
+              <option key={d.nombre} value={d.nombre}>
+                {d.nombre} ({d.ruta})
+              </option>
+            ))}
+          </select>
+        </label>
 
-      <button type="button" onClick={respaldar}>
+        <label className="campo">
+          Nombre del dumpfile
+          <input
+            value={nombre}
+            onChange={(e) => setNombre(e.target.value)}
+            aria-describedby={ayudaNombre}
+          />
+        </label>
+        <p className="ayuda" id={ayudaNombre}>
+          Se agrega la fecha y la hora al nombre. Usa letras, números, guion y guion bajo.
+        </p>
+      </div>
+
+      <button type="button" className="accion" onClick={respaldar}>
         Respaldar
       </button>
     </section>

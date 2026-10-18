@@ -11,11 +11,60 @@ const MODULOS = [
   'Administración de archivos de respaldos y directorios',
 ]
 
+const MODULOS_DISPONIBLES = ['Creación de respaldos']
+
 const RESPALDOS: { tipo: TipoRespaldo; titulo: string }[] = [
   { tipo: 'tablas', titulo: 'Tablas' },
   { tipo: 'schemas', titulo: 'Schemas' },
   { tipo: 'full', titulo: 'Full' },
 ]
+
+const RESPALDOS_DISPONIBLES: TipoRespaldo[] = ['tablas']
+
+function Flecha({ haciaAtras = false }: { haciaAtras?: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d={haciaAtras ? 'm15 18-6-6 6-6' : 'm9 18 6-6-6-6'} />
+    </svg>
+  )
+}
+
+type FilaProps = {
+  titulo: string
+  disponible: boolean
+  onElegir: () => void
+}
+
+function Fila({ titulo, disponible, onElegir }: FilaProps) {
+  return (
+    <li>
+      <button
+        type="button"
+        className="fila"
+        aria-disabled={disponible ? undefined : true}
+        onClick={disponible ? onElegir : undefined}
+      >
+        <span>{titulo}</span>
+        {disponible ? (
+          <Flecha />
+        ) : (
+          <span className="etiqueta" aria-hidden="true">
+            Próximamente
+          </span>
+        )}
+      </button>
+    </li>
+  )
+}
 
 type PropsPrincipal = {
   onAbrirRespaldos: () => void
@@ -23,20 +72,22 @@ type PropsPrincipal = {
 
 export function MenuPrincipal({ onAbrirRespaldos }: PropsPrincipal) {
   return (
-    <nav>
-      <ul>
-        {MODULOS.map((modulo) => (
-          <li key={modulo}>
-            <button
-              type="button"
-              onClick={modulo === 'Creación de respaldos' ? onAbrirRespaldos : undefined}
-            >
-              {modulo}
-            </button>
-          </li>
-        ))}
-      </ul>
-    </nav>
+    <section className="vista">
+      <h1>¿Qué quieres administrar?</h1>
+      <p className="apoyo">Elige un módulo para empezar.</p>
+      <nav aria-label="Módulos">
+        <ul className="filas">
+          {MODULOS.map((modulo) => (
+            <Fila
+              key={modulo}
+              titulo={modulo}
+              disponible={MODULOS_DISPONIBLES.includes(modulo)}
+              onElegir={onAbrirRespaldos}
+            />
+          ))}
+        </ul>
+      </nav>
+    </section>
   )
 }
 
@@ -47,19 +98,25 @@ type PropsRespaldos = {
 
 export function MenuRespaldos({ onElegirRespaldo, onVolver }: PropsRespaldos) {
   return (
-    <nav>
-      <button type="button" onClick={onVolver}>
+    <section className="vista">
+      <button type="button" className="volver" onClick={onVolver}>
+        <Flecha haciaAtras />
         Volver
       </button>
-      <ul>
-        {RESPALDOS.map(({ tipo, titulo }) => (
-          <li key={tipo}>
-            <button type="button" onClick={() => onElegirRespaldo(tipo)}>
-              {titulo}
-            </button>
-          </li>
-        ))}
-      </ul>
-    </nav>
+      <h1>Creación de respaldos</h1>
+      <p className="apoyo">Elige qué quieres respaldar.</p>
+      <nav aria-label="Tipos de respaldo">
+        <ul className="filas">
+          {RESPALDOS.map(({ tipo, titulo }) => (
+            <Fila
+              key={tipo}
+              titulo={titulo}
+              disponible={RESPALDOS_DISPONIBLES.includes(tipo)}
+              onElegir={() => onElegirRespaldo(tipo)}
+            />
+          ))}
+        </ul>
+      </nav>
+    </section>
   )
 }
