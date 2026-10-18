@@ -101,6 +101,28 @@ PROBLEMA 5 (menor): archivos auxiliares fuera de la lista del check
   permitidas (por ejemplo notas, docs o *.txt en la raíz).
 
 =====================================================================
+PROBLEMA 6: un check de solo pruebas (integración) tampoco puede avanzar
+=====================================================================
+
+  Check 9 de respaldar-schemas: "Integración contra Oracle XE real". La
+  implementación ya existe desde los checks 2 a 8; el check solo añade pruebas
+  que confirman que funciona contra la base real. Resultado:
+
+    $ tdd-sdd test
+    7 passed (integración, Oracle real)  | 84 passed | 58 passed
+    [tdd-sdd] Los tests pasan sin implementación: el test nuevo no está
+    demostrando nada. Escribe un test que falle.
+
+  Es el mismo círculo del Problema 1 desde otro ángulo: aquí no hay refactor,
+  pero tampoco hay código de producción que escribir, así que ninguna prueba
+  nueva puede estar en rojo. Un test de integración que pasa a la primera es un
+  resultado válido (confirma que el sistema ya cumple el requisito).
+
+  Propuesta: tipo de check "(verificación)" o "(solo pruebas)" en plan.md, que
+  acepte que las pruebas nuevas pasen sin rojo previo siempre que no se toque
+  código de producción, y que pase directo a la parada de revisión.
+
+=====================================================================
 ESTADO ACTUAL DEL CASO DE USO
 =====================================================================
 
