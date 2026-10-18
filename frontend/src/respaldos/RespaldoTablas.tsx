@@ -71,7 +71,8 @@ export function RespaldoTablas({ credenciales }: Props) {
       if (r.ok && cuerpo.dmp) setResultado({ tipo: 'ok', dmp: cuerpo.dmp, log: cuerpo.log })
       else if (r.status === 422) setResultado({ tipo: 'error', mensajes: cuerpo.errores })
       else if (!r.ok) {
-        setResultado({ tipo: 'error', mensajes: [cuerpo.mensaje], log: cuerpo.log })
+        const mensajes = [cuerpo.mensaje, cuerpo.explicacion].filter(Boolean)
+        setResultado({ tipo: 'error', mensajes, log: cuerpo.log })
       }
     } catch {
       // sin respuesta del servidor: no hay nada que mostrar todavía
