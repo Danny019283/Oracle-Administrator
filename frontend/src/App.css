@@ -276,7 +276,8 @@ input[type='checkbox']:checked {
 
 select,
 input:not([type]),
-input[type='text'] {
+input[type='text'],
+input[type='password'] {
   width: 100%;
   min-height: 3rem;
   padding: 0.5rem 1rem;
@@ -318,6 +319,47 @@ select {
 
 .accion:active {
   box-shadow: inset 3px 3px 8px rgba(0, 0, 0, 0.3);
+}
+
+.accion:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Barra de carga indeterminada */
+.progreso {
+  margin: 0 0 1.25rem;
+}
+
+.progreso p {
+  margin: 0 0 0.5rem;
+  color: var(--texto-suave);
+}
+
+.progreso-pista {
+  height: 0.5rem;
+  overflow: hidden;
+  border-radius: 999px;
+  box-shadow: var(--hundido);
+}
+
+.progreso-bloque {
+  width: 25%;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--acento);
+  animation: progreso-paso 1s ease-in-out infinite alternate;
+}
+
+@keyframes progreso-paso {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(300%);
+  }
 }
 
 /* Avisos */
@@ -404,4 +446,52 @@ select {
   .accion:hover {
     transform: none;
   }
+
+  .progreso-bloque {
+    animation-duration: 2.5s;
+  }
+}
+
+/* Inicio de sesión: diálogo bloqueante sobre la aplicación */
+.modal-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: color-mix(in srgb, var(--fondo) 80%, transparent);
+  backdrop-filter: blur(4px);
+}
+
+.modal {
+  width: min(100%, 30rem);
+  max-height: 100%;
+  padding: 2rem;
+  overflow: auto;
+  border-radius: 28px;
+  background: var(--superficie);
+  box-shadow: var(--relieve-hoja);
+}
+
+.modal .accion {
+  margin-top: 1.5rem;
+}
+
+.campo-login {
+  margin-bottom: 1.25rem;
+}
+
+.campo-login .campo {
+  margin-bottom: 0;
+}
+
+.error-campo {
+  margin: 0.5rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--error);
+}
+
+input[aria-invalid='true'] {
+  border-color: var(--error);
 }
