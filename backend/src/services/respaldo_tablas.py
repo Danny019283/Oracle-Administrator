@@ -1,7 +1,15 @@
 from collections.abc import Collection
+from dataclasses import dataclass
 from datetime import datetime
 
 from src.services.dumpfile import NombreInvalido, construir_nombres
+from src.services.expdp_runner import Conexion, Ejecutor, ejecutar_expdp
+
+
+@dataclass(frozen=True)
+class ResultadoRespaldo:
+    dmp: str
+    log: str
 
 
 class SolicitudInvalida(Exception):
@@ -40,3 +48,27 @@ def validar_solicitud(
 
     if errores:
         raise SolicitudInvalida(errores)
+
+
+def respaldar_tablas(
+    conexion: Conexion,
+    tablas: list[str],
+    directorio: str,
+    nombre: str,
+    contenedor: str,
+    ejecutar: Ejecutor,
+    ahora: datetime,
+) -> ResultadoRespaldo:
+    nombres = construir_nombres(nombre, ahora)
+    ejecutar_expdp(
+        contenedor,
+        conexion,
+        [
+            f"TABLES={','.join(tablas)}",
+            f"DIRECTORY={directorio}",
+            f"DUMPFILE={nombres.dmp}",
+            f"LOGFILE={nombres.log}",
+        ],
+        ejecutar,
+    )
+    return ResultadoRespaldo(dmp=nombres.dmp, log=nombres.log)
