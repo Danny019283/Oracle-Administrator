@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { iniciarSesion, recordados, type DatosLogin } from './sesion'
+import { avisoDeConexion, ErrorConexion } from '../respaldos/api'
+import { ErrorLogin, iniciarSesion, recordados, type DatosLogin } from './sesion'
 
 const PUERTO_MAXIMO = 65535
 
@@ -30,11 +31,18 @@ function validar(datos: DatosLogin): Errores {
   return errores
 }
 
+function mensajesDe(error: unknown): string[] {
+  if (error instanceof ErrorLogin) return error.errores.length ? error.errores : [error.mensaje]
+  if (error instanceof ErrorConexion) return [avisoDeConexion(error)]
+  return ['No se pudo iniciar sesión']
+}
+
 // Diálogo bloqueante: sin cerrar, sin Escape y con el foco atrapado hasta iniciar sesión.
 export function ModalLogin() {
   const [datos, setDatos] = useState<DatosLogin>(() => ({ ...INICIAL, ...recordados() }))
   const [errores, setErrores] = useState<Errores>({})
   const [enviando, setEnviando] = useState(false)
+  const [aviso, setAviso] = useState<string[]>([])
   const idTitulo = useId()
   const idBase = useId()
   const formulario = useRef<HTMLFormElement>(null)
@@ -81,9 +89,14 @@ export function ModalLogin() {
       campos.current[primero.nombre]?.focus()
       return
     }
+    setAviso([])
     setEnviando(true)
     iniciarSesion(limpios)
-      .catch(() => undefined)
+      .catch((error) => {
+        setAviso(mensajesDe(error))
+        cambiar('password', '')
+        campos.current.password?.focus()
+      })
       .finally(() => setEnviando(false))
   }
 
@@ -92,6 +105,14 @@ export function ModalLogin() {
       <div role="dialog" aria-modal="true" aria-labelledby={idTitulo} className="modal" onKeyDown={alPulsarTecla}>
         <h1 id={idTitulo}>Iniciar sesión</h1>
         <p className="apoyo">Ingresa los datos de conexión y las credenciales de tu usuario de Oracle.</p>
+
+        {aviso.length > 0 && (
+          <div role="alert" className="aviso error">
+            {aviso.map((mensaje) => (
+              <p key={mensaje}>{mensaje}</p>
+            ))}
+          </div>
+        )}
 
         <form ref={formulario} onSubmit={alEnviar} noValidate>
           {CAMPOS.map(({ nombre, etiqueta, tipo, autoComplete }) => {
