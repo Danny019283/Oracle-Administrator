@@ -3,13 +3,13 @@ from fastapi.testclient import TestClient
 
 from main import app
 from src.api.respaldos import obtener_consulta, obtener_ejecutor
-from src.services.expdp_runner import Salida
+from src.api.sesion import obtener_almacen
+from src.services.expdp_runner import Conexion, Salida
+from src.services.sesiones import AlmacenSesiones
 
-CABECERAS = {
-    "X-Oracle-User": "HR",
-    "X-Oracle-Password": "s3creta!",
-    "X-Oracle-Service": "XEPDB1",
-}
+ALMACEN = AlmacenSesiones()
+TOKEN = ALMACEN.crear(Conexion(usuario="HR", password="s3creta!", servicio="XEPDB1"))
+CABECERAS = {"Authorization": f"Bearer {TOKEN}"}
 RUTA = "/opt/oracle/Respaldos"
 SOLICITUD = {"tablas": ["CLIENTES"], "directorio": "RESPALDO", "nombre": "ventas"}
 LOG_DUPLICADO = "ORA-31641: no se puede crear el archivo\nORA-27038: el archivo creado ya existe"
@@ -34,6 +34,7 @@ def ejecutor_que_falla(log):
 
 @pytest.fixture
 def cliente():
+    app.dependency_overrides[obtener_almacen] = lambda: ALMACEN
     yield TestClient(app)
     app.dependency_overrides.clear()
 

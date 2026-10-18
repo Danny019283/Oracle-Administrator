@@ -2,10 +2,11 @@ import os
 from collections.abc import Callable
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from src.api.dependencias import obtener_conexion
 from src.services.directorios import SinDirectorios, listar_directorios
 from src.services.docker_ejecutor import ejecutar_docker
 from src.services.expdp_runner import Conexion
@@ -24,16 +25,6 @@ from src.services.schemas import SinSchemas, listar_schemas
 from src.services.tablas import SinTablas, listar_tablas
 
 router = APIRouter(prefix="/respaldos")
-
-
-def obtener_conexion(
-    x_oracle_user: str = Header(),
-    x_oracle_password: str = Header(),
-    x_oracle_service: str = Header(),
-) -> Conexion:
-    return Conexion(
-        usuario=x_oracle_user, password=x_oracle_password, servicio=x_oracle_service
-    )
 
 
 def obtener_consulta(conexion: Conexion = Depends(obtener_conexion)):

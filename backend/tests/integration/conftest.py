@@ -105,8 +105,15 @@ def cliente(monkeypatch):
 
 
 def cabeceras(entorno: Entorno) -> dict[str, str]:
-    return {
-        "X-Oracle-User": entorno.usuario,
-        "X-Oracle-Password": entorno.password,
-        "X-Oracle-Service": entorno.servicio,
-    }
+    respuesta = TestClient(app).post(
+        "/sesion",
+        json={
+            "host": HOST,
+            "puerto": PUERTO,
+            "servicio": entorno.servicio,
+            "usuario": entorno.usuario,
+            "password": entorno.password,
+        },
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    return {"Authorization": f"Bearer {respuesta.json()['token']}"}
