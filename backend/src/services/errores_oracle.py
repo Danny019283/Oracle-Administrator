@@ -1,0 +1,29 @@
+import re
+
+EXPLICACION_GENERICA = (
+    "Oracle devolvió un error que no está catalogado; revisa el error y el log"
+)
+
+_EXPLICACIONES = {
+    "ORA-27038": "Ya existe un archivo de respaldo con ese nombre en el directorio",
+    "ORA-39087": "El nombre del DIRECTORY no es válido o no existe en Oracle",
+    "ORA-39070": "No se puede abrir el archivo de log: revisa los permisos del DIRECTORY",
+    "ORA-39166": "Alguna de las tablas seleccionadas no existe en el schema",
+    "ORA-01017": "Usuario o contraseña de Oracle incorrectos",
+    "ORA-12514": "El servicio de Oracle indicado no existe",
+    "ORA-39002": "La operación no es válida; revisa el DIRECTORY y los permisos",
+}
+
+# Oracle envuelve casi todos los fallos de Data Pump con este código; solo
+# explica cuando no hay otro más específico.
+_ENVOLTORIO = "ORA-39002"
+
+
+def explicar_error(log: str) -> str:
+    codigos = re.findall(r"ORA-\d{5}", log)
+    for codigo in codigos:
+        if codigo != _ENVOLTORIO and codigo in _EXPLICACIONES:
+            return _EXPLICACIONES[codigo]
+    if _ENVOLTORIO in codigos:
+        return _EXPLICACIONES[_ENVOLTORIO]
+    return EXPLICACION_GENERICA
