@@ -102,6 +102,11 @@ def post_tablas(
         )
     except RespaldoFallido as error:
         return JSONResponse(
-            status_code=500, content={"mensaje": str(error), "log": error.log}
+            status_code=500,
+            content={
+                "mensaje": str(error),
+                "explicacion": error.explicacion,
+                "log": error.log,
+            },
         )
     return {"dmp": resultado.dmp, "log": resultado.log}

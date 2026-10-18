@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from src.services.dumpfile import NombreInvalido, construir_nombres
+from src.services.errores_oracle import explicar_error
 from src.services.expdp_runner import Conexion, Ejecutor, ejecutar_expdp
 
 
@@ -11,6 +12,7 @@ class RespaldoFallido(Exception):
         super().__init__(f"El respaldo falló: expdp terminó con código {codigo}")
         self.codigo = codigo
         self.log = log
+        self.explicacion = explicar_error(log)
 
 
 @dataclass(frozen=True)
