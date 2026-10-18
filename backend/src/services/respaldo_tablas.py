@@ -6,6 +6,13 @@ from src.services.dumpfile import NombreInvalido, construir_nombres
 from src.services.expdp_runner import Conexion, Ejecutor, ejecutar_expdp
 
 
+class RespaldoFallido(Exception):
+    def __init__(self, codigo: int, log: str):
+        super().__init__(f"El respaldo falló: expdp terminó con código {codigo}")
+        self.codigo = codigo
+        self.log = log
+
+
 @dataclass(frozen=True)
 class ResultadoRespaldo:
     dmp: str
@@ -58,9 +65,10 @@ def respaldar_tablas(
     contenedor: str,
     ejecutar: Ejecutor,
     ahora: datetime,
+    ruta_directorio: str | None = None,
 ) -> ResultadoRespaldo:
     nombres = construir_nombres(nombre, ahora)
-    ejecutar_expdp(
+    salida = ejecutar_expdp(
         contenedor,
         conexion,
         [
@@ -71,4 +79,11 @@ def respaldar_tablas(
         ],
         ejecutar,
     )
+    if salida.codigo != 0:
+        log = salida.texto
+        if ruta_directorio is not None:
+            log = ejecutar(
+                ["docker", "exec", contenedor, "cat", f"{ruta_directorio}/{nombres.log}"]
+            ).texto
+        raise RespaldoFallido(salida.codigo, log)
     return ResultadoRespaldo(dmp=nombres.dmp, log=nombres.log)
