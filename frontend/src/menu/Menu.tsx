@@ -1,5 +1,3 @@
-import { useState } from 'react'
-
 export type TipoRespaldo = 'tablas' | 'schemas' | 'full'
 
 const MODULOS = [
@@ -19,13 +17,11 @@ const RESPALDOS: { tipo: TipoRespaldo; titulo: string }[] = [
   { tipo: 'full', titulo: 'Full' },
 ]
 
-type Props = {
-  onElegirRespaldo: (tipo: TipoRespaldo) => void
+type PropsPrincipal = {
+  onAbrirRespaldos: () => void
 }
 
-export function Menu({ onElegirRespaldo }: Props) {
-  const [respaldosAbierto, setRespaldosAbierto] = useState(false)
-
+export function MenuPrincipal({ onAbrirRespaldos }: PropsPrincipal) {
   return (
     <nav>
       <ul>
@@ -33,28 +29,37 @@ export function Menu({ onElegirRespaldo }: Props) {
           <li key={modulo}>
             <button
               type="button"
-              onClick={
-                modulo === 'Creación de respaldos'
-                  ? () => setRespaldosAbierto(true)
-                  : undefined
-              }
+              onClick={modulo === 'Creación de respaldos' ? onAbrirRespaldos : undefined}
             >
               {modulo}
             </button>
           </li>
         ))}
       </ul>
-      {respaldosAbierto && (
-        <ul>
-          {RESPALDOS.map(({ tipo, titulo }) => (
-            <li key={tipo}>
-              <button type="button" onClick={() => onElegirRespaldo(tipo)}>
-                {titulo}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+    </nav>
+  )
+}
+
+type PropsRespaldos = {
+  onElegirRespaldo: (tipo: TipoRespaldo) => void
+  onVolver: () => void
+}
+
+export function MenuRespaldos({ onElegirRespaldo, onVolver }: PropsRespaldos) {
+  return (
+    <nav>
+      <button type="button" onClick={onVolver}>
+        Volver
+      </button>
+      <ul>
+        {RESPALDOS.map(({ tipo, titulo }) => (
+          <li key={tipo}>
+            <button type="button" onClick={() => onElegirRespaldo(tipo)}>
+              {titulo}
+            </button>
+          </li>
+        ))}
+      </ul>
     </nav>
   )
 }
