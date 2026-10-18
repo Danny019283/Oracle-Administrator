@@ -4,7 +4,7 @@ import { MenuPrincipal, MenuRespaldos } from './menu/Menu'
 import { RespaldoSchemas } from './respaldos/RespaldoSchemas'
 import { RespaldoTablas } from './respaldos/RespaldoTablas'
 import { ModalLogin } from './sesion/ModalLogin'
-import { alCambiarSesion, sesionActual, type Sesion } from './sesion/sesion'
+import { alCambiarSesion, cerrarSesion, motivoDeSalida, sesionActual, type Sesion } from './sesion/sesion'
 import { ToggleTema } from './tema/ToggleTema'
 
 type Vista = 'principal' | 'respaldos' | 'tablas' | 'schemas'
@@ -32,6 +32,8 @@ const suscribirse = (avisar: () => void) => alCambiarSesion(() => avisar())
 
 const useSesion = () => useSyncExternalStore(suscribirse, sesionActual)
 
+const useMotivoDeSalida = () => useSyncExternalStore(suscribirse, motivoDeSalida)
+
 function Marco({ children, sesion }: { children: ReactNode; sesion: Sesion | null }) {
   return (
     <div className="app" inert={!sesion}>
@@ -47,7 +49,7 @@ function Marco({ children, sesion }: { children: ReactNode; sesion: Sesion | nul
                 {sesion.usuario}
                 {sesion.sysdba && <span className="etiqueta-sysdba">SYSDBA</span>}
               </span>
-              <button type="button" className="cerrar-sesion">
+              <button type="button" className="cerrar-sesion" onClick={() => void cerrarSesion()}>
                 Cerrar sesión
               </button>
             </>
@@ -110,13 +112,14 @@ function Navegador({ sesion }: { sesion: Sesion | null }) {
 
 function App() {
   const sesion = useSesion()
+  const motivo = useMotivoDeSalida()
 
   return (
     <>
       <Marco sesion={sesion}>
         <Navegador key={sesion?.token ?? 'sin-sesion'} sesion={sesion} />
       </Marco>
-      {!sesion && <ModalLogin />}
+      {!sesion && <ModalLogin aviso={motivo === 'expirada' ? 'Sesión expirada. Inicia sesión de nuevo.' : undefined} />}
     </>
   )
 }

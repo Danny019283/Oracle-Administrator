@@ -28,6 +28,8 @@ const CLAVE_RECORDADOS = 'oracle.conexion'
 
 // El token vive solo en memoria: recargar la página obliga a iniciar sesión de nuevo.
 let actual: Sesion | null = null
+// Por qué no hay sesión: solo se avisa al usuario cuando la perdió sin pedirlo.
+let motivo: 'expirada' | null = null
 const escuchas = new Set<Escucha>()
 
 // Fallo de login con respuesta de la API (credenciales, privilegio, Oracle inalcanzable, datos inválidos).
@@ -49,6 +51,8 @@ export class ErrorLogin extends Error {
 const avisar = (evento: EventoSesion) => escuchas.forEach((escucha) => escucha(evento))
 
 export const sesionActual = () => actual
+
+export const motivoDeSalida = () => motivo
 
 export const cabeceraAutorizacion = (): Record<string, string> =>
   actual ? { Authorization: `Bearer ${actual.token}` } : {}
@@ -104,6 +108,7 @@ export async function iniciarSesion(datos: DatosLogin): Promise<Sesion> {
   }
 
   actual = { token: cuerpo.token, usuario: cuerpo.usuario, sysdba: cuerpo.sysdba }
+  motivo = null
   recordar(datos)
   avisar({ estado: 'activa', sesion: actual })
   return actual
@@ -113,6 +118,7 @@ export async function cerrarSesion(): Promise<void> {
   if (!actual) return
   const cabecera = cabeceraAutorizacion()
   actual = null
+  motivo = null
   avisar({ estado: 'cerrada' })
   try {
     await fetch('/sesion', { method: 'DELETE', headers: cabecera })
@@ -125,5 +131,6 @@ export async function cerrarSesion(): Promise<void> {
 export function expirarSesion() {
   if (!actual) return
   actual = null
+  motivo = 'expirada'
   avisar({ estado: 'expirada' })
 }

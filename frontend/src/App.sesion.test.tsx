@@ -179,3 +179,136 @@ describe('con la sesión ya iniciada al abrir', () => {
     expect(screen.getByRole('dialog', { name: 'Iniciar sesión' })).not.toBeNull()
   })
 })
+
+describe('cerrar sesión desde la top bar', () => {
+  beforeEach(async () => {
+    await iniciarSesion(DATOS)
+  })
+
+  it('llama a DELETE /sesion con el token y vuelve al modal', async () => {
+    render(<App />)
+
+    fireEvent.click(barra().getByRole('button', { name: 'Cerrar sesión' }))
+
+    await screen.findByRole('dialog', { name: 'Iniciar sesión' })
+    const borrado = fetchFalso.mock.calls.find(([url, o]) => url === '/sesion' && o?.method === 'DELETE')
+    expect(borrado).toBeDefined()
+    expect(borrado![1].headers).toEqual({ Authorization: 'Bearer tok-123' })
+  })
+
+  it('la top bar deja de mostrar usuario y «Cerrar sesión»', async () => {
+    render(<App />)
+
+    fireEvent.click(barra().getByRole('button', { name: 'Cerrar sesión' }))
+
+    await screen.findByRole('dialog')
+    expect(barra().queryByText('HR')).toBeNull()
+    expect(barra().queryByRole('button', { name: 'Cerrar sesión' })).toBeNull()
+  })
+
+  it('el modal vuelve con la contraseña vacía y los datos de conexión recordados', async () => {
+    render(<App />)
+
+    fireEvent.click(barra().getByRole('button', { name: 'Cerrar sesión' }))
+
+    await screen.findByRole('dialog')
+    expect((screen.getByLabelText('Contraseña') as HTMLInputElement).value).toBe('')
+    expect((screen.getByLabelText('Host') as HTMLInputElement).value).toBe('db.local')
+    expect((screen.getByLabelText('Usuario') as HTMLInputElement).value).toBe('HR')
+  })
+
+  it('cerrar la sesión por voluntad propia no muestra «Sesión expirada»', async () => {
+    render(<App />)
+
+    fireEvent.click(barra().getByRole('button', { name: 'Cerrar sesión' }))
+
+    await screen.findByRole('dialog')
+    expect(screen.queryByText(/Sesión expirada/)).toBeNull()
+  })
+
+  it('tras cerrar, la app empieza en el menú principal al volver a entrar', async () => {
+    render(<App />)
+    fireEvent.click(boton('Creación de respaldos')!)
+    fireEvent.click(boton('Tablas')!)
+    await screen.findByRole('checkbox', { name: 'CLIENTES' })
+
+    fireEvent.click(barra().getByRole('button', { name: 'Cerrar sesión' }))
+    await screen.findByRole('dialog')
+    iniciarDesdeElModal()
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(boton('Creación de respaldos')).not.toBeNull()
+    expect(screen.queryByRole('checkbox', { name: 'CLIENTES' })).toBeNull()
+  })
+})
+
+describe('sesión expirada', () => {
+  beforeEach(async () => {
+    await iniciarSesion(DATOS)
+  })
+
+  it('un 401 en una pantalla de respaldo vuelve al modal con el aviso «Sesión expirada»', async () => {
+    fetchFalso.mockImplementation(async (url: string) =>
+      String(url).startsWith('/respaldos') ? respuesta({ detail: 'Sesión no válida o expirada' }, 401) : respuesta(OK),
+    )
+    render(<App />)
+
+    fireEvent.click(boton('Creación de respaldos')!)
+    fireEvent.click(boton('Tablas')!)
+
+    await screen.findByRole('dialog', { name: 'Iniciar sesión' })
+    expect(screen.getByRole('status').textContent).toContain('Sesión expirada')
+  })
+
+  it('al expirar por inactividad el modal muestra el aviso y conserva los datos recordados', () => {
+    render(<App />)
+
+    act(() => expirarSesion())
+
+    expect(screen.getByRole('status').textContent).toContain('Sesión expirada')
+    expect((screen.getByLabelText('Host') as HTMLInputElement).value).toBe('db.local')
+    expect((screen.getByLabelText('Contraseña') as HTMLInputElement).value).toBe('')
+  })
+
+  it('al iniciar sesión de nuevo el aviso desaparece', async () => {
+    render(<App />)
+    act(() => expirarSesion())
+
+    iniciarDesdeElModal()
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.queryByText(/Sesión expirada/)).toBeNull()
+  })
+
+  it('una expiración posterior a un cierre voluntario vuelve a mostrar el aviso', async () => {
+    render(<App />)
+    await act(() => cerrarSesion())
+    iniciarDesdeElModal()
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+
+    act(() => expirarSesion())
+
+    expect(screen.getByRole('status').textContent).toContain('Sesión expirada')
+  })
+
+  it('un fallo de login con el aviso visible muestra además el error del servidor', async () => {
+    render(<App />)
+    act(() => expirarSesion())
+    fetchFalso.mockImplementation(async () =>
+      respuesta({ mensaje: 'Usuario o contraseña de Oracle incorrectos (ORA-01017)', codigo: 'ORA-01017' }, 401),
+    )
+
+    iniciarDesdeElModal()
+
+    const alerta = await screen.findByRole('alert')
+    expect(alerta.textContent).toContain('ORA-01017')
+    expect(screen.getByRole('status').textContent).toContain('Sesión expirada')
+  })
+
+  it('sin sesión previa el modal inicial no muestra el aviso', async () => {
+    await cerrarSesion()
+    render(<App />)
+
+    expect(screen.queryByText(/Sesión expirada/)).toBeNull()
+  })
+})

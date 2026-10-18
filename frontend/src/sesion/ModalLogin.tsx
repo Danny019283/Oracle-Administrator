@@ -38,7 +38,7 @@ function mensajesDe(error: unknown): string[] {
 }
 
 // Diálogo bloqueante: sin cerrar, sin Escape y con el foco atrapado hasta iniciar sesión.
-export function ModalLogin() {
+export function ModalLogin({ aviso: avisoExterno }: { aviso?: string }) {
   const [datos, setDatos] = useState<DatosLogin>(() => ({ ...INICIAL, ...recordados() }))
   const [errores, setErrores] = useState<Errores>({})
   const [enviando, setEnviando] = useState(false)
@@ -105,6 +105,12 @@ export function ModalLogin() {
       <div role="dialog" aria-modal="true" aria-labelledby={idTitulo} className="modal" onKeyDown={alPulsarTecla}>
         <h1 id={idTitulo}>Iniciar sesión</h1>
         <p className="apoyo">Ingresa los datos de conexión y las credenciales de tu usuario de Oracle.</p>
+
+        {avisoExterno && (
+          <p role="status" className="aviso">
+            {avisoExterno}
+          </p>
+        )}
 
         {aviso.length > 0 && (
           <div role="alert" className="aviso error">
