@@ -48,4 +48,22 @@ describe('menú principal', () => {
 
     expect(screen.queryByRole('heading', { name: 'Respaldar tablas' })).not.toBeNull()
   })
+
+  it('«Schemas» está disponible y lleva a la pantalla de respaldo de schemas', () => {
+    render(<App />)
+
+    fireEvent.click(boton('Creación de respaldos')!)
+    expect(boton('Schemas')!.getAttribute('aria-disabled')).toBeNull()
+    fireEvent.click(boton('Schemas')!)
+
+    expect(screen.queryByRole('heading', { name: 'Respaldar schemas' })).not.toBeNull()
+  })
+
+  it('«Full» sigue sin estar disponible', () => {
+    render(<App />)
+
+    fireEvent.click(boton('Creación de respaldos')!)
+
+    expect(boton('Full')!.getAttribute('aria-disabled')).toBe('true')
+  })
 })

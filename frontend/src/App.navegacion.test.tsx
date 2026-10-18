@@ -75,6 +75,30 @@ describe('navegación de una pantalla a la vez', () => {
     expect(boton('Schemas')).not.toBeNull()
   })
 
+  it('al elegir «Schemas» la pantalla de respaldo de schemas reemplaza al submenú', () => {
+    render(<App />)
+
+    irASubmenu()
+    fireEvent.click(boton('Schemas')!)
+
+    expect(titulo('Respaldar schemas')).not.toBeNull()
+    expect(boton('Tablas')).toBeNull()
+    expect(boton('Schemas')).toBeNull()
+    expect(boton('Tunning de consultas')).toBeNull()
+  })
+
+  it('desde la pantalla de schemas «Volver» regresa al submenú', () => {
+    render(<App />)
+    irASubmenu()
+    fireEvent.click(boton('Schemas')!)
+
+    fireEvent.click(boton('Volver')!)
+
+    expect(titulo('Respaldar schemas')).toBeNull()
+    expect(boton('Tablas')).not.toBeNull()
+    expect(boton('Schemas')).not.toBeNull()
+  })
+
   it('el menú principal no muestra ningún botón «Volver»', () => {
     render(<App />)
 

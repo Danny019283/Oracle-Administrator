@@ -19,7 +19,7 @@ const RESPALDOS: { tipo: TipoRespaldo; titulo: string }[] = [
   { tipo: 'full', titulo: 'Full' },
 ]
 
-const RESPALDOS_DISPONIBLES: TipoRespaldo[] = ['tablas']
+const RESPALDOS_DISPONIBLES: TipoRespaldo[] = ['tablas', 'schemas']
 
 function Flecha({ haciaAtras = false }: { haciaAtras?: boolean }) {
   return (

@@ -11,7 +11,7 @@ const CREDENCIALES: Credenciales = {
   servicio: import.meta.env.VITE_ORACLE_SERVICE ?? '',
 }
 
-type Vista = 'principal' | 'respaldos' | 'tablas'
+type Vista = 'principal' | 'respaldos' | 'tablas' | 'schemas'
 
 function MarcaBaseDeDatos() {
   return (
@@ -81,11 +81,25 @@ function App() {
     )
   }
 
+  if (vista === 'schemas') {
+    return (
+      <Marco>
+        <button type="button" className="volver" onClick={() => setVista('respaldos')}>
+          <FlechaAtras />
+          Volver
+        </button>
+        <section className="vista">
+          <h1>Respaldar schemas</h1>
+        </section>
+      </Marco>
+    )
+  }
+
   if (vista === 'respaldos') {
     return (
       <Marco>
         <MenuRespaldos
-          onElegirRespaldo={(tipo) => tipo === 'tablas' && setVista('tablas')}
+          onElegirRespaldo={(tipo) => (tipo === 'tablas' || tipo === 'schemas') && setVista(tipo)}
           onVolver={() => setVista('principal')}
         />
       </Marco>
