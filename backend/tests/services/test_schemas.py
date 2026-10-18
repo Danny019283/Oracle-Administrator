@@ -29,6 +29,17 @@ def test_excluye_los_schemas_mantenidos_por_oracle():
     assert "oracle_maintained = 'n'" in consulta.sqls[0]
 
 
+def test_solo_lista_los_schemas_que_el_usuario_puede_respaldar():
+    consulta = ConsultaFalsa([("HR",)])
+
+    listar_schemas(consulta)
+
+    sql = consulta.sqls[0]
+    assert "sys_context('userenv', 'current_user')" in sql
+    assert "session_roles" in sql
+    assert "datapump_exp_full_database" in sql
+
+
 def test_sin_schemas_informa_que_no_hay_schemas_de_usuario():
     with pytest.raises(SinSchemas, match="No hay schemas de usuario"):
         listar_schemas(ConsultaFalsa([]))
