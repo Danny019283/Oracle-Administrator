@@ -2,6 +2,9 @@ import { useState, type ReactNode } from 'react'
 import './App.css'
 import { MenuPrincipal, MenuRespaldos } from './menu/Menu'
 import { RespaldoTablas, type Credenciales } from './respaldos/RespaldoTablas'
+import { Performance } from './performance/Performance'
+import { Auditoria } from './auditoria/Auditoria'
+import { Seguridad } from './seguridad/Seguridad'
 import { ToggleTema } from './tema/ToggleTema'
 
 // Provisional hasta que exista la pantalla de ingreso a Oracle.
@@ -11,7 +14,13 @@ const CREDENCIALES: Credenciales = {
   servicio: import.meta.env.VITE_ORACLE_SERVICE ?? '',
 }
 
-type Vista = 'principal' | 'respaldos' | 'tablas'
+type Vista = 'principal' | 'respaldos' | 'tablas' | 'performance' | 'auditoria' | 'seguridad'
+
+const VISTA_DE_MODULO: Record<string, Vista> = {
+  'Performance de la base de datos': 'performance',
+  'Auditoría de la BD': 'auditoria',
+  'Seguridad de usuarios': 'seguridad',
+}
 
 function MarcaBaseDeDatos() {
   return (
@@ -81,6 +90,20 @@ function App() {
     )
   }
 
+  if (vista === 'performance' || vista === 'auditoria' || vista === 'seguridad') {
+    return (
+      <Marco>
+        <button type="button" className="volver" onClick={() => setVista('principal')}>
+          <FlechaAtras />
+          Volver
+        </button>
+        {vista === 'performance' && <Performance credenciales={CREDENCIALES} />}
+        {vista === 'auditoria' && <Auditoria credenciales={CREDENCIALES} />}
+        {vista === 'seguridad' && <Seguridad credenciales={CREDENCIALES} />}
+      </Marco>
+    )
+  }
+
   if (vista === 'respaldos') {
     return (
       <Marco>
@@ -94,7 +117,13 @@ function App() {
 
   return (
     <Marco>
-      <MenuPrincipal onAbrirRespaldos={() => setVista('respaldos')} />
+      <MenuPrincipal
+        onAbrirRespaldos={() => setVista('respaldos')}
+        onElegirModulo={(modulo) => {
+          const destino = VISTA_DE_MODULO[modulo]
+          if (destino) setVista(destino)
+        }}
+      />
     </Marco>
   )
 }

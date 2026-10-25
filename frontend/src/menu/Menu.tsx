@@ -11,7 +11,12 @@ const MODULOS = [
   'Administración de archivos de respaldos y directorios',
 ]
 
-const MODULOS_DISPONIBLES = ['Creación de respaldos']
+const MODULOS_DISPONIBLES = [
+  'Performance de la base de datos',
+  'Auditoría de la BD',
+  'Seguridad de usuarios',
+  'Creación de respaldos',
+]
 
 const RESPALDOS: { tipo: TipoRespaldo; titulo: string }[] = [
   { tipo: 'tablas', titulo: 'Tablas' },
@@ -68,9 +73,10 @@ function Fila({ titulo, disponible, onElegir }: FilaProps) {
 
 type PropsPrincipal = {
   onAbrirRespaldos: () => void
+  onElegirModulo?: (modulo: string) => void
 }
 
-export function MenuPrincipal({ onAbrirRespaldos }: PropsPrincipal) {
+export function MenuPrincipal({ onAbrirRespaldos, onElegirModulo }: PropsPrincipal) {
   return (
     <section className="vista">
       <h1>¿Qué quieres administrar?</h1>
@@ -82,7 +88,11 @@ export function MenuPrincipal({ onAbrirRespaldos }: PropsPrincipal) {
               key={modulo}
               titulo={modulo}
               disponible={MODULOS_DISPONIBLES.includes(modulo)}
-              onElegir={onAbrirRespaldos}
+              onElegir={
+                modulo === 'Creación de respaldos'
+                  ? onAbrirRespaldos
+                  : () => onElegirModulo?.(modulo)
+              }
             />
           ))}
         </ul>
