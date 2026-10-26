@@ -19,9 +19,9 @@ export function AvisoError({ mensajes, log }: PropsError) {
 
 export function AvisoExito({ children }: { children: ReactNode }) {
   return (
-    <p role="status" className="aviso exito">
+    <div role="status" className="aviso exito">
       {children}
-    </p>
+    </div>
   )
 }
 
