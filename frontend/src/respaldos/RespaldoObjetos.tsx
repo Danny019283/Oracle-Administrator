@@ -1,7 +1,7 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { avisoDeConexion, cabeceras, ErrorConexion, pedir } from './api'
-
-type Directorio = { nombre: string; ruta: string }
+import { AvisoError, AvisoExito, BarraRespaldando } from './AvisosRespaldo'
+import { FormularioDestino, type Directorio } from './FormularioDestino'
 
 type Resultado =
   | { tipo: 'ok'; dmp: string; log: string }
@@ -33,7 +33,6 @@ export function RespaldoObjetos({ token, tipo }: Props) {
   const [resultado, setResultado] = useState<Resultado | null>(null)
   const [errorConexion, setErrorConexion] = useState<string | null>(null)
   const [respaldando, setRespaldando] = useState(false)
-  const ayudaNombre = useId()
   const encabezado = useRef<HTMLHeadingElement>(null)
 
   useEffect(() => {
@@ -102,18 +101,14 @@ export function RespaldoObjetos({ token, tipo }: Props) {
       <h1 ref={encabezado}>{tipo.titulo}</h1>
       <p className="apoyo">{tipo.descripcion}</p>
 
-      {mensajes.length > 0 && (
-        <div role="alert" className="aviso error">
-          {mensajes.map((mensaje) => (
-            <p key={mensaje}>{mensaje}</p>
-          ))}
-          {resultado?.tipo === 'error' && resultado.log && <pre>{resultado.log}</pre>}
-        </div>
-      )}
+      <AvisoError
+        mensajes={mensajes}
+        log={resultado?.tipo === 'error' ? resultado.log : undefined}
+      />
       {resultado?.tipo === 'ok' && (
-        <p role="status" className="aviso exito">
+        <AvisoExito>
           Respaldo creado: {resultado.dmp} (log: {resultado.log})
-        </p>
+        </AvisoExito>
       )}
 
       <div className="panel">
@@ -142,41 +137,17 @@ export function RespaldoObjetos({ token, tipo }: Props) {
         </ul>
       </div>
 
-      <div className="panel">
-        <h2>Destino</h2>
-        <label className="campo">
-          Directorio
-          <select value={directorio} onChange={(e) => setDirectorio(e.target.value)}>
-            <option value="">Selecciona un directorio</option>
-            {directorios.map((d) => (
-              <option key={d.nombre} value={d.nombre}>
-                {d.nombre} ({d.ruta})
-              </option>
-            ))}
-          </select>
-        </label>
+      <FormularioDestino
+        directorios={directorios}
+        directorio={directorio}
+        alElegirDirectorio={setDirectorio}
+        nombre={nombre}
+        alCambiarNombre={setNombre}
+        etiquetaNombre="Nombre del dumpfile"
+        ayudaNombre="Se agrega la fecha y la hora al nombre. Usa letras, números, guion y guion bajo."
+      />
 
-        <label className="campo">
-          Nombre del dumpfile
-          <input
-            value={nombre}
-            onChange={(e) => setNombre(e.target.value)}
-            aria-describedby={ayudaNombre}
-          />
-        </label>
-        <p className="ayuda" id={ayudaNombre}>
-          Se agrega la fecha y la hora al nombre. Usa letras, números, guion y guion bajo.
-        </p>
-      </div>
-
-      {respaldando && (
-        <div aria-live="polite" className="progreso">
-          <p>Respaldando...</p>
-          <div className="progreso-pista" aria-hidden="true">
-            <div className="progreso-bloque" />
-          </div>
-        </div>
-      )}
+      {respaldando && <BarraRespaldando />}
 
       <button type="button" className="accion" onClick={respaldar} disabled={respaldando}>
         Respaldar
