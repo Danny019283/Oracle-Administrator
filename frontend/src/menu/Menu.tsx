@@ -16,10 +16,10 @@ const MODULOS_DISPONIBLES = ['Creación de respaldos']
 const RESPALDOS: { tipo: TipoRespaldo; titulo: string }[] = [
   { tipo: 'tablas', titulo: 'Tablas' },
   { tipo: 'schemas', titulo: 'Schemas' },
-  { tipo: 'full', titulo: 'Full' },
+  { tipo: 'full', titulo: 'Full (SYSDBA requerido)' },
 ]
 
-const RESPALDOS_DISPONIBLES: TipoRespaldo[] = ['tablas', 'schemas']
+const RESPALDOS_DISPONIBLES: TipoRespaldo[] = ['tablas', 'schemas', 'full']
 
 function Flecha({ haciaAtras = false }: { haciaAtras?: boolean }) {
   return (

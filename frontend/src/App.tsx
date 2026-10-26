@@ -1,13 +1,14 @@
 import { useState, useSyncExternalStore, type ReactNode } from 'react'
 import './App.css'
 import { MenuPrincipal, MenuRespaldos } from './menu/Menu'
+import { RespaldoFull } from './respaldos/RespaldoFull'
 import { RespaldoSchemas } from './respaldos/RespaldoSchemas'
 import { RespaldoTablas } from './respaldos/RespaldoTablas'
 import { ModalLogin } from './sesion/ModalLogin'
 import { alCambiarSesion, cerrarSesion, motivoDeSalida, sesionActual, type Sesion } from './sesion/sesion'
 import { ToggleTema } from './tema/ToggleTema'
 
-type Vista = 'principal' | 'respaldos' | 'tablas' | 'schemas'
+type Vista = 'principal' | 'respaldos' | 'tablas' | 'schemas' | 'full'
 
 function MarcaBaseDeDatos() {
   return (
@@ -81,12 +82,14 @@ function FlechaAtras() {
   )
 }
 
+const PANTALLAS = { tablas: RespaldoTablas, schemas: RespaldoSchemas, full: RespaldoFull }
+
 // La pantalla abierta pertenece a la sesión: al cambiar el token se vuelve al menú principal.
 function Navegador({ sesion }: { sesion: Sesion | null }) {
   const [vista, setVista] = useState<Vista>('principal')
 
-  if (sesion && (vista === 'tablas' || vista === 'schemas')) {
-    const Pantalla = vista === 'tablas' ? RespaldoTablas : RespaldoSchemas
+  if (sesion && (vista === 'tablas' || vista === 'schemas' || vista === 'full')) {
+    const Pantalla = PANTALLAS[vista]
     return (
       <>
         <button type="button" className="volver" onClick={() => setVista('respaldos')}>
@@ -101,7 +104,7 @@ function Navegador({ sesion }: { sesion: Sesion | null }) {
   if (vista === 'respaldos') {
     return (
       <MenuRespaldos
-        onElegirRespaldo={(tipo) => (tipo === 'tablas' || tipo === 'schemas') && setVista(tipo)}
+        onElegirRespaldo={setVista}
         onVolver={() => setVista('principal')}
       />
     )

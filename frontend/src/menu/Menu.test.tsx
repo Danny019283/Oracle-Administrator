@@ -51,14 +51,14 @@ describe('menú principal', () => {
     expect(boton('Tablas')).toBeNull()
   })
 
-  it('al elegir «Creación de respaldos» ofrece Tablas, Schemas y Full', () => {
+  it('al elegir «Creación de respaldos» ofrece Tablas, Schemas y Full (SYSDBA requerido)', () => {
     render(<App />)
 
     fireEvent.click(boton('Creación de respaldos')!)
 
     expect(boton('Tablas')).not.toBeNull()
     expect(boton('Schemas')).not.toBeNull()
-    expect(boton('Full')).not.toBeNull()
+    expect(boton('Full (SYSDBA requerido)')).not.toBeNull()
   })
 
   it('al elegir «Tablas» lleva a la pantalla de respaldo de tablas', () => {
@@ -80,11 +80,13 @@ describe('menú principal', () => {
     expect(screen.queryByRole('heading', { name: 'Respaldar schemas' })).not.toBeNull()
   })
 
-  it('«Full» sigue sin estar disponible', () => {
+  it('«Full (SYSDBA requerido)» está disponible y lleva a la pantalla de respaldo Full', () => {
     render(<App />)
 
     fireEvent.click(boton('Creación de respaldos')!)
+    expect(boton('Full (SYSDBA requerido)')!.getAttribute('aria-disabled')).toBeNull()
+    fireEvent.click(boton('Full (SYSDBA requerido)')!)
 
-    expect(boton('Full')!.getAttribute('aria-disabled')).toBe('true')
+    expect(screen.queryByRole('heading', { name: 'Respaldar base completa (Full)' })).not.toBeNull()
   })
 })

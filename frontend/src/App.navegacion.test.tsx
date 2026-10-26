@@ -43,7 +43,7 @@ describe('navegación de una pantalla a la vez', () => {
 
     expect(boton('Tablas')).not.toBeNull()
     expect(boton('Schemas')).not.toBeNull()
-    expect(boton('Full')).not.toBeNull()
+    expect(boton('Full (SYSDBA requerido)')).not.toBeNull()
     expect(boton('Tunning de consultas')).toBeNull()
     expect(boton('Creación de respaldos')).toBeNull()
   })
@@ -109,5 +109,29 @@ describe('navegación de una pantalla a la vez', () => {
     render(<App />)
 
     expect(boton('Volver')).toBeNull()
+  })
+
+  it('al elegir «Full (SYSDBA requerido)» la pantalla Full reemplaza al submenú', () => {
+    render(<App />)
+
+    irASubmenu()
+    fireEvent.click(boton('Full (SYSDBA requerido)')!)
+
+    expect(titulo('Respaldar base completa (Full)')).not.toBeNull()
+    expect(boton('Tablas')).toBeNull()
+    expect(boton('Full (SYSDBA requerido)')).toBeNull()
+    expect(boton('Tunning de consultas')).toBeNull()
+  })
+
+  it('desde la pantalla Full «Volver» regresa al submenú', () => {
+    render(<App />)
+    irASubmenu()
+    fireEvent.click(boton('Full (SYSDBA requerido)')!)
+
+    fireEvent.click(boton('Volver')!)
+
+    expect(titulo('Respaldar base completa (Full)')).toBeNull()
+    expect(boton('Tablas')).not.toBeNull()
+    expect(boton('Full (SYSDBA requerido)')).not.toBeNull()
   })
 })
