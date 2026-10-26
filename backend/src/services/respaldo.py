@@ -30,9 +30,13 @@ def listar_objetos(
     return [fila[0] for fila in filas]
 
 
+def leer_log(contenedor: str, ruta: str, ejecutar: Ejecutor) -> str:
+    return ejecutar(["docker", "exec", contenedor, "cat", ruta]).texto
+
+
 class RespaldoFallido(Exception):
-    def __init__(self, codigo: int, log: str):
-        super().__init__(f"El respaldo falló: expdp terminó con código {codigo}")
+    def __init__(self, codigo: int, log: str, herramienta: str = "expdp"):
+        super().__init__(f"El respaldo falló: {herramienta} terminó con código {codigo}")
         self.codigo = codigo
         self.log = log
         self.explicacion = explicar_error(log)
@@ -123,8 +127,6 @@ def respaldar(
     if salida.codigo != 0:
         log = salida.texto
         if ruta_directorio is not None:
-            log = ejecutar(
-                ["docker", "exec", contenedor, "cat", f"{ruta_directorio}/{nombres.log}"]
-            ).texto
+            log = leer_log(contenedor, f"{ruta_directorio}/{nombres.log}", ejecutar)
         raise RespaldoFallido(salida.codigo, log)
     return ResultadoRespaldo(dmp=nombres.dmp, log=nombres.log)

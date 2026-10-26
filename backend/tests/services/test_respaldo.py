@@ -7,6 +7,7 @@ from src.services.respaldo import (
     SCHEMAS,
     TABLAS,
     RespaldoFallido,
+    leer_log,
     respaldar,
 )
 
@@ -72,3 +73,17 @@ def test_si_expdp_falla_informa_error_log_y_explicacion(tipo):
     assert "ORA-27038" in error.value.log
     assert "Ya existe un archivo de respaldo" in error.value.explicacion
     assert "s3creta!" not in str(error.value)
+
+
+def test_leer_log_devuelve_el_contenido_del_archivo_del_contenedor():
+    ejecutor = EjecutorFalso()
+
+    log = leer_log("oracle21c", f"{RUTA}/ventas.log", ejecutor)
+
+    assert log == "ORA-27038: el archivo creado ya existe"
+    assert ejecutor.llamadas == [(["docker", "exec", "oracle21c", "cat", f"{RUTA}/ventas.log"], None)]
+
+
+def test_el_mensaje_de_respaldo_fallido_nombra_la_herramienta():
+    assert str(RespaldoFallido(5, "")) == "El respaldo falló: expdp terminó con código 5"
+    assert str(RespaldoFallido(1, "", "rman")) == "El respaldo falló: rman terminó con código 1"
