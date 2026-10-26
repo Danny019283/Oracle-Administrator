@@ -58,3 +58,42 @@ def test_un_codigo_ora_desconocido_da_la_explicacion_generica():
 def test_un_log_sin_codigo_ora_da_la_explicacion_generica():
     assert explicar_error("") == EXPLICACION_GENERICA
     assert explicar_error("expdp: command not found") == EXPLICACION_GENERICA
+
+
+@pytest.mark.parametrize(
+    "log, esperado",
+    [
+        (
+            "RMAN-06149: no se puede hacer BACKUP DATABASE en modo NOARCHIVELOG",
+            "La base no está en ARCHIVELOG: actívalo para respaldar en caliente",
+        ),
+        (
+            "RMAN-06059: no se encuentra el archivelog esperado",
+            "Faltan archivelogs necesarios para el respaldo; ejecuta un CROSSCHECK",
+        ),
+        (
+            "ORA-19809: se ha superado el límite de los archivos de recuperación",
+            "Se superó el límite de la zona de recuperación (FRA)",
+        ),
+        (
+            "ORA-19504: fallo al crear el archivo",
+            "No se pudo crear el archivo de respaldo; revisa el DIRECTORY y sus permisos",
+        ),
+        (
+            "RMAN-03002: fallo del comando backup",
+            "RMAN falló al ejecutar el respaldo; revisa el log",
+        ),
+    ],
+)
+def test_explica_en_lenguaje_natural_el_codigo_rman_conocido(log, esperado):
+    assert explicar_error(log) == esperado
+
+
+def test_un_codigo_rman_especifico_prevalece_sobre_el_envoltorio_03002():
+    log = (
+        "RMAN-00569: =====PILA DE MENSAJES DE ERROR=====\n"
+        "RMAN-03002: fallo del comando backup\n"
+        "RMAN-06149: no se puede hacer BACKUP DATABASE en modo NOARCHIVELOG"
+    )
+
+    assert explicar_error(log).startswith("La base no está en ARCHIVELOG")

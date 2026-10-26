@@ -17,12 +17,17 @@ _EXPLICACIONES = {
     "ORA-28000": "La cuenta de Oracle está bloqueada",
     "ORA-28001": "La contraseña de Oracle ha expirado",
     "ORA-28009": "SYS debe conectarse como SYSDBA: marca la casilla «Iniciar como SYSDBA»",
+    "RMAN-06149": "La base no está en ARCHIVELOG: actívalo para respaldar en caliente",
+    "RMAN-03002": "RMAN falló al ejecutar el respaldo; revisa el log",
+    "RMAN-06059": "Faltan archivelogs necesarios para el respaldo; ejecuta un CROSSCHECK",
+    "ORA-19809": "Se superó el límite de la zona de recuperación (FRA)",
+    "ORA-19504": "No se pudo crear el archivo de respaldo; revisa el DIRECTORY y sus permisos",
     "DPY-6005": "No se pudo alcanzar el servidor de Oracle en ese host y puerto",
 }
 
-# Oracle envuelve casi todos los fallos de Data Pump con este código; solo
-# explica cuando no hay otro más específico.
-_ENVOLTORIO = "ORA-39002"
+# Oracle envuelve casi todos los fallos de Data Pump (ORA-39002) y de RMAN
+# (RMAN-03002) con estos códigos; solo explican cuando no hay otro más específico.
+_ENVOLTORIOS = ("ORA-39002", "RMAN-03002")
 
 
 def explicacion_de(codigo: str) -> str | None:
@@ -30,10 +35,11 @@ def explicacion_de(codigo: str) -> str | None:
 
 
 def explicar_error(log: str) -> str:
-    codigos = re.findall(r"ORA-\d{5}", log)
+    codigos = re.findall(r"(?:ORA|RMAN)-\d{5}", log)
     for codigo in codigos:
-        if codigo != _ENVOLTORIO and codigo in _EXPLICACIONES:
+        if codigo not in _ENVOLTORIOS and codigo in _EXPLICACIONES:
             return _EXPLICACIONES[codigo]
-    if _ENVOLTORIO in codigos:
-        return _EXPLICACIONES[_ENVOLTORIO]
+    for envoltorio in _ENVOLTORIOS:
+        if envoltorio in codigos:
+            return _EXPLICACIONES[envoltorio]
     return EXPLICACION_GENERICA
