@@ -47,6 +47,21 @@ class SolicitudRespaldoSchemas(BaseModel):
     nombre: str = ""
 
 
+def respuesta_solicitud_invalida(error: SolicitudInvalida) -> JSONResponse:
+    return JSONResponse(status_code=422, content={"errores": error.errores})
+
+
+def respuesta_respaldo_fallido(error: RespaldoFallido) -> JSONResponse:
+    return JSONResponse(
+        status_code=500,
+        content={
+            "mensaje": str(error),
+            "explicacion": error.explicacion,
+            "log": error.log,
+        },
+    )
+
+
 def _listado(clave: str, listar: Callable, sin_objetos: type[SinObjetos], consulta):
     try:
         return {clave: listar(consulta)}
@@ -84,7 +99,7 @@ def _respaldo(
             directorios_disponibles=[d.nombre for d in directorios],
         )
     except SolicitudInvalida as error:
-        return JSONResponse(status_code=422, content={"errores": error.errores})
+        return respuesta_solicitud_invalida(error)
 
     ruta = next(d.ruta for d in directorios if d.nombre == directorio)
     try:
@@ -100,14 +115,7 @@ def _respaldo(
             ruta_directorio=ruta,
         )
     except RespaldoFallido as error:
-        return JSONResponse(
-            status_code=500,
-            content={
-                "mensaje": str(error),
-                "explicacion": error.explicacion,
-                "log": error.log,
-            },
-        )
+        return respuesta_respaldo_fallido(error)
     return {"dmp": resultado.dmp, "log": resultado.log}
 
 
