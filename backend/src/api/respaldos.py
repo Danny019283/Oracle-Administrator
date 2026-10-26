@@ -7,8 +7,10 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from src.api.dependencias import obtener_conexion
+from src.services.archivelog import ArchivelogFallido, activar_archivelog
 from src.services.directorios import SinDirectorios, listar_directorios
 from src.services.docker_ejecutor import ejecutar_docker
+from src.services.errores_oracle import explicacion_de
 from src.services.expdp_runner import Conexion
 from src.services.oracle_conexion import consulta_oracle
 from src.services.respaldo import (
@@ -21,6 +23,7 @@ from src.services.respaldo import (
     respaldar,
     validar_solicitud,
 )
+from src.services.respaldo_full import SinArchivelog, en_archivelog, respaldar_full
 from src.services.schemas import SinSchemas, listar_schemas
 from src.services.tablas import SinTablas, listar_tablas
 
@@ -35,8 +38,23 @@ def obtener_ejecutor():
     return ejecutar_docker
 
 
+def exigir_sysdba(conexion: Conexion = Depends(obtener_conexion)) -> Conexion:
+    if not conexion.sysdba:
+        raise HTTPException(status_code=403, detail="Se requiere sesión SYSDBA")
+    return conexion
+
+
+def _contenedor() -> str:
+    return os.environ.get("ORACLE_CONTAINER", "oracle21c")
+
+
 class SolicitudRespaldo(BaseModel):
     tablas: list[str] = []
+    directorio: str = ""
+    nombre: str = ""
+
+
+class SolicitudRespaldoFull(BaseModel):
     directorio: str = ""
     nombre: str = ""
 
@@ -109,7 +127,7 @@ def _respaldo(
             objetos=objetos,
             directorio=directorio,
             nombre=nombre,
-            contenedor=os.environ.get("ORACLE_CONTAINER", "oracle21c"),
+            contenedor=_contenedor(),
             ejecutar=ejecutar,
             ahora=datetime.now(),
             ruta_directorio=ruta,
@@ -162,3 +180,68 @@ def post_schemas(
         SCHEMAS, listar_schemas, SinSchemas, solicitud.schemas, solicitud.directorio,
         solicitud.nombre, conexion, consulta, ejecutar,
     )
+
+
+@router.get("/full/estado")
+def get_estado_full(
+    _: Conexion = Depends(exigir_sysdba), consulta=Depends(obtener_consulta)
+):
+    return {"archivelog": en_archivelog(consulta)}
+
+
+@router.post("/full")
+def post_full(
+    solicitud: SolicitudRespaldoFull,
+    _: Conexion = Depends(exigir_sysdba),
+    consulta=Depends(obtener_consulta),
+    ejecutar=Depends(obtener_ejecutor),
+):
+    try:
+        directorios = listar_directorios(consulta)
+    except SinDirectorios:
+        directorios = []
+
+    try:
+        resultado = respaldar_full(
+            consulta=consulta,
+            directorios=directorios,
+            directorio=solicitud.directorio,
+            nombre=solicitud.nombre,
+            contenedor=_contenedor(),
+            ejecutar=ejecutar,
+        )
+    except SolicitudInvalida as error:
+        return respuesta_solicitud_invalida(error)
+    except SinArchivelog as error:
+        return JSONResponse(
+            status_code=409,
+            content={"mensaje": str(error), "explicacion": explicacion_de("RMAN-06149")},
+        )
+    except RespaldoFallido as error:
+        return respuesta_respaldo_fallido(error)
+
+    advertencia = resultado.advertencia
+    return {
+        "log": resultado.log,
+        "advertencia": None
+        if advertencia is None
+        else {"explicacion": advertencia.explicacion, "log": advertencia.log},
+    }
+
+
+@router.post("/full/archivelog")
+def post_archivelog(
+    _: Conexion = Depends(exigir_sysdba), ejecutar=Depends(obtener_ejecutor)
+):
+    try:
+        log = activar_archivelog(_contenedor(), ejecutar)
+    except ArchivelogFallido as error:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "mensaje": str(error),
+                "explicacion": error.explicacion,
+                "log": error.log,
+            },
+        )
+    return {"mensaje": "ARCHIVELOG activado. Inicia sesión de nuevo", "log": log}
