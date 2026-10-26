@@ -1,6 +1,7 @@
 import os
 import secrets
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -48,6 +49,18 @@ def docker(*args: str) -> subprocess.CompletedProcess:
     )
 
 
+def _conectar_admin_tras_reinicio(password_admin: str, intentos: int = 60):
+    for intento in range(intentos):
+        try:
+            return oracledb.connect(
+                user="system", password=password_admin, dsn=f"{HOST}:{PUERTO}/{SERVICIO}"
+            )
+        except oracledb.Error:
+            if intento == intentos - 1:
+                raise
+            time.sleep(3)
+
+
 def _ejecutar_ignorando_errores(cursor, sql: str) -> None:
     try:
         cursor.execute(sql)
@@ -89,6 +102,10 @@ def entorno():
 
     yield Entorno(USUARIO, password, SERVICIO, DIRECTORIO, RUTA, "CLIENTES")
 
+    # Activar ARCHIVELOG reinicia la base y corta la conexión de arriba: se abre otra.
+    admin.close()
+    admin = _conectar_admin_tras_reinicio(password_admin)
+    cursor = admin.cursor()
     _ejecutar_ignorando_errores(cursor, f"DROP USER {USUARIO} CASCADE")
     _ejecutar_ignorando_errores(cursor, f"DROP DIRECTORY {DIRECTORIO}")
     docker("rm", "-rf", RUTA)

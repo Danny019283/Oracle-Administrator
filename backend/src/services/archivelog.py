@@ -5,6 +5,7 @@ FRA_DIRECTORIO = "/opt/oracle/oradata/fast_recovery_area"
 FRA_TAMANO = "10G"
 
 _SCRIPT = f"""WHENEVER SQLERROR EXIT SQL.SQLCODE
+HOST mkdir -p {FRA_DIRECTORIO}
 ALTER SYSTEM SET db_recovery_file_dest_size={FRA_TAMANO} SCOPE=BOTH;
 ALTER SYSTEM SET db_recovery_file_dest='{FRA_DIRECTORIO}' SCOPE=BOTH;
 SHUTDOWN IMMEDIATE
