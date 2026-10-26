@@ -68,6 +68,27 @@ SCHEMAS = TipoObjeto(
 )
 
 
+def errores_destino(
+    directorio: str, nombre: str, directorios_disponibles: Collection[str]
+) -> list[str]:
+    errores = []
+
+    if not directorio:
+        errores.append("Debes elegir un directorio")
+    elif directorio not in directorios_disponibles:
+        errores.append(f"El directorio {directorio} no está disponible")
+
+    if not nombre:
+        errores.append("Debes ingresar un nombre de dumpfile")
+    else:
+        try:
+            construir_nombres(nombre, datetime.now())
+        except NombreInvalido as error:
+            errores.append(str(error))
+
+    return errores
+
+
 def validar_solicitud(
     tipo: TipoObjeto,
     objetos: list[str],
@@ -84,18 +105,7 @@ def validar_solicitud(
         if objeto not in objetos_disponibles:
             errores.append(tipo.fuera_de_lista.format(objeto))
 
-    if not directorio:
-        errores.append("Debes elegir un directorio")
-    elif directorio not in directorios_disponibles:
-        errores.append(f"El directorio {directorio} no está disponible")
-
-    if not nombre:
-        errores.append("Debes ingresar un nombre de dumpfile")
-    else:
-        try:
-            construir_nombres(nombre, datetime.now())
-        except NombreInvalido as error:
-            errores.append(str(error))
+    errores += errores_destino(directorio, nombre, directorios_disponibles)
 
     if errores:
         raise SolicitudInvalida(errores)
