@@ -261,6 +261,8 @@ describe('sesión expirada', () => {
   })
 
   it.each([
+    ['Administración de tablespaces', '/tablespaces'],
+    ['Tunning de consultas', '/tuning'],
     ['Performance de la base de datos', '/performance'],
     ['Auditoría de la BD', '/auditoria'],
     ['Seguridad de usuarios', '/seguridad'],
