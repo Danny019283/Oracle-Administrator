@@ -40,9 +40,6 @@ const MODULOS = [
   ['Seguridad de usuarios', 'Seguridad de usuarios', '/seguridad/usuarios'],
 ]
 
-// Tablespaces y Tunning se suman a este grupo cuando usan la sesión (checks 4 y 5).
-const MODULOS_CON_SESION = MODULOS.slice(2)
-
 const llamadasA = (url: string) => fetchFalso.mock.calls.filter(([u]) => u === url)
 
 describe('módulos de administración', () => {
@@ -59,7 +56,7 @@ describe('módulos de administración', () => {
     expect(boton('Creación de respaldos')).not.toBeNull()
   })
 
-  it.each(MODULOS_CON_SESION)('«%s» consulta con el token de la sesión y sin credenciales', async (modulo, _e, ruta) => {
+  it.each(MODULOS)('«%s» consulta con el token de la sesión y sin credenciales', async (modulo, _e, ruta) => {
     render(<App />)
 
     fireEvent.click(boton(modulo)!)

@@ -13,13 +13,6 @@ import { ModalLogin } from './sesion/ModalLogin'
 import { alCambiarSesion, cerrarSesion, motivoDeSalida, sesionActual, type Sesion } from './sesion/sesion'
 import { ToggleTema } from './tema/ToggleTema'
 
-// Provisional: Tablespaces y Tunning aún no usan la sesión de inicio de sesión.
-const CREDENCIALES = {
-  usuario: import.meta.env.VITE_ORACLE_USER ?? '',
-  password: import.meta.env.VITE_ORACLE_PASSWORD ?? '',
-  servicio: import.meta.env.VITE_ORACLE_SERVICE ?? '',
-}
-
 type VistaModulo = 'tablespaces' | 'tuning' | 'performance' | 'auditoria' | 'seguridad'
 
 type Vista = 'principal' | 'respaldos' | 'tablas' | 'schemas' | 'full' | VistaModulo
@@ -130,8 +123,8 @@ function Navegador({ sesion }: { sesion: Sesion | null }) {
           <FlechaAtras />
           Volver
         </button>
-        {vista === 'tablespaces' && <Tablespaces credenciales={CREDENCIALES} />}
-        {vista === 'tuning' && <Tuning credenciales={CREDENCIALES} />}
+        {vista === 'tablespaces' && <Tablespaces token={sesion.token} />}
+        {vista === 'tuning' && <Tuning token={sesion.token} />}
         {vista === 'performance' && <Performance token={sesion.token} />}
         {vista === 'auditoria' && <Auditoria token={sesion.token} />}
         {vista === 'seguridad' && <Seguridad token={sesion.token} />}
