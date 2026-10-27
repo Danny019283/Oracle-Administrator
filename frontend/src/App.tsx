@@ -7,21 +7,26 @@ import { RespaldoFull } from './respaldos/RespaldoFull'
 import { RespaldoSchemas } from './respaldos/RespaldoSchemas'
 import { RespaldoTablas } from './respaldos/RespaldoTablas'
 import { Seguridad } from './seguridad/Seguridad'
+import { Tablespaces } from './tablespaces/Tablespaces'
+import { Tuning } from './tuning/Tuning'
 import { ModalLogin } from './sesion/ModalLogin'
 import { alCambiarSesion, cerrarSesion, motivoDeSalida, sesionActual, type Sesion } from './sesion/sesion'
 import { ToggleTema } from './tema/ToggleTema'
 
-type Vista =
-  | 'principal'
-  | 'respaldos'
-  | 'tablas'
-  | 'schemas'
-  | 'full'
-  | 'performance'
-  | 'auditoria'
-  | 'seguridad'
+// Provisional: Tablespaces y Tunning aún no usan la sesión de inicio de sesión.
+const CREDENCIALES = {
+  usuario: import.meta.env.VITE_ORACLE_USER ?? '',
+  password: import.meta.env.VITE_ORACLE_PASSWORD ?? '',
+  servicio: import.meta.env.VITE_ORACLE_SERVICE ?? '',
+}
 
-const VISTA_DE_MODULO: Record<string, Vista> = {
+type VistaModulo = 'tablespaces' | 'tuning' | 'performance' | 'auditoria' | 'seguridad'
+
+type Vista = 'principal' | 'respaldos' | 'tablas' | 'schemas' | 'full' | VistaModulo
+
+const VISTA_DE_MODULO: Record<string, VistaModulo> = {
+  'Administración de tablespaces': 'tablespaces',
+  'Tunning de consultas': 'tuning',
   'Performance de la base de datos': 'performance',
   'Auditoría de la BD': 'auditoria',
   'Seguridad de usuarios': 'seguridad',
@@ -99,8 +104,6 @@ function FlechaAtras() {
   )
 }
 
-const MODULOS = { performance: Performance, auditoria: Auditoria, seguridad: Seguridad }
-
 const PANTALLAS = { tablas: RespaldoTablas, schemas: RespaldoSchemas, full: RespaldoFull }
 
 // La pantalla abierta pertenece a la sesión: al cambiar el token se vuelve al menú principal.
@@ -120,15 +123,18 @@ function Navegador({ sesion }: { sesion: Sesion | null }) {
     )
   }
 
-  if (sesion && (vista === 'performance' || vista === 'auditoria' || vista === 'seguridad')) {
-    const Modulo = MODULOS[vista]
+  if (sesion && Object.values(VISTA_DE_MODULO).includes(vista as VistaModulo)) {
     return (
       <>
         <button type="button" className="volver" onClick={() => setVista('principal')}>
           <FlechaAtras />
           Volver
         </button>
-        <Modulo token={sesion.token} />
+        {vista === 'tablespaces' && <Tablespaces credenciales={CREDENCIALES} />}
+        {vista === 'tuning' && <Tuning credenciales={CREDENCIALES} />}
+        {vista === 'performance' && <Performance token={sesion.token} />}
+        {vista === 'auditoria' && <Auditoria token={sesion.token} />}
+        {vista === 'seguridad' && <Seguridad token={sesion.token} />}
       </>
     )
   }

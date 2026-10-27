@@ -33,14 +33,19 @@ const boton = (nombre: string) => screen.queryByRole('button', { name: nombre })
 const titulo = (nombre: string) => screen.queryByRole('heading', { name: nombre, level: 1 })
 
 const MODULOS = [
+  ['Administración de tablespaces', 'Administración de tablespaces', '/tablespaces'],
+  ['Tunning de consultas', 'Tunning de consultas', '/tuning/catalogos'],
   ['Performance de la base de datos', 'Performance de la base de datos', '/performance/resumen'],
   ['Auditoría de la BD', 'Auditoría de la BD', '/auditoria/estado'],
   ['Seguridad de usuarios', 'Seguridad de usuarios', '/seguridad/usuarios'],
 ]
 
+// Tablespaces y Tunning se suman a este grupo cuando usan la sesión (checks 4 y 5).
+const MODULOS_CON_SESION = MODULOS.slice(2)
+
 const llamadasA = (url: string) => fetchFalso.mock.calls.filter(([u]) => u === url)
 
-describe('módulos de performance, auditoría y seguridad', () => {
+describe('módulos de administración', () => {
   it.each(MODULOS)('«%s» abre su pantalla y «Volver» regresa al menú', (modulo, encabezado) => {
     render(<App />)
 
@@ -54,7 +59,7 @@ describe('módulos de performance, auditoría y seguridad', () => {
     expect(boton('Creación de respaldos')).not.toBeNull()
   })
 
-  it.each(MODULOS)('«%s» consulta con el token de la sesión y sin credenciales', async (modulo, _e, ruta) => {
+  it.each(MODULOS_CON_SESION)('«%s» consulta con el token de la sesión y sin credenciales', async (modulo, _e, ruta) => {
     render(<App />)
 
     fireEvent.click(boton(modulo)!)
