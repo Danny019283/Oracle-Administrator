@@ -260,6 +260,24 @@ describe('sesión expirada', () => {
     expect(screen.getByRole('status').textContent).toContain('Sesión expirada')
   })
 
+  it.each([
+    ['Performance de la base de datos', '/performance'],
+    ['Auditoría de la BD', '/auditoria'],
+    ['Seguridad de usuarios', '/seguridad'],
+  ])('un 401 en «%s» vuelve al modal con «Sesión expirada» y sin el error de la pantalla', async (modulo, prefijo) => {
+    fetchFalso.mockImplementation(async (url: string) =>
+      String(url).startsWith(prefijo) ? respuesta({ detail: 'Sesión no válida o expirada' }, 401) : respuesta(OK),
+    )
+    render(<App />)
+
+    fireEvent.click(boton(modulo)!)
+
+    await screen.findByRole('dialog', { name: 'Iniciar sesión' })
+    expect(screen.getByRole('status').textContent).toContain('Sesión expirada')
+    expect(screen.queryByRole('heading', { name: modulo, level: 1 })).toBeNull()
+    expect(screen.queryByText('Sesión no válida o expirada')).toBeNull()
+  })
+
   it('al expirar por inactividad el modal muestra el aviso y conserva los datos recordados', () => {
     render(<App />)
 
