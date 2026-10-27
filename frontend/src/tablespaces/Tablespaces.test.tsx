@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Tablespaces } from './Tablespaces'
 
-const CREDENCIALES = { usuario: 'SYSTEM', password: 's3creta!', servicio: 'XEPDB1' }
+const TOKEN = 'tok-123'
 const CARPETA = '/opt/oracle/oradata/XE/XEPDB1/'
 const ok = (cuerpo: unknown) => ({ ok: true, status: 200, json: async () => cuerpo })
 
@@ -52,7 +52,7 @@ afterEach(() => {
 
 const posts = () => fetchFalso.mock.calls.filter(([, o]) => o?.method === 'POST')
 const abrirUsers = async () => {
-  render(<Tablespaces credenciales={CREDENCIALES} />)
+  render(<Tablespaces token={TOKEN} />)
   fireEvent.click(await screen.findByRole('button', { name: 'Administrar USERS' }))
   await screen.findByRole('heading', { name: 'Tablespace USERS' })
   await screen.findByText(`${CARPETA}users01.dbf`)
@@ -60,7 +60,7 @@ const abrirUsers = async () => {
 
 describe('pantalla de administración de tablespaces', () => {
   it('lista los tablespaces con su porcentaje de uso', async () => {
-    render(<Tablespaces credenciales={CREDENCIALES} />)
+    render(<Tablespaces token={TOKEN} />)
 
     expect(await screen.findByText('USERS')).not.toBeNull()
     expect(screen.getByText('90 %')).not.toBeNull()
@@ -69,7 +69,7 @@ describe('pantalla de administración de tablespaces', () => {
   })
 
   it('al crear muestra la carpeta de los datafiles y los errores de validación', async () => {
-    render(<Tablespaces credenciales={CREDENCIALES} />)
+    render(<Tablespaces token={TOKEN} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Crear tablespace' }))
     expect(await screen.findByText(`Se crea en ${CARPETA}`, { exact: false })).not.toBeNull()
@@ -89,7 +89,7 @@ describe('pantalla de administración de tablespaces', () => {
   })
 
   it('sin AUTOEXTEND oculta el incremento y el máximo', async () => {
-    render(<Tablespaces credenciales={CREDENCIALES} />)
+    render(<Tablespaces token={TOKEN} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Crear tablespace' }))
 
     expect(screen.queryByLabelText('Tamaño máximo')).not.toBeNull()
@@ -145,11 +145,20 @@ describe('pantalla de administración de tablespaces', () => {
   })
 
   it('no ofrece cambiar el estado de SYSTEM', async () => {
-    render(<Tablespaces credenciales={CREDENCIALES} />)
+    render(<Tablespaces token={TOKEN} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Administrar SYSTEM' }))
     await screen.findByRole('heading', { name: 'Estado' })
 
     expect(screen.queryByRole('button', { name: 'Poner OFFLINE' })).toBeNull()
+  })
+
+  it('consulta con el token de la sesión y sin credenciales', async () => {
+    render(<Tablespaces token={TOKEN} />)
+
+    await waitFor(() => expect(fetchFalso).toHaveBeenCalled())
+    for (const [, opciones] of fetchFalso.mock.calls) {
+      expect(opciones.headers).toEqual({ Authorization: `Bearer ${TOKEN}` })
+    }
   })
 })

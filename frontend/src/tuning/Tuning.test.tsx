@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Tuning } from './Tuning'
 
-const CREDENCIALES = { usuario: 'SYSTEM', password: 's3creta!', servicio: 'XEPDB1' }
+const TOKEN = 'tok-123'
 const ok = (cuerpo: unknown) => ({ ok: true, status: 200, json: async () => cuerpo })
 
 const PLAN = {
@@ -61,7 +61,7 @@ const elegirSchema = async () => {
 
 describe('pantalla de tunning de consultas', () => {
   it('muestra el plan de ejecución con sus operaciones y observaciones', async () => {
-    render(<Tuning credenciales={CREDENCIALES} />)
+    render(<Tuning token={TOKEN} />)
 
     await elegirSchema()
     fireEvent.change(screen.getByLabelText('Sentencia SQL'), {
@@ -80,7 +80,7 @@ describe('pantalla de tunning de consultas', () => {
   })
 
   it('lista las estadísticas y marca las tablas nunca analizadas', async () => {
-    render(<Tuning credenciales={CREDENCIALES} />)
+    render(<Tuning token={TOKEN} />)
     fireEvent.click(screen.getByRole('button', { name: 'Estadísticas' }))
 
     await elegirSchema()
@@ -90,7 +90,7 @@ describe('pantalla de tunning de consultas', () => {
   })
 
   it('actualiza las estadísticas de una tabla', async () => {
-    render(<Tuning credenciales={CREDENCIALES} />)
+    render(<Tuning token={TOKEN} />)
     fireEvent.click(screen.getByRole('button', { name: 'Estadísticas' }))
     await elegirSchema()
 
@@ -103,7 +103,7 @@ describe('pantalla de tunning de consultas', () => {
   })
 
   it('crea un índice compuesto respetando el orden en que se marcan las columnas', async () => {
-    render(<Tuning credenciales={CREDENCIALES} />)
+    render(<Tuning token={TOKEN} />)
     fireEvent.click(screen.getByRole('button', { name: 'Índices' }))
     await elegirSchema()
     await screen.findByRole('option', { name: 'EMPLOYEES' })
@@ -127,7 +127,7 @@ describe('pantalla de tunning de consultas', () => {
   })
 
   it('eliminar un índice pide confirmación y no se ofrece para el de la llave primaria', async () => {
-    render(<Tuning credenciales={CREDENCIALES} />)
+    render(<Tuning token={TOKEN} />)
     fireEvent.click(screen.getByRole('button', { name: 'Índices' }))
     await elegirSchema()
     await screen.findByRole('option', { name: 'EMPLOYEES' })
@@ -148,5 +148,14 @@ describe('pantalla de tunning de consultas', () => {
       nombre: 'EMP_NAME_IX',
       confirmar: true,
     })
+  })
+
+  it('consulta con el token de la sesión y sin credenciales', async () => {
+    render(<Tuning token={TOKEN} />)
+
+    await waitFor(() => expect(fetchFalso).toHaveBeenCalled())
+    for (const [, opciones] of fetchFalso.mock.calls) {
+      expect(opciones.headers).toEqual({ Authorization: `Bearer ${TOKEN}` })
+    }
   })
 })

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import '../admin/admin.css'
-import { llamar, type Aviso, type Credenciales } from '../admin/api'
+import { llamar, type Aviso } from '../admin/api'
 import { BotonConfirmar, MostrarAviso, Tabla } from '../admin/Avisos'
 
 type Tablespace = {
@@ -60,9 +60,9 @@ function EstadoTablespace({ estado }: { estado: string }) {
   return <span className={`estado ${estado === 'ONLINE' ? 'bien' : estado === 'OFFLINE' ? 'mal' : ''}`}>{estado}</span>
 }
 
-type Props = { credenciales: Credenciales }
+type Props = { token: string }
 
-export function Tablespaces({ credenciales }: Props) {
+export function Tablespaces({ token }: Props) {
   const [vista, setVista] = useState<Vista>({ tipo: 'lista' })
   const [aviso, setAviso] = useState<Aviso | null>(null)
 
@@ -79,14 +79,14 @@ export function Tablespaces({ credenciales }: Props) {
         </button>
       )}
       {vista.tipo === 'lista' && (
-        <ListaTablespaces credenciales={credenciales} aviso={aviso} setAviso={setAviso} ir={ir} />
+        <ListaTablespaces token={token} aviso={aviso} setAviso={setAviso} ir={ir} />
       )}
       {vista.tipo === 'crear' && (
-        <CrearTablespace credenciales={credenciales} aviso={aviso} setAviso={setAviso} ir={ir} />
+        <CrearTablespace token={token} aviso={aviso} setAviso={setAviso} ir={ir} />
       )}
       {vista.tipo === 'detalle' && (
         <DetalleTablespace
-          credenciales={credenciales}
+          token={token}
           tablespace={vista.tablespace}
           aviso={aviso}
           setAviso={setAviso}
@@ -102,15 +102,15 @@ type PropsVista = Props & {
   ir: (vista: Vista, mensaje?: Aviso | null) => void
 }
 
-function ListaTablespaces({ credenciales, aviso, setAviso, ir }: PropsVista) {
+function ListaTablespaces({ token, aviso, setAviso, ir }: PropsVista) {
   const [tablespaces, setTablespaces] = useState<Tablespace[]>([])
 
   useEffect(() => {
-    void llamar<{ tablespaces: Tablespace[] }>(credenciales, '/tablespaces').then((r) => {
+    void llamar<{ tablespaces: Tablespace[] }>(token, '/tablespaces').then((r) => {
       if (r.ok) setTablespaces(r.datos.tablespaces)
       else setAviso(r.aviso)
     })
-  }, [credenciales, setAviso])
+  }, [token, setAviso])
 
   return (
     <>
@@ -233,21 +233,21 @@ function CamposArchivo({
   )
 }
 
-function CrearTablespace({ credenciales, aviso, setAviso, ir }: PropsVista) {
+function CrearTablespace({ token, aviso, setAviso, ir }: PropsVista) {
   const [carpeta, setCarpeta] = useState('')
   const [nombre, setNombre] = useState('')
   const [tipo, setTipo] = useState('PERMANENT')
   const [archivo, setArchivo] = useState<Archivo>(ARCHIVO_INICIAL)
 
   useEffect(() => {
-    void llamar<{ carpeta: string }>(credenciales, '/tablespaces').then((r) => {
+    void llamar<{ carpeta: string }>(token, '/tablespaces').then((r) => {
       if (r.ok) setCarpeta(r.datos.carpeta)
       else setAviso(r.aviso)
     })
-  }, [credenciales, setAviso])
+  }, [token, setAviso])
 
   const crear = async () => {
-    const r = await llamar<Mensaje>(credenciales, '/tablespaces', { nombre, tipo, ...archivo })
+    const r = await llamar<Mensaje>(token, '/tablespaces', { nombre, tipo, ...archivo })
     if (r.ok) ir({ tipo: 'lista' }, { tipo: 'ok', textos: [r.datos.mensaje] })
     else setAviso(r.aviso)
   }
@@ -286,7 +286,7 @@ function CrearTablespace({ credenciales, aviso, setAviso, ir }: PropsVista) {
 }
 
 function DetalleTablespace({
-  credenciales,
+  token,
   tablespace,
   aviso,
   setAviso,
@@ -299,11 +299,11 @@ function DetalleTablespace({
 
   const cargar = useCallback(
     () =>
-      llamar<Detalle>(credenciales, base).then((r) => {
+      llamar<Detalle>(token, base).then((r) => {
         if (r.ok) setDetalle(r.datos)
         else setAviso(r.aviso)
       }),
-    [credenciales, base, setAviso],
+    [token, base, setAviso],
   )
 
   useEffect(() => {
@@ -311,7 +311,7 @@ function DetalleTablespace({
   }, [cargar])
 
   const operar = async (ruta: string, cuerpo: unknown) => {
-    const r = await llamar<Mensaje>(credenciales, `${base}/${ruta}`, cuerpo)
+    const r = await llamar<Mensaje>(token, `${base}/${ruta}`, cuerpo)
     if (!r.ok) {
       setAviso(r.aviso)
       return false

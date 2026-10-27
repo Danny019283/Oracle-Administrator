@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import '../admin/admin.css'
-import { llamar, type Aviso, type Credenciales } from '../admin/api'
+import { llamar, type Aviso } from '../admin/api'
 import { BotonConfirmar, MostrarAviso, Tabla } from '../admin/Avisos'
 
 type Catalogos = { schemas: string[]; tablespaces: string[] }
@@ -59,24 +59,24 @@ const conSchema = (ruta: string, params: Record<string, string>) =>
 
 const sinDato = (valor: number | string | null) => (valor === null ? '—' : valor)
 
-type Props = { credenciales: Credenciales }
+type Props = { token: string }
 
 type PropsSeccion = Props & {
   catalogos: Catalogos
   setAviso: (aviso: Aviso | null) => void
 }
 
-export function Tuning({ credenciales }: Props) {
+export function Tuning({ token }: Props) {
   const [seccion, setSeccion] = useState<Seccion>('plan')
   const [aviso, setAviso] = useState<Aviso | null>(null)
   const [catalogos, setCatalogos] = useState<Catalogos>({ schemas: [], tablespaces: [] })
 
   useEffect(() => {
-    void llamar<Catalogos>(credenciales, '/tuning/catalogos').then((r) => {
+    void llamar<Catalogos>(token, '/tuning/catalogos').then((r) => {
       if (r.ok) setCatalogos(r.datos)
       else setAviso(r.aviso)
     })
-  }, [credenciales])
+  }, [token])
 
   return (
     <section className="vista">
@@ -104,11 +104,11 @@ export function Tuning({ credenciales }: Props) {
 
       <MostrarAviso aviso={aviso} />
 
-      {seccion === 'plan' && <PlanEjecucion credenciales={credenciales} catalogos={catalogos} setAviso={setAviso} />}
+      {seccion === 'plan' && <PlanEjecucion token={token} catalogos={catalogos} setAviso={setAviso} />}
       {seccion === 'estadisticas' && (
-        <Estadisticas credenciales={credenciales} catalogos={catalogos} setAviso={setAviso} />
+        <Estadisticas token={token} catalogos={catalogos} setAviso={setAviso} />
       )}
-      {seccion === 'indices' && <Indices credenciales={credenciales} catalogos={catalogos} setAviso={setAviso} />}
+      {seccion === 'indices' && <Indices token={token} catalogos={catalogos} setAviso={setAviso} />}
     </section>
   )
 }
@@ -137,14 +137,14 @@ function SelectorSchema({
   )
 }
 
-function PlanEjecucion({ credenciales, catalogos, setAviso }: PropsSeccion) {
+function PlanEjecucion({ token, catalogos, setAviso }: PropsSeccion) {
   const [schema, setSchema] = useState('')
   const [sql, setSql] = useState('')
   const [plan, setPlan] = useState<Plan | null>(null)
 
   const analizar = async () => {
     setAviso(null)
-    const r = await llamar<Plan>(credenciales, '/tuning/plan', { sql, schema })
+    const r = await llamar<Plan>(token, '/tuning/plan', { sql, schema })
     if (r.ok) setPlan(r.datos)
     else {
       setPlan(null)
@@ -243,7 +243,7 @@ function PlanEjecucion({ credenciales, catalogos, setAviso }: PropsSeccion) {
 }
 
 function useTablas(
-  credenciales: Credenciales,
+  token: string,
   schema: string,
   setAviso: (aviso: Aviso | null) => void,
 ) {
@@ -252,12 +252,12 @@ function useTablas(
   const cargar = useCallback(
     () =>
       schema
-        ? llamar<{ tablas: TablaStats[] }>(credenciales, conSchema('/tuning/tablas', { schema })).then((r) => {
+        ? llamar<{ tablas: TablaStats[] }>(token, conSchema('/tuning/tablas', { schema })).then((r) => {
             if (r.ok) setTablas(r.datos.tablas)
             else setAviso(r.aviso)
           })
         : Promise.resolve(),
-    [credenciales, schema, setAviso],
+    [token, schema, setAviso],
   )
 
   useEffect(() => {
@@ -267,12 +267,12 @@ function useTablas(
   return { tablas: schema ? tablas : [], cargar }
 }
 
-function Estadisticas({ credenciales, catalogos, setAviso }: PropsSeccion) {
+function Estadisticas({ token, catalogos, setAviso }: PropsSeccion) {
   const [schema, setSchema] = useState('')
-  const { tablas, cargar } = useTablas(credenciales, schema, setAviso)
+  const { tablas, cargar } = useTablas(token, schema, setAviso)
 
   const recolectar = async (tabla = '') => {
-    const r = await llamar<Mensaje>(credenciales, '/tuning/estadisticas', { schema, tabla })
+    const r = await llamar<Mensaje>(token, '/tuning/estadisticas', { schema, tabla })
     if (!r.ok) {
       setAviso(r.aviso)
       return
@@ -344,10 +344,10 @@ function Estadisticas({ credenciales, catalogos, setAviso }: PropsSeccion) {
   )
 }
 
-function Indices({ credenciales, catalogos, setAviso }: PropsSeccion) {
+function Indices({ token, catalogos, setAviso }: PropsSeccion) {
   const [schema, setSchema] = useState('')
   const [tabla, setTabla] = useState('')
-  const { tablas } = useTablas(credenciales, schema, setAviso)
+  const { tablas } = useTablas(token, schema, setAviso)
   const [indices, setIndices] = useState<Indice[]>([])
   const [columnas, setColumnas] = useState<Columna[]>([])
   const [nombre, setNombre] = useState('')
@@ -359,7 +359,7 @@ function Indices({ credenciales, catalogos, setAviso }: PropsSeccion) {
     () =>
       schema && tabla
         ? llamar<{ indices: Indice[]; columnas: Columna[] }>(
-            credenciales,
+            token,
             conSchema('/tuning/indices', { schema, tabla }),
           ).then((r) => {
             if (r.ok) {
@@ -368,7 +368,7 @@ function Indices({ credenciales, catalogos, setAviso }: PropsSeccion) {
             } else setAviso(r.aviso)
           })
         : Promise.resolve(),
-    [credenciales, schema, tabla, setAviso],
+    [token, schema, tabla, setAviso],
   )
 
   useEffect(() => {
@@ -389,7 +389,7 @@ function Indices({ credenciales, catalogos, setAviso }: PropsSeccion) {
     )
 
   const operar = async (ruta: string, cuerpo: unknown) => {
-    const r = await llamar<Mensaje>(credenciales, ruta, cuerpo)
+    const r = await llamar<Mensaje>(token, ruta, cuerpo)
     if (!r.ok) {
       setAviso(r.aviso)
       return false
