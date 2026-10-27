@@ -5,6 +5,8 @@ import { RespaldoTablas, type Credenciales } from './respaldos/RespaldoTablas'
 import { Performance } from './performance/Performance'
 import { Auditoria } from './auditoria/Auditoria'
 import { Seguridad } from './seguridad/Seguridad'
+import { Tablespaces } from './tablespaces/Tablespaces'
+import { Tuning } from './tuning/Tuning'
 import { ToggleTema } from './tema/ToggleTema'
 
 // Provisional hasta que exista la pantalla de ingreso a Oracle.
@@ -14,9 +16,13 @@ const CREDENCIALES: Credenciales = {
   servicio: import.meta.env.VITE_ORACLE_SERVICE ?? '',
 }
 
-type Vista = 'principal' | 'respaldos' | 'tablas' | 'performance' | 'auditoria' | 'seguridad'
+type VistaModulo = 'tablespaces' | 'tuning' | 'performance' | 'auditoria' | 'seguridad'
 
-const VISTA_DE_MODULO: Record<string, Vista> = {
+type Vista = 'principal' | 'respaldos' | 'tablas' | VistaModulo
+
+const VISTA_DE_MODULO: Record<string, VistaModulo> = {
+  'Administración de tablespaces': 'tablespaces',
+  'Tunning de consultas': 'tuning',
   'Performance de la base de datos': 'performance',
   'Auditoría de la BD': 'auditoria',
   'Seguridad de usuarios': 'seguridad',
@@ -90,13 +96,15 @@ function App() {
     )
   }
 
-  if (vista === 'performance' || vista === 'auditoria' || vista === 'seguridad') {
+  if (Object.values(VISTA_DE_MODULO).includes(vista as VistaModulo)) {
     return (
       <Marco>
         <button type="button" className="volver" onClick={() => setVista('principal')}>
           <FlechaAtras />
           Volver
         </button>
+        {vista === 'tablespaces' && <Tablespaces credenciales={CREDENCIALES} />}
+        {vista === 'tuning' && <Tuning credenciales={CREDENCIALES} />}
         {vista === 'performance' && <Performance credenciales={CREDENCIALES} />}
         {vista === 'auditoria' && <Auditoria credenciales={CREDENCIALES} />}
         {vista === 'seguridad' && <Seguridad credenciales={CREDENCIALES} />}

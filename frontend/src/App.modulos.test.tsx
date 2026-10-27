@@ -17,8 +17,10 @@ afterEach(() => {
 const boton = (nombre: string) => screen.queryByRole('button', { name: nombre })
 const titulo = (nombre: string) => screen.queryByRole('heading', { name: nombre, level: 1 })
 
-describe('módulos de performance, auditoría y seguridad', () => {
+describe('módulos de administración', () => {
   it.each([
+    ['Administración de tablespaces', 'Administración de tablespaces'],
+    ['Tunning de consultas', 'Tunning de consultas'],
     ['Performance de la base de datos', 'Performance de la base de datos'],
     ['Auditoría de la BD', 'Auditoría de la BD'],
     ['Seguridad de usuarios', 'Seguridad de usuarios'],
