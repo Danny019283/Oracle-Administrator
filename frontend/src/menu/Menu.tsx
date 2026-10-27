@@ -12,6 +12,8 @@ const MODULOS = [
 ]
 
 const MODULOS_DISPONIBLES = [
+  'Administración de tablespaces',
+  'Tunning de consultas',
   'Performance de la base de datos',
   'Auditoría de la BD',
   'Seguridad de usuarios',
