@@ -1,4 +1,4 @@
-"""Dependencias y respuestas compartidas por Performance, Auditoría y Seguridad."""
+"""Dependencias y respuestas compartidas por los módulos de administración."""
 
 from collections.abc import Callable
 from typing import Any
@@ -16,6 +16,7 @@ from src.services.oracle_conexion import consulta_oracle
 from src.services.oracle_ejecucion import sentencia_oracle
 from src.services.performance import SesionInvalida
 from src.services.seguridad import SolicitudInvalida, UsuarioNoAdministrable
+from src.services.tablespaces import TablespaceInvalido, TablespaceNoEncontrado
 
 
 def obtener_consulta_admin(conexion: Conexion = Depends(obtener_conexion)):
@@ -30,16 +31,16 @@ def responder(accion: Callable[[], Any]):
     """Ejecuta la acción y traduce los errores a respuestas uniformes.
 
     - 422 {"errores": [...]} cuando la solicitud no es válida.
-    - 404 {"detail"} cuando el usuario no se puede administrar.
+    - 404 {"detail"} cuando el usuario o el tablespace no se puede administrar.
     - 500 {"mensaje", "explicacion", "error"} cuando Oracle rechaza la operación.
     """
     try:
         return accion()
-    except (PoliticaInvalida, SolicitudInvalida) as error:
+    except (PoliticaInvalida, SolicitudInvalida, TablespaceInvalido) as error:
         return JSONResponse(status_code=422, content={"errores": error.errores})
     except (IdentificadorInvalido, SesionInvalida) as error:
         return JSONResponse(status_code=422, content={"errores": [str(error)]})
-    except UsuarioNoAdministrable as error:
+    except (UsuarioNoAdministrable, TablespaceNoEncontrado) as error:
         return JSONResponse(status_code=404, content={"detail": str(error)})
     except oracledb.Error as error:
         texto = str(error).strip()
