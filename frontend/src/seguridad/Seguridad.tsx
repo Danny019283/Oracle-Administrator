@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import '../admin/admin.css'
-import { llamar, type Aviso, type Credenciales } from '../admin/api'
+import { llamar, type Aviso } from '../admin/api'
 import { BotonConfirmar, MostrarAviso, Tabla } from '../admin/Avisos'
 
 type Usuario = {
@@ -35,9 +35,9 @@ const CATALOGOS_VACIOS: Catalogos = { tablespaces: [], temporales: [], roles: []
 
 const bloqueado = (estado: string) => estado.includes('LOCKED')
 
-type Props = { credenciales: Credenciales }
+type Props = { token: string }
 
-export function Seguridad({ credenciales }: Props) {
+export function Seguridad({ token }: Props) {
   const [vista, setVista] = useState<Vista>({ tipo: 'lista' })
   const [aviso, setAviso] = useState<Aviso | null>(null)
 
@@ -54,14 +54,14 @@ export function Seguridad({ credenciales }: Props) {
         </button>
       )}
       {vista.tipo === 'lista' && (
-        <ListaUsuarios credenciales={credenciales} aviso={aviso} setAviso={setAviso} ir={ir} />
+        <ListaUsuarios token={token} aviso={aviso} setAviso={setAviso} ir={ir} />
       )}
       {vista.tipo === 'crear' && (
-        <CrearUsuario credenciales={credenciales} aviso={aviso} setAviso={setAviso} ir={ir} />
+        <CrearUsuario token={token} aviso={aviso} setAviso={setAviso} ir={ir} />
       )}
       {vista.tipo === 'detalle' && (
         <DetalleUsuario
-          credenciales={credenciales}
+          token={token}
           usuario={vista.usuario}
           aviso={aviso}
           setAviso={setAviso}
@@ -78,15 +78,15 @@ type PropsVista = Props & {
   ir: (vista: Vista, mensaje?: Aviso | null) => void
 }
 
-function ListaUsuarios({ credenciales, aviso, setAviso, ir }: PropsVista) {
+function ListaUsuarios({ token, aviso, setAviso, ir }: PropsVista) {
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
 
   useEffect(() => {
-    void llamar<{ usuarios: Usuario[] }>(credenciales, '/seguridad/usuarios').then((r) => {
+    void llamar<{ usuarios: Usuario[] }>(token, '/seguridad/usuarios').then((r) => {
       if (r.ok) setUsuarios(r.datos.usuarios)
       else setAviso(r.aviso)
     })
-  }, [credenciales, setAviso])
+  }, [token, setAviso])
 
   return (
     <>
@@ -143,19 +143,19 @@ function ListaUsuarios({ credenciales, aviso, setAviso, ir }: PropsVista) {
   )
 }
 
-function useCatalogos(credenciales: Credenciales, setAviso: (aviso: Aviso | null) => void) {
+function useCatalogos(token: string, setAviso: (aviso: Aviso | null) => void) {
   const [catalogos, setCatalogos] = useState<Catalogos>(CATALOGOS_VACIOS)
   useEffect(() => {
-    void llamar<Catalogos>(credenciales, '/seguridad/catalogos').then((r) => {
+    void llamar<Catalogos>(token, '/seguridad/catalogos').then((r) => {
       if (r.ok) setCatalogos(r.datos)
       else setAviso(r.aviso)
     })
-  }, [credenciales, setAviso])
+  }, [token, setAviso])
   return catalogos
 }
 
-function CrearUsuario({ credenciales, aviso, setAviso, ir }: PropsVista) {
-  const catalogos = useCatalogos(credenciales, setAviso)
+function CrearUsuario({ token, aviso, setAviso, ir }: PropsVista) {
+  const catalogos = useCatalogos(token, setAviso)
   const [usuario, setUsuario] = useState('')
   const [password, setPassword] = useState('')
   const [tablespace, setTablespace] = useState('')
@@ -164,7 +164,7 @@ function CrearUsuario({ credenciales, aviso, setAviso, ir }: PropsVista) {
   const [conexion, setConexion] = useState(true)
 
   const crear = async () => {
-    const r = await llamar<Mensaje>(credenciales, '/seguridad/usuarios', {
+    const r = await llamar<Mensaje>(token, '/seguridad/usuarios', {
       usuario,
       password,
       tablespace,
@@ -228,8 +228,8 @@ function CrearUsuario({ credenciales, aviso, setAviso, ir }: PropsVista) {
   )
 }
 
-function DetalleUsuario({ credenciales, usuario, aviso, setAviso, ir }: PropsVista & { usuario: string }) {
-  const catalogos = useCatalogos(credenciales, setAviso)
+function DetalleUsuario({ token, usuario, aviso, setAviso, ir }: PropsVista & { usuario: string }) {
+  const catalogos = useCatalogos(token, setAviso)
   const [detalle, setDetalle] = useState<Detalle | null>(null)
   const [rol, setRol] = useState('')
   const [privilegio, setPrivilegio] = useState('')
@@ -239,11 +239,11 @@ function DetalleUsuario({ credenciales, usuario, aviso, setAviso, ir }: PropsVis
 
   const cargar = useCallback(
     () =>
-      llamar<Detalle>(credenciales, base).then((r) => {
+      llamar<Detalle>(token, base).then((r) => {
         if (r.ok) setDetalle(r.datos)
         else setAviso(r.aviso)
       }),
-    [credenciales, base, setAviso],
+    [token, base, setAviso],
   )
 
   useEffect(() => {
@@ -251,7 +251,7 @@ function DetalleUsuario({ credenciales, usuario, aviso, setAviso, ir }: PropsVis
   }, [cargar])
 
   const operar = async (ruta: string, cuerpo: unknown = {}) => {
-    const r = await llamar<Mensaje>(credenciales, `${base}/${ruta}`, cuerpo)
+    const r = await llamar<Mensaje>(token, `${base}/${ruta}`, cuerpo)
     if (!r.ok) {
       setAviso(r.aviso)
       return false
@@ -262,7 +262,7 @@ function DetalleUsuario({ credenciales, usuario, aviso, setAviso, ir }: PropsVis
   }
 
   const eliminar = async () => {
-    const r = await llamar<Mensaje>(credenciales, `${base}/eliminar`, { confirmar: true })
+    const r = await llamar<Mensaje>(token, `${base}/eliminar`, { confirmar: true })
     if (r.ok) ir({ tipo: 'lista' }, { tipo: 'ok', textos: [r.datos.mensaje] })
     else setAviso(r.aviso)
   }

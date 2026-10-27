@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Performance } from './Performance'
 
-const CREDENCIALES = { usuario: 'SYSTEM', password: 's3creta!', servicio: 'XEPDB1' }
+const TOKEN = 'tok-123'
 
 const ok = (cuerpo: unknown) => ({ ok: true, status: 200, json: async () => cuerpo })
 
@@ -58,23 +58,23 @@ afterEach(() => {
 
 describe('pantalla de performance', () => {
   it('muestra el estado de la instancia y los indicadores', async () => {
-    render(<Performance credenciales={CREDENCIALES} />)
+    render(<Performance token={TOKEN} />)
 
     expect(await screen.findByText('99.1 %')).not.toBeNull()
     expect(screen.getByText('ARCHIVELOG')).not.toBeNull()
     expect(screen.getByRole('table', { name: 'SGA' })).not.toBeNull()
   })
 
-  it('envía las credenciales en las cabeceras', async () => {
-    render(<Performance credenciales={CREDENCIALES} />)
+  it('envía el token de la sesión y no las credenciales', async () => {
+    render(<Performance token={TOKEN} />)
     await screen.findByText('99.1 %')
 
     const [, opciones] = fetchFalso.mock.calls[0]
-    expect(opciones.headers['X-Oracle-User']).toBe('SYSTEM')
+    expect(opciones.headers).toEqual({ Authorization: `Bearer ${TOKEN}` })
   })
 
   it('terminar una sesión pide confirmación antes de llamar al backend', async () => {
-    render(<Performance credenciales={CREDENCIALES} />)
+    render(<Performance token={TOKEN} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Terminar' }))
     const llamadasTerminar = () =>
@@ -99,7 +99,7 @@ describe('pantalla de performance', () => {
       }),
     }))
 
-    render(<Performance credenciales={CREDENCIALES} />)
+    render(<Performance token={TOKEN} />)
 
     const alerta = await screen.findByRole('alert')
     expect(alerta.textContent).toContain('privilegios suficientes')
@@ -111,7 +111,7 @@ describe('pantalla de performance', () => {
       throw new TypeError('Failed to fetch')
     })
 
-    render(<Performance credenciales={CREDENCIALES} />)
+    render(<Performance token={TOKEN} />)
 
     expect((await screen.findByRole('alert')).textContent).toContain('backend esté en ejecución')
   })

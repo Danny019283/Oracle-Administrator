@@ -1,14 +1,8 @@
-import type { Credenciales } from '../respaldos/RespaldoTablas'
-
-export type { Credenciales }
+import { expirarSesion } from '../sesion/sesion'
 
 export type Aviso = { tipo: 'ok' | 'error'; textos: string[]; detalle?: string }
 
-const cabeceras = ({ usuario, password, servicio }: Credenciales) => ({
-  'X-Oracle-User': usuario,
-  'X-Oracle-Password': password,
-  'X-Oracle-Service': servicio,
-})
+const cabeceras = (token: string) => ({ Authorization: `Bearer ${token}` })
 
 const CODIGOS_DEL_PROXY = [502, 503, 504]
 
@@ -37,16 +31,16 @@ function avisoDeError(status: number, cuerpo: Record<string, unknown>): Aviso {
 export type Respuesta<T> = { ok: true; datos: T } | { ok: false; aviso: Aviso }
 
 export async function llamar<T>(
-  credenciales: Credenciales,
+  token: string,
   url: string,
   cuerpo?: unknown,
 ): Promise<Respuesta<T>> {
   const opciones: RequestInit =
     cuerpo === undefined
-      ? { headers: cabeceras(credenciales) }
+      ? { headers: cabeceras(token) }
       : {
           method: 'POST',
-          headers: { ...cabeceras(credenciales), 'Content-Type': 'application/json' },
+          headers: { ...cabeceras(token), 'Content-Type': 'application/json' },
           body: JSON.stringify(cuerpo),
         }
   let r: Response
@@ -62,6 +56,7 @@ export async function llamar<T>(
   } catch {
     // respuesta sin JSON: se informa con el código
   }
+  if (r.status === 401) expirarSesion()
   if (!r.ok) return { ok: false, aviso: avisoDeError(r.status, datos) }
   return { ok: true, datos: datos as T }
 }

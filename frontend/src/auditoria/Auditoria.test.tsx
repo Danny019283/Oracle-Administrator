@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { Auditoria } from './Auditoria'
 
-const CREDENCIALES = { usuario: 'SYSTEM', password: 's3creta!', servicio: 'XEPDB1' }
+const TOKEN = 'tok-123'
 const ok = (cuerpo: unknown) => ({ ok: true, status: 200, json: async () => cuerpo })
 
 let fetchFalso: ReturnType<typeof vi.fn>
@@ -48,7 +48,7 @@ const posts = () => fetchFalso.mock.calls.filter(([, o]) => o?.method === 'POST'
 
 describe('pantalla de auditoría', () => {
   it('muestra el modo, las políticas propias y oculta las predefinidas', async () => {
-    render(<Auditoria credenciales={CREDENCIALES} />)
+    render(<Auditoria token={TOKEN} />)
 
     const politicas = await screen.findByRole('table', { name: 'Políticas de auditoría' })
     expect(within(politicas).getByText('AUD_EMP')).not.toBeNull()
@@ -60,14 +60,14 @@ describe('pantalla de auditoría', () => {
   })
 
   it('muestra los registros de auditoría', async () => {
-    render(<Auditoria credenciales={CREDENCIALES} />)
+    render(<Auditoria token={TOKEN} />)
 
     const registros = await screen.findByRole('table', { name: 'Registros de auditoría' })
     expect(within(registros).getByText('Correcto')).not.toBeNull()
   })
 
   it('crea una política sobre una tabla con las acciones elegidas', async () => {
-    render(<Auditoria credenciales={CREDENCIALES} />)
+    render(<Auditoria token={TOKEN} />)
     await screen.findByRole('option', { name: 'HR.EMPLOYEES' })
 
     fireEvent.change(screen.getByLabelText('Nombre de la política'), { target: { value: 'aud_emp' } })
@@ -90,7 +90,7 @@ describe('pantalla de auditoría', () => {
   })
 
   it('eliminar una política pide confirmación', async () => {
-    render(<Auditoria credenciales={CREDENCIALES} />)
+    render(<Auditoria token={TOKEN} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Eliminar' }))
     expect(posts()).toHaveLength(0)

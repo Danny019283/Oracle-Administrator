@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import '../admin/admin.css'
-import { llamar, type Aviso, type Credenciales } from '../admin/api'
+import { llamar, type Aviso } from '../admin/api'
 import { BotonConfirmar, MostrarAviso, Tabla } from '../admin/Avisos'
 
 type Memoria = { nombre: string; mb: number }
@@ -52,7 +52,7 @@ type Espera = { evento: string; clase: string; esperas: number; tiempo_s: number
 
 const porcentaje = (valor: number | null) => (valor === null ? 'Sin datos' : `${valor} %`)
 
-export function Performance({ credenciales }: { credenciales: Credenciales }) {
+export function Performance({ token }: { token: string }) {
   const [resumen, setResumen] = useState<Resumen | null>(null)
   const [sesiones, setSesiones] = useState<Sesion[]>([])
   const [consultas, setConsultas] = useState<ConsultaSql[]>([])
@@ -63,10 +63,10 @@ export function Performance({ credenciales }: { credenciales: Credenciales }) {
   const cargar = useCallback(
     () =>
       Promise.all([
-        llamar<Resumen>(credenciales, '/performance/resumen'),
-        llamar<{ sesiones: Sesion[] }>(credenciales, '/performance/sesiones'),
-        llamar<{ consultas: ConsultaSql[] }>(credenciales, '/performance/consultas?limite=10'),
-        llamar<{ esperas: Espera[] }>(credenciales, '/performance/esperas'),
+        llamar<Resumen>(token, '/performance/resumen'),
+        llamar<{ sesiones: Sesion[] }>(token, '/performance/sesiones'),
+        llamar<{ consultas: ConsultaSql[] }>(token, '/performance/consultas?limite=10'),
+        llamar<{ esperas: Espera[] }>(token, '/performance/esperas'),
       ]).then(([r, s, c, e]) => {
         if (r.ok) setResumen(r.datos)
         if (s.ok) setSesiones(s.datos.sesiones)
@@ -76,7 +76,7 @@ export function Performance({ credenciales }: { credenciales: Credenciales }) {
         setAviso(fallo && !fallo.ok ? fallo.aviso : null)
         setCargando(false)
       }),
-    [credenciales],
+    [token],
   )
 
   useEffect(() => {
@@ -85,7 +85,7 @@ export function Performance({ credenciales }: { credenciales: Credenciales }) {
   }, [cargar])
 
   const terminar = async (sesion: Sesion) => {
-    const r = await llamar<{ mensaje: string }>(credenciales, '/performance/sesiones/terminar', {
+    const r = await llamar<{ mensaje: string }>(token, '/performance/sesiones/terminar', {
       sid: sesion.sid,
       serial: sesion.serial,
       confirmar: true,

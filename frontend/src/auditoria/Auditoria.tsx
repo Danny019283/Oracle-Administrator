@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import '../admin/admin.css'
-import { llamar, type Aviso, type Credenciales } from '../admin/api'
+import { llamar, type Aviso } from '../admin/api'
 import { BotonConfirmar, MostrarAviso, Tabla } from '../admin/Avisos'
 
 type Estado = { modo: string; audit_trail: string | null }
@@ -32,7 +32,7 @@ const ACCIONES_TABLA = ['SELECT', 'INSERT', 'UPDATE', 'DELETE']
 
 type Mensaje = { mensaje: string }
 
-export function Auditoria({ credenciales }: { credenciales: Credenciales }) {
+export function Auditoria({ token }: { token: string }) {
   const [estado, setEstado] = useState<Estado | null>(null)
   const [politicas, setPoliticas] = useState<Politica[]>([])
   const [tablas, setTablas] = useState<TablaAuditable[]>([])
@@ -50,27 +50,27 @@ export function Auditoria({ credenciales }: { credenciales: Credenciales }) {
   const [filtroUsuario, setFiltroUsuario] = useState('')
 
   const cargarPoliticas = useCallback(async () => {
-    const r = await llamar<{ politicas: Politica[] }>(credenciales, '/auditoria/politicas')
+    const r = await llamar<{ politicas: Politica[] }>(token, '/auditoria/politicas')
     if (r.ok) setPoliticas(r.datos.politicas)
     return r
-  }, [credenciales])
+  }, [token])
 
   const buscarRegistros = useCallback(
     async (politica = '', usuario = '') => {
       const params = new URLSearchParams({ politica, usuario, limite: '100' })
-      const r = await llamar<{ registros: Registro[] }>(credenciales, `/auditoria/registros?${params}`)
+      const r = await llamar<{ registros: Registro[] }>(token, `/auditoria/registros?${params}`)
       if (r.ok) setRegistros(r.datos.registros)
       return r
     },
-    [credenciales],
+    [token],
   )
 
   useEffect(() => {
     const iniciar = async () => {
       const [e, p, t, g] = await Promise.all([
-        llamar<Estado>(credenciales, '/auditoria/estado'),
+        llamar<Estado>(token, '/auditoria/estado'),
         cargarPoliticas(),
-        llamar<{ tablas: TablaAuditable[] }>(credenciales, '/auditoria/tablas'),
+        llamar<{ tablas: TablaAuditable[] }>(token, '/auditoria/tablas'),
         buscarRegistros(),
       ])
       if (e.ok) setEstado(e.datos)
@@ -79,11 +79,11 @@ export function Auditoria({ credenciales }: { credenciales: Credenciales }) {
       if (fallo && !fallo.ok) setAviso(fallo.aviso)
     }
     void iniciar()
-  }, [credenciales, cargarPoliticas, buscarRegistros])
+  }, [token, cargarPoliticas, buscarRegistros])
 
   // Ejecuta una acción sobre una política y refresca la lista.
   const operar = async (url: string, cuerpo: unknown = {}) => {
-    const r = await llamar<Mensaje>(credenciales, url, cuerpo)
+    const r = await llamar<Mensaje>(token, url, cuerpo)
     if (!r.ok) {
       setAviso(r.aviso)
       return false

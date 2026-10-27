@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Seguridad } from './Seguridad'
 
-const CREDENCIALES = { usuario: 'SYSTEM', password: 's3creta!', servicio: 'XEPDB1' }
+const TOKEN = 'tok-123'
 const ok = (cuerpo: unknown) => ({ ok: true, status: 200, json: async () => cuerpo })
 
 const HR = { usuario: 'HR', estado: 'OPEN', tablespace: 'USERS', temporal: 'TEMP', perfil: 'DEFAULT', creado: '01/10/2026' }
@@ -35,14 +35,14 @@ const posts = () => fetchFalso.mock.calls.filter(([, o]) => o?.method === 'POST'
 
 describe('pantalla de seguridad de usuarios', () => {
   it('lista los usuarios con su estado', async () => {
-    render(<Seguridad credenciales={CREDENCIALES} />)
+    render(<Seguridad token={TOKEN} />)
 
     expect(await screen.findByText('HR')).not.toBeNull()
     expect(screen.getByText('OPEN')).not.toBeNull()
   })
 
   it('abre el detalle del usuario con sus roles y permite bloquearlo', async () => {
-    render(<Seguridad credenciales={CREDENCIALES} />)
+    render(<Seguridad token={TOKEN} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Administrar HR' }))
     expect(await screen.findByRole('heading', { name: 'Usuario HR' })).not.toBeNull()
@@ -55,7 +55,7 @@ describe('pantalla de seguridad de usuarios', () => {
   })
 
   it('eliminar un usuario pide confirmación', async () => {
-    render(<Seguridad credenciales={CREDENCIALES} />)
+    render(<Seguridad token={TOKEN} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Administrar HR' }))
 
     fireEvent.click(await screen.findByRole('button', { name: 'Eliminar usuario' }))
@@ -68,7 +68,7 @@ describe('pantalla de seguridad de usuarios', () => {
   })
 
   it('al crear un usuario muestra los errores de validación', async () => {
-    render(<Seguridad credenciales={CREDENCIALES} />)
+    render(<Seguridad token={TOKEN} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Crear usuario' }))
     await screen.findByRole('option', { name: 'USERS' })
