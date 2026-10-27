@@ -7,6 +7,9 @@ export default defineConfig({
     proxy: {
       '/respaldos': 'http://localhost:8000',
       '/sesion': 'http://localhost:8000',
+      '/performance': 'http://localhost:8000',
+      '/auditoria': 'http://localhost:8000',
+      '/seguridad': 'http://localhost:8000',
     },
   },
   test: { environment: 'jsdom' },

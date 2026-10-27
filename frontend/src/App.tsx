@@ -1,14 +1,38 @@
 import { useState, useSyncExternalStore, type ReactNode } from 'react'
 import './App.css'
 import { MenuPrincipal, MenuRespaldos } from './menu/Menu'
+import { Auditoria } from './auditoria/Auditoria'
+import { Performance } from './performance/Performance'
 import { RespaldoFull } from './respaldos/RespaldoFull'
 import { RespaldoSchemas } from './respaldos/RespaldoSchemas'
 import { RespaldoTablas } from './respaldos/RespaldoTablas'
+import { Seguridad } from './seguridad/Seguridad'
 import { ModalLogin } from './sesion/ModalLogin'
 import { alCambiarSesion, cerrarSesion, motivoDeSalida, sesionActual, type Sesion } from './sesion/sesion'
 import { ToggleTema } from './tema/ToggleTema'
 
-type Vista = 'principal' | 'respaldos' | 'tablas' | 'schemas' | 'full'
+// Provisional: los módulos de administración aún no usan la sesión de inicio de sesión.
+const CREDENCIALES = {
+  usuario: import.meta.env.VITE_ORACLE_USER ?? '',
+  password: import.meta.env.VITE_ORACLE_PASSWORD ?? '',
+  servicio: import.meta.env.VITE_ORACLE_SERVICE ?? '',
+}
+
+type Vista =
+  | 'principal'
+  | 'respaldos'
+  | 'tablas'
+  | 'schemas'
+  | 'full'
+  | 'performance'
+  | 'auditoria'
+  | 'seguridad'
+
+const VISTA_DE_MODULO: Record<string, Vista> = {
+  'Performance de la base de datos': 'performance',
+  'Auditoría de la BD': 'auditoria',
+  'Seguridad de usuarios': 'seguridad',
+}
 
 function MarcaBaseDeDatos() {
   return (
@@ -101,6 +125,20 @@ function Navegador({ sesion }: { sesion: Sesion | null }) {
     )
   }
 
+  if (vista === 'performance' || vista === 'auditoria' || vista === 'seguridad') {
+    return (
+      <>
+        <button type="button" className="volver" onClick={() => setVista('principal')}>
+          <FlechaAtras />
+          Volver
+        </button>
+        {vista === 'performance' && <Performance credenciales={CREDENCIALES} />}
+        {vista === 'auditoria' && <Auditoria credenciales={CREDENCIALES} />}
+        {vista === 'seguridad' && <Seguridad credenciales={CREDENCIALES} />}
+      </>
+    )
+  }
+
   if (vista === 'respaldos') {
     return (
       <MenuRespaldos
@@ -110,7 +148,15 @@ function Navegador({ sesion }: { sesion: Sesion | null }) {
     )
   }
 
-  return <MenuPrincipal onAbrirRespaldos={() => setVista('respaldos')} />
+  return (
+    <MenuPrincipal
+      onAbrirRespaldos={() => setVista('respaldos')}
+      onElegirModulo={(modulo) => {
+        const destino = VISTA_DE_MODULO[modulo]
+        if (destino) setVista(destino)
+      }}
+    />
+  )
 }
 
 function App() {
