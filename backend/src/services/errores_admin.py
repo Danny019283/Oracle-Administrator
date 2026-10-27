@@ -37,6 +37,16 @@ _EXPLICACIONES = {
     "ORA-01652": "El tablespace temporal se quedó sin espacio; agrega un archivo o activa AUTOEXTEND",
     "ORA-01653": "El tablespace se quedó sin espacio; agrega un datafile, redimensiónalo o activa AUTOEXTEND",
     "ORA-01654": "El tablespace se quedó sin espacio para el índice; agrega un datafile o activa AUTOEXTEND",
+    "ORA-00955": "Ya existe un objeto con ese nombre en el schema; elige otro nombre para el índice",
+    "ORA-01408": "Ya existe un índice sobre esas mismas columnas",
+    "ORA-01418": "El índice no existe",
+    "ORA-02429": "No se puede eliminar un índice que respalda una llave primaria o única",
+    "ORA-01452": "No se puede crear el índice único porque la tabla tiene valores repetidos en esas columnas",
+    "ORA-00900": "La sentencia SQL no es válida",
+    "ORA-00904": "La consulta usa una columna o identificador que no existe",
+    "ORA-00933": "La sentencia SQL no terminó correctamente; revisa la sintaxis cerca del final",
+    "ORA-00936": "Falta una expresión en la consulta; revisa la sintaxis",
+    "ORA-20000": "No se pudieron generar las estadísticas: el objeto no existe o el usuario no tiene privilegios suficientes",
     "DPY-6005": "No se pudo conectar con Oracle; verifica que el contenedor oracle21c esté encendido",
 }
 

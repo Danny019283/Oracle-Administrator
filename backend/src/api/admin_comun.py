@@ -13,10 +13,11 @@ from src.services.errores_admin import explicar_error_admin
 from src.services.expdp_runner import Conexion
 from src.services.identificadores import IdentificadorInvalido
 from src.services.oracle_conexion import consulta_oracle
-from src.services.oracle_ejecucion import sentencia_oracle
+from src.services.oracle_ejecucion import sentencia_oracle, sesion_oracle
 from src.services.performance import SesionInvalida
 from src.services.seguridad import SolicitudInvalida, UsuarioNoAdministrable
 from src.services.tablespaces import TablespaceInvalido, TablespaceNoEncontrado
+from src.services.tuning import ObjetoNoEncontrado, SolicitudTuningInvalida
 
 
 def obtener_consulta_admin(conexion: Conexion = Depends(obtener_conexion)):
@@ -27,20 +28,24 @@ def obtener_sentencia(conexion: Conexion = Depends(obtener_conexion)):
     return sentencia_oracle(conexion)
 
 
+def obtener_sesion(conexion: Conexion = Depends(obtener_conexion)):
+    return sesion_oracle(conexion)
+
+
 def responder(accion: Callable[[], Any]):
     """Ejecuta la acción y traduce los errores a respuestas uniformes.
 
     - 422 {"errores": [...]} cuando la solicitud no es válida.
-    - 404 {"detail"} cuando el usuario o el tablespace no se puede administrar.
+    - 404 {"detail"} cuando el usuario, tablespace, schema, tabla o índice no se puede administrar.
     - 500 {"mensaje", "explicacion", "error"} cuando Oracle rechaza la operación.
     """
     try:
         return accion()
-    except (PoliticaInvalida, SolicitudInvalida, TablespaceInvalido) as error:
+    except (PoliticaInvalida, SolicitudInvalida, TablespaceInvalido, SolicitudTuningInvalida) as error:
         return JSONResponse(status_code=422, content={"errores": error.errores})
     except (IdentificadorInvalido, SesionInvalida) as error:
         return JSONResponse(status_code=422, content={"errores": [str(error)]})
-    except (UsuarioNoAdministrable, TablespaceNoEncontrado) as error:
+    except (UsuarioNoAdministrable, TablespaceNoEncontrado, ObjetoNoEncontrado) as error:
         return JSONResponse(status_code=404, content={"detail": str(error)})
     except oracledb.Error as error:
         texto = str(error).strip()
