@@ -160,16 +160,21 @@ function CrearUsuario({ token, aviso, setAviso, ir }: PropsVista) {
   const [password, setPassword] = useState('')
   const [tablespace, setTablespace] = useState('')
   const [temporal, setTemporal] = useState('')
-  const [cuota, setCuota] = useState('UNLIMITED')
+  const [cuotaMb, setCuotaMb] = useState('')
+  const [ilimitada, setIlimitada] = useState(true)
   const [conexion, setConexion] = useState(true)
 
   const crear = async () => {
+    if (!ilimitada && !(Number(cuotaMb) > 0)) {
+      setAviso({ tipo: 'error', textos: ['Ingresa una cuota en MB o marca Unlimited'] })
+      return
+    }
     const r = await llamar<Mensaje>(token, '/seguridad/usuarios', {
       usuario,
       password,
       tablespace,
       temporal,
-      cuota,
+      cuota: ilimitada ? 'UNLIMITED' : `${Number(cuotaMb)}M`,
       permitir_conexion: conexion,
     })
     if (r.ok) ir({ tipo: 'lista' }, { tipo: 'ok', textos: [r.datos.mensaje] })
@@ -211,10 +216,26 @@ function CrearUsuario({ token, aviso, setAviso, ir }: PropsVista) {
           </select>
         </label>
         <label className="campo">
-          Cuota en el tablespace por defecto
-          <input value={cuota} onChange={(e) => setCuota(e.target.value)} />
+          Cuota en MB
+          <input
+            inputMode="numeric"
+            value={cuotaMb}
+            disabled={ilimitada}
+            onChange={(e) => setCuotaMb(e.target.value.replace(/\D/g, ''))}
+          />
         </label>
-        <p className="ayuda">UNLIMITED o un tamaño como 100M, 500K o 1G.</p>
+        <label className="opcion">
+          <input
+            type="checkbox"
+            checked={ilimitada}
+            onChange={() => {
+              setIlimitada((v) => !v)
+              setCuotaMb('')
+            }}
+          />
+          Unlimited
+        </label>
+        <p className="ayuda">Cuota en el tablespace por defecto. Marca Unlimited para no limitarla.</p>
         <label className="opcion">
           <input type="checkbox" checked={conexion} onChange={() => setConexion((v) => !v)} />
           Permitir que se conecte (otorga CREATE SESSION)

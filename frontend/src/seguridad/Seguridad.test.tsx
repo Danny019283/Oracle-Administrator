@@ -78,3 +78,108 @@ describe('pantalla de seguridad de usuarios', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('Debes ingresar una contraseña')
   })
 })
+
+describe('cuota al crear un usuario', () => {
+  const abrirFormulario = async () => {
+    render(<Seguridad token={TOKEN} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Crear usuario' }))
+    await screen.findByRole('option', { name: 'USERS' })
+  }
+
+  const cuota = () => screen.getByLabelText('Cuota en MB') as HTMLInputElement
+  const unlimited = () => screen.getByRole('checkbox', { name: 'Unlimited' }) as HTMLInputElement
+  const crear = () => fireEvent.click(screen.getAllByRole('button', { name: 'Crear usuario' }).at(-1)!)
+
+  const llenarYCrear = async () => {
+    fireEvent.change(screen.getByLabelText('Usuario'), { target: { value: 'ventas' } })
+    fireEvent.change(screen.getByLabelText('Contraseña'), { target: { value: 'Clave123' } })
+    fireEvent.change(screen.getByLabelText('Tablespace por defecto'), { target: { value: 'USERS' } })
+    fireEvent.change(screen.getByLabelText('Tablespace temporal'), { target: { value: 'TEMP' } })
+    crear()
+  }
+
+  const cuerpoDelPost = async () => {
+    await waitFor(() => expect(posts()).toHaveLength(1))
+    return JSON.parse(posts()[0][1].body)
+  }
+
+  it('por defecto «Unlimited» está marcada y el campo numérico deshabilitado', async () => {
+    await abrirFormulario()
+
+    expect(unlimited().checked).toBe(true)
+    expect(cuota().disabled).toBe(true)
+  })
+
+  it('al desmarcar «Unlimited» se habilita el campo numérico', async () => {
+    await abrirFormulario()
+
+    fireEvent.click(unlimited())
+
+    expect(unlimited().checked).toBe(false)
+    expect(cuota().disabled).toBe(false)
+  })
+
+  it('el campo numérico solo conserva dígitos', async () => {
+    await abrirFormulario()
+    fireEvent.click(unlimited())
+
+    fireEvent.change(cuota(), { target: { value: '12ab 3.5' } })
+
+    expect(cuota().value).toBe('1235')
+    expect(cuota().inputMode).toBe('numeric')
+  })
+
+  it('al marcar «Unlimited» de nuevo se deshabilita y se vacía el campo', async () => {
+    await abrirFormulario()
+    fireEvent.click(unlimited())
+    fireEvent.change(cuota(), { target: { value: '500' } })
+
+    fireEvent.click(unlimited())
+
+    expect(cuota().disabled).toBe(true)
+    expect(cuota().value).toBe('')
+  })
+
+  it('con «Unlimited» marcada envía UNLIMITED', async () => {
+    await abrirFormulario()
+
+    await llenarYCrear()
+
+    expect((await cuerpoDelPost()).cuota).toBe('UNLIMITED')
+  })
+
+  it('con un número envía ese tamaño en megabytes', async () => {
+    await abrirFormulario()
+    fireEvent.click(unlimited())
+    fireEvent.change(cuota(), { target: { value: '500' } })
+
+    await llenarYCrear()
+
+    expect((await cuerpoDelPost()).cuota).toBe('500M')
+  })
+
+  it('sin «Unlimited» y sin número avisa y no envía la solicitud', async () => {
+    await abrirFormulario()
+    fireEvent.click(unlimited())
+
+    await llenarYCrear()
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'Ingresa una cuota en MB o marca Unlimited',
+    )
+    expect(posts()).toHaveLength(0)
+  })
+
+  it('un cero no es una cuota válida', async () => {
+    await abrirFormulario()
+    fireEvent.click(unlimited())
+    fireEvent.change(cuota(), { target: { value: '0' } })
+
+    await llenarYCrear()
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'Ingresa una cuota en MB o marca Unlimited',
+    )
+    expect(posts()).toHaveLength(0)
+  })
+})
