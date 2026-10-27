@@ -11,13 +11,6 @@ import { ModalLogin } from './sesion/ModalLogin'
 import { alCambiarSesion, cerrarSesion, motivoDeSalida, sesionActual, type Sesion } from './sesion/sesion'
 import { ToggleTema } from './tema/ToggleTema'
 
-// Provisional: los módulos de administración aún no usan la sesión de inicio de sesión.
-const CREDENCIALES = {
-  usuario: import.meta.env.VITE_ORACLE_USER ?? '',
-  password: import.meta.env.VITE_ORACLE_PASSWORD ?? '',
-  servicio: import.meta.env.VITE_ORACLE_SERVICE ?? '',
-}
-
 type Vista =
   | 'principal'
   | 'respaldos'
@@ -106,6 +99,8 @@ function FlechaAtras() {
   )
 }
 
+const MODULOS = { performance: Performance, auditoria: Auditoria, seguridad: Seguridad }
+
 const PANTALLAS = { tablas: RespaldoTablas, schemas: RespaldoSchemas, full: RespaldoFull }
 
 // La pantalla abierta pertenece a la sesión: al cambiar el token se vuelve al menú principal.
@@ -125,16 +120,15 @@ function Navegador({ sesion }: { sesion: Sesion | null }) {
     )
   }
 
-  if (vista === 'performance' || vista === 'auditoria' || vista === 'seguridad') {
+  if (sesion && (vista === 'performance' || vista === 'auditoria' || vista === 'seguridad')) {
+    const Modulo = MODULOS[vista]
     return (
       <>
         <button type="button" className="volver" onClick={() => setVista('principal')}>
           <FlechaAtras />
           Volver
         </button>
-        {vista === 'performance' && <Performance credenciales={CREDENCIALES} />}
-        {vista === 'auditoria' && <Auditoria credenciales={CREDENCIALES} />}
-        {vista === 'seguridad' && <Seguridad credenciales={CREDENCIALES} />}
+        <Modulo token={sesion.token} />
       </>
     )
   }
