@@ -1,4 +1,4 @@
-/* Estilos compartidos por Performance, Auditoría y Seguridad.
+/* Estilos compartidos por los módulos de administración.
    Reutilizan las variables de index.css para respetar el tema claro/oscuro. */
 
 .encabezado-modulo {
@@ -211,4 +211,73 @@ input[type='password'] {
   cursor: pointer;
   font-size: 0.8125rem;
   padding: 0.125rem 0.375rem;
+}
+
+textarea {
+  width: 100%;
+  min-height: 9rem;
+  padding: 0.75rem 1rem;
+  border: 1.5px solid var(--linea-control);
+  border-radius: 12px;
+  background: var(--superficie);
+  box-shadow: var(--hundido);
+  font-family: var(--mono);
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--texto);
+  resize: vertical;
+}
+
+/* Porcentaje de uso de un tablespace: número y barra hundida. */
+.uso {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
+.uso .pista-uso {
+  width: 4.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--superficie);
+  box-shadow: var(--hundido);
+  overflow: hidden;
+}
+
+.uso .relleno {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--acento);
+}
+
+.uso.alto .relleno {
+  background: var(--error);
+}
+
+/* Salida de DBMS_XPLAN: se conserva el ancho fijo de sus columnas. */
+.plan {
+  margin: 0;
+  padding: 1rem;
+  overflow: auto;
+  border-radius: 12px;
+  background: var(--superficie);
+  box-shadow: var(--hundido);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+.observaciones {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.observaciones li + li {
+  margin-top: 0.5rem;
 }
