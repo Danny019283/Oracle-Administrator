@@ -1,12 +1,21 @@
+import os
+import sys
+
 from fastapi import FastAPI
 
 from src.api.auditoria import router as auditoria_router
+from src.api.dependencias import fijar_entorno
 from src.api.performance import router as performance_router
 from src.api.respaldos import router as respaldos_router
 from src.api.seguridad import router as seguridad_router
 from src.api.sesion import router as sesion_router
 from src.api.tablespaces import router as tablespaces_router
 from src.api.tuning import router as tuning_router
+from src.services.entorno_fabrica import fabrica_desde_variables
+
+# Con un valor inválido la carga falla aquí, antes de crear la aplicación
+entorno = fabrica_desde_variables(os.environ, sys.platform)
+fijar_entorno(entorno)
 
 app = FastAPI()
 app.include_router(respaldos_router)
