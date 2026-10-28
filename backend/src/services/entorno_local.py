@@ -1,7 +1,11 @@
+import os
+import tempfile
 from collections.abc import Callable, Mapping
 from pathlib import Path, PurePath
+from uuid import uuid4
 
 from src.services.entorno_oracle import EntornoOracle, Salida
+from src.services.procesos import ejecutar_proceso
 
 
 class SistemaLinux:
@@ -19,8 +23,9 @@ class SistemaLinux:
 class EntornoLocal(EntornoOracle):
     """Estrategia: las herramientas corren en la misma máquina que el backend."""
 
-    def __init__(self, sistema: SistemaLinux):
+    def __init__(self, sistema: SistemaLinux, ejecutar: Callable[..., Salida] = ejecutar_proceso):
         self._sistema = sistema
+        self._ejecutar = ejecutar
         self.tipo_ruta = sistema.tipo_ruta
 
     def crear_carpeta(self, ruta: PurePath) -> None:
@@ -39,4 +44,12 @@ class EntornoLocal(EntornoOracle):
         extension: str = "",
         variables: Mapping[str, str] | None = None,
     ) -> Salida:
-        raise NotImplementedError  # check 8
+        ruta = Path(tempfile.gettempdir()) / f"{prefijo}_{uuid4().hex}{extension}"
+        # O_EXCL y 0600: nadie más puede crear ni leer el script (lleva credenciales)
+        descriptor = os.open(ruta, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            with os.fdopen(descriptor, "w") as archivo:
+                archivo.write(script)
+            return self._ejecutar([nombre, *args(str(ruta))], variables=variables)
+        finally:
+            ruta.unlink(missing_ok=True)
