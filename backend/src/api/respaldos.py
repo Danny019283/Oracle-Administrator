@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from src.api.dependencias import obtener_conexion, obtener_entorno
-from src.services.archivelog import FRA_DIRECTORIO, ArchivelogFallido, activar_archivelog
+from src.api.dependencias import obtener_conexion, obtener_directorio_fra, obtener_entorno
+from src.services.archivelog import ArchivelogFallido, activar_archivelog
 from src.services.directorios import SinDirectorios, listar_directorios
 from src.services.entorno_oracle import EntornoOracle
 from src.services.errores_oracle import explicacion_de
@@ -220,10 +220,17 @@ def post_full(
 
 @router.post("/full/archivelog")
 def post_archivelog(
-    _: Conexion = Depends(exigir_sysdba), entorno=Depends(obtener_entorno)
+    _: Conexion = Depends(exigir_sysdba),
+    entorno=Depends(obtener_entorno),
+    fra=Depends(obtener_directorio_fra),
 ):
+    if fra is None:
+        return JSONResponse(
+            status_code=500,
+            content={"mensaje": "Configura ORACLE_FRA_DIRECTORIO con la ruta de la zona de recuperación (FRA) del servidor de Oracle"},
+        )
     try:
-        log = activar_archivelog(entorno, FRA_DIRECTORIO)
+        log = activar_archivelog(entorno, fra)
     except ArchivelogFallido as error:
         return JSONResponse(
             status_code=500,

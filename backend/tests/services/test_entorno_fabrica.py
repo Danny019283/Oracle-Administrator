@@ -4,7 +4,11 @@ import pytest
 
 from src.services import entorno_fabrica
 from src.services.entorno_contenedor import EntornoContenedor
-from src.services.entorno_fabrica import ConfiguracionInvalida, fabrica_desde_variables
+from src.services.entorno_fabrica import (
+    ConfiguracionInvalida,
+    fabrica_desde_variables,
+    fra_desde_variables,
+)
 from src.services.entorno_local import EntornoLocal
 from src.services.entorno_oracle import Salida
 
@@ -75,3 +79,42 @@ def test_cli_desconocido_indica_los_valores_validos():
     assert "ORACLE_CONTAINER_CLI" in mensaje
     assert "docker" in mensaje
     assert "podman" in mensaje
+
+
+def test_la_fra_en_contenedor_toma_la_variable_como_ruta_posix():
+    variables = {"ORACLE_FRA_DIRECTORIO": "/u01/fra"}
+
+    fra = fra_desde_variables(variables, fabrica_desde_variables(variables, "win32"))
+
+    assert fra == PurePosixPath("/u01/fra")
+    assert isinstance(fra, PurePosixPath)
+
+
+def test_la_fra_en_contenedor_sin_variable_es_la_de_hoy():
+    entorno = fabrica_desde_variables({}, "linux")
+
+    assert fra_desde_variables({}, entorno) == PurePosixPath(
+        "/opt/oracle/oradata/fast_recovery_area"
+    )
+
+
+def test_la_fra_en_local_linux_toma_la_variable_como_path():
+    variables = {"ORACLE_ENTORNO": "local", "ORACLE_FRA_DIRECTORIO": "/u01/fra"}
+
+    fra = fra_desde_variables(variables, fabrica_desde_variables(variables, "linux"))
+
+    assert fra == Path("/u01/fra")
+    assert isinstance(fra, Path)
+
+
+def test_la_fra_en_local_windows_toma_la_variable_como_ruta_de_windows():
+    variables = {"ORACLE_ENTORNO": "local", "ORACLE_FRA_DIRECTORIO": "D:\\oracle\\fra"}
+
+    fra = fra_desde_variables(variables, fabrica_desde_variables(variables, "win32"))
+
+    assert fra == PureWindowsPath("D:\\oracle\\fra")
+
+
+@pytest.mark.parametrize("variables", [{"ORACLE_ENTORNO": "local"}, {"ORACLE_ENTORNO": "local", "ORACLE_FRA_DIRECTORIO": ""}])
+def test_la_fra_en_local_sin_variable_no_tiene_defecto(variables):
+    assert fra_desde_variables(variables, fabrica_desde_variables(variables, "linux")) is None

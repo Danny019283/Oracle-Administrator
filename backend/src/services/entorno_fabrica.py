@@ -1,5 +1,7 @@
 from collections.abc import Mapping
+from pathlib import PurePath, PurePosixPath
 
+from src.services.archivelog import FRA_DIRECTORIO
 from src.services.entorno_contenedor import EntornoContenedor
 from src.services.entorno_local import EntornoLocal, SistemaLinux, SistemaWindows
 from src.services.entorno_oracle import EntornoOracle
@@ -29,3 +31,11 @@ def fabrica_desde_variables(variables: Mapping[str, str], plataforma: str) -> En
         return EntornoLocal(SistemaWindows() if plataforma.startswith("win") else SistemaLinux())
     cli = _elegir(variables, "ORACLE_CONTAINER_CLI", CLIS)
     return EntornoContenedor(variables.get("ORACLE_CONTAINER", "oracle21c"), ejecutar_proceso, cli)
+
+
+def fra_desde_variables(variables: Mapping[str, str], entorno: EntornoOracle) -> PurePath | None:
+    """Ruta de la FRA con las rutas del SO del entorno; sin variable, solo Contenedor tiene defecto."""
+    valor = variables.get("ORACLE_FRA_DIRECTORIO")
+    if valor:
+        return entorno.tipo_ruta(valor)
+    return FRA_DIRECTORIO if entorno.tipo_ruta is PurePosixPath else None
