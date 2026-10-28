@@ -1,29 +1,17 @@
 from collections.abc import Callable, Sequence
 from typing import Any
 
-import oracledb
-
 from src.services.expdp_runner import Conexion
+from src.services.oracle_conexion import abrir_conexion
 
 Sentencia = Callable[..., None]
-
-
-def _conectar(conexion: Conexion):
-    """Abre la conexión de la sesión: su host, puerto y servicio, como SYSDBA si lo es."""
-    modo = oracledb.AUTH_MODE_SYSDBA if conexion.sysdba else oracledb.AUTH_MODE_DEFAULT
-    return oracledb.connect(
-        user=conexion.usuario,
-        password=conexion.password,
-        dsn=f"{conexion.host}:{conexion.puerto}/{conexion.servicio}",
-        mode=modo,
-    )
 
 
 def sentencia_oracle(conexion: Conexion) -> Sentencia:
     """Ejecuta sentencias que no devuelven filas (DDL, GRANT, ALTER ...) con la sesión."""
 
     def ejecutar(sql: str, params: dict[str, Any] | None = None) -> None:
-        with _conectar(conexion) as bd:
+        with abrir_conexion(conexion) as bd:
             with bd.cursor() as cursor:
                 cursor.execute(sql, params or {})
             bd.commit()
@@ -44,7 +32,7 @@ def sesion_oracle(conexion: Conexion) -> Sesion:
 
     def ejecutar(pasos: Sequence[Paso]) -> list[list[Any] | None]:
         resultados: list[list[Any] | None] = []
-        with _conectar(conexion) as bd:
+        with abrir_conexion(conexion) as bd:
             with bd.cursor() as cursor:
                 for sql, params in pasos:
                     cursor.execute(sql, params or {})

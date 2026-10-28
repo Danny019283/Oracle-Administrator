@@ -7,6 +7,7 @@ import oracledb
 
 from src.services.errores_oracle import explicacion_de
 from src.services.expdp_runner import Conexion
+from src.services.oracle_conexion import abrir_conexion
 from src.services.respaldo import SolicitudInvalida
 from src.services.sesiones import AlmacenSesiones
 
@@ -100,14 +101,15 @@ def validar_login(
 
 
 def conectar_oracle(pedido: SolicitudLogin, driver: Any = oracledb) -> None:
-    modo = driver.AUTH_MODE_SYSDBA if pedido.sysdba else driver.AUTH_MODE_DEFAULT
-    conexion = driver.connect(
-        user=pedido.usuario,
+    conexion = Conexion(
+        usuario=pedido.usuario,
         password=pedido.password,
-        dsn=f"{pedido.host}:{pedido.puerto}/{pedido.servicio}",
-        mode=modo,
+        servicio=pedido.servicio,
+        host=pedido.host,
+        puerto=pedido.puerto,
+        sysdba=pedido.sysdba,
     )
-    conexion.close()
+    abrir_conexion(conexion, driver).close()
 
 
 def _traducir(error: Exception, sysdba: bool) -> LoginFallido:
