@@ -2,7 +2,9 @@ from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from typing import Any
 from datetime import datetime
+from pathlib import PurePosixPath
 
+from src.services.entorno_contenedor import EntornoContenedor
 from src.services.dumpfile import NombreInvalido, construir_nombres
 from src.services.errores_oracle import explicar_error
 from src.services.expdp_runner import Conexion, Ejecutor, ejecutar_expdp
@@ -31,7 +33,7 @@ def listar_objetos(
 
 
 def leer_log(contenedor: str, ruta: str, ejecutar: Ejecutor) -> str:
-    return ejecutar(["docker", "exec", contenedor, "cat", ruta]).texto
+    return EntornoContenedor(contenedor, ejecutar).leer_archivo(PurePosixPath(ruta))
 
 
 class RespaldoFallido(Exception):

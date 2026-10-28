@@ -1,0 +1,35 @@
+from abc import ABC, abstractmethod
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from pathlib import PurePath
+
+
+@dataclass(frozen=True)
+class Salida:
+    codigo: int
+    texto: str
+
+
+class EntornoOracle(ABC):
+    """Puerto: dónde corren las herramientas de Oracle (expdp, rman, sqlplus).
+    Los servicios solo conocen esta interfaz, no el entorno concreto."""
+
+    # Clase pathlib del SO del servidor de Oracle, para armar rutas sin conocer el entorno.
+    tipo_ruta: type[PurePath]
+
+    @abstractmethod
+    def leer_archivo(self, ruta: PurePath) -> str: ...
+
+    @abstractmethod
+    def ejecutar_herramienta(
+        self,
+        nombre: str,
+        args: Callable[[str], list[str]],
+        script: str,
+        *,
+        prefijo: str,
+        extension: str = "",
+        variables: Mapping[str, str] | None = None,
+    ) -> Salida:
+        """Escribe `script` en un temporal privado (sin que aparezca en los argumentos
+        del proceso), ejecuta `nombre` con `args(ruta_del_temporal)` y siempre lo borra."""

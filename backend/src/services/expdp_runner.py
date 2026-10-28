@@ -1,7 +1,11 @@
 import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from uuid import uuid4
+
+from src.services.entorno_contenedor import EntornoContenedor, Ejecutor
+from src.services.entorno_oracle import Salida
+
+__all__ = ["Conexion", "Ejecutor", "Salida", "ejecutar_con_archivo", "ejecutar_expdp"]
 
 
 @dataclass(frozen=True)
@@ -12,15 +16,6 @@ class Conexion:
     host: str = field(default_factory=lambda: os.environ.get("ORACLE_HOST", "localhost"))
     puerto: int = field(default_factory=lambda: int(os.environ.get("ORACLE_PORT", "1521")))
     sysdba: bool = False
-
-
-@dataclass(frozen=True)
-class Salida:
-    codigo: int
-    texto: str
-
-
-Ejecutor = Callable[..., Salida]
 
 
 def ejecutar_con_archivo(
@@ -34,17 +29,26 @@ def ejecutar_con_archivo(
     """Escribe `contenido` por stdin en un archivo temporal del contenedor
     (para que no aparezca en los argumentos del proceso), ejecuta el comando
     que lo usa y siempre lo borra."""
-    ruta = f"/tmp/{prefijo}_{uuid4().hex}{extension}"
-    docker = ["docker", "exec", contenedor]
-
-    ejecutar(
-        ["docker", "exec", "-i", contenedor, "sh", "-c", f"umask 077; cat > {ruta}"],
-        entrada=contenido,
+    entorno = EntornoContenedor(contenedor, ejecutar)
+    variables, nombre, n_prefijo = _separar_comando(comando(""))
+    return entorno.ejecutar_herramienta(
+        nombre, lambda ruta: comando(ruta)[n_prefijo:], contenido,
+        prefijo=prefijo, extension=extension, variables=variables,
     )
-    try:
-        return ejecutar([*docker, *comando(ruta)])
-    finally:
-        ejecutar([*docker, "rm", "-f", ruta])
+
+
+def _separar_comando(comando: list[str]) -> tuple[dict[str, str], str, int]:
+    """Traduce el prefijo `env K=V …` del comando a variables; devuelve también
+    la herramienta y cuántos elementos preceden a sus argumentos."""
+    variables: dict[str, str] = {}
+    posicion = 0
+    if comando[0] == "env":
+        posicion = 1
+        while "=" in comando[posicion]:
+            clave, valor = comando[posicion].split("=", 1)
+            variables[clave] = valor
+            posicion += 1
+    return variables, comando[posicion], posicion + 1
 
 
 def ejecutar_expdp(
