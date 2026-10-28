@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from src.api.dependencias import obtener_conexion, obtener_directorio_fra, obtener_entorno
 from src.services.archivelog import ArchivelogFallido, activar_archivelog
 from src.services.directorios import SinDirectorios, listar_directorios
-from src.services.entorno_oracle import EntornoOracle
+from src.services.entorno_oracle import EntornoOracle, HerramientaNoDisponible
 from src.services.errores_oracle import explicacion_de
 from src.services.expdp_runner import Conexion
 from src.services.oracle_conexion import consulta_oracle
@@ -71,6 +71,10 @@ def respuesta_respaldo_fallido(error: RespaldoFallido) -> JSONResponse:
     )
 
 
+def respuesta_herramienta_no_disponible(error: HerramientaNoDisponible) -> JSONResponse:
+    return JSONResponse(status_code=500, content={"mensaje": str(error)})
+
+
 def _listado(clave: str, listar: Callable, sin_objetos: type[SinObjetos], consulta):
     try:
         return {clave: listar(consulta)}
@@ -124,6 +128,8 @@ def _respaldo(
         )
     except RespaldoFallido as error:
         return respuesta_respaldo_fallido(error)
+    except HerramientaNoDisponible as error:
+        return respuesta_herramienta_no_disponible(error)
     return {"dmp": resultado.dmp, "log": resultado.log}
 
 
@@ -208,6 +214,8 @@ def post_full(
         )
     except RespaldoFallido as error:
         return respuesta_respaldo_fallido(error)
+    except HerramientaNoDisponible as error:
+        return respuesta_herramienta_no_disponible(error)
 
     advertencia = resultado.advertencia
     return {
@@ -240,4 +248,6 @@ def post_archivelog(
                 "log": error.log,
             },
         )
+    except HerramientaNoDisponible as error:
+        return respuesta_herramienta_no_disponible(error)
     return {"mensaje": "ARCHIVELOG activado. Inicia sesión de nuevo", "log": log}
