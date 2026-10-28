@@ -47,7 +47,7 @@ _EXPLICACIONES = {
     "ORA-00933": "La sentencia SQL no terminó correctamente; revisa la sintaxis cerca del final",
     "ORA-00936": "Falta una expresión en la consulta; revisa la sintaxis",
     "ORA-20000": "No se pudieron generar las estadísticas: el objeto no existe o el usuario no tiene privilegios suficientes",
-    "DPY-6005": "No se pudo conectar con Oracle; verifica que el contenedor oracle21c esté encendido",
+    "DPY-6005": "No se pudo conectar con Oracle; verifica que el servidor de Oracle esté encendido",
 }
 
 
