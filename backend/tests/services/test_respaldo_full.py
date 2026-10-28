@@ -29,13 +29,14 @@ def scripts(entorno):
     return [h["script"] for h in entorno.herramientas]
 
 
-def respaldo(entorno=None, consulta=None, directorio="RESPALDO", nombre="semanal"):
+def respaldo(entorno=None, consulta=None, directorio="RESPALDO", nombre="semanal", sid="XE"):
     return respaldar_full(
         consulta=consulta or ConsultaFalsa(),
         directorios=DIRECTORIOS,
         directorio=directorio,
         nombre=nombre,
         entorno=entorno or entorno_con(),
+        sid=sid,
     )
 
 
@@ -70,6 +71,14 @@ def test_tras_un_backup_correcto_ejecuta_la_limpieza_con_redundancy_1():
     assert "CROSSCHECK ARCHIVELOG ALL;" in limpieza
     assert "DELETE NOPROMPT OBSOLETE REDUNDANCY 1;" in limpieza
     assert "BACKUP INCREMENTAL" not in limpieza
+
+
+def test_las_dos_ejecuciones_de_rman_usan_el_sid_recibido_en_oracle_sid():
+    entorno = entorno_con()
+
+    respaldo(entorno, sid="ORCL")
+
+    assert [h["variables"] for h in entorno.herramientas] == [{"ORACLE_SID": "ORCL"}] * 2
 
 
 def test_el_exito_devuelve_el_log_del_backup_sin_advertencia():

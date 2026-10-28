@@ -59,6 +59,7 @@ def respaldar_full(
     directorio: str,
     nombre: str,
     entorno: EntornoOracle,
+    sid: str,
 ) -> ResultadoFull:
     errores = errores_destino(directorio, nombre, [d.nombre for d in directorios])
     if errores:
@@ -67,11 +68,11 @@ def respaldar_full(
         raise SinArchivelog()
 
     ruta = next(d.ruta for d in directorios if d.nombre == directorio)
-    respaldo = ejecutar_rman(entorno, _script_respaldo(entorno, ruta, nombre))
+    respaldo = ejecutar_rman(entorno, _script_respaldo(entorno, ruta, nombre), sid)
     if respaldo.codigo != 0:
         raise RespaldoFallido(respaldo.codigo, respaldo.texto, "rman")
 
-    limpieza = ejecutar_rman(entorno, _SCRIPT_LIMPIEZA)
+    limpieza = ejecutar_rman(entorno, _SCRIPT_LIMPIEZA, sid)
     advertencia = None
     if limpieza.codigo != 0:
         advertencia = AdvertenciaLimpieza(explicar_error(limpieza.texto), limpieza.texto)

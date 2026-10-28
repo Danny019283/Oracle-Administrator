@@ -28,11 +28,14 @@ ENDPOINTS = [
 
 
 class ConsultaFalsa:
-    def __init__(self, modo="ARCHIVELOG", directorios=(("RESPALDO", RUTA),)):
+    def __init__(self, modo="ARCHIVELOG", directorios=(("RESPALDO", RUTA),), sid="XE"):
         self.modo = modo
         self.directorios = list(directorios)
+        self.sid = sid
 
     def __call__(self, sql, params=None):
+        if "instance_name" in sql.lower():
+            return [(self.sid,)]
         if "v$database" in sql.lower():
             return [(self.modo,)]
         return self.directorios
@@ -103,6 +106,15 @@ def test_respalda_y_devuelve_el_log_de_rman_sin_advertencia(cliente):
     assert respuesta.json() == {"log": "log del backup", "advertencia": None}
     assert [h["nombre"] for h in entorno.herramientas] == ["rman", "rman"]
     assert "s3creta!" not in respuesta.text
+
+
+def test_rman_usa_el_sid_real_de_la_instancia_aunque_la_sesion_sea_de_un_servicio_de_pdb(cliente):
+    # la sesión del test usa el servicio XE; el SID sale de la consulta, no del servicio
+    entorno = usar(consulta=ConsultaFalsa(sid="ORCLCDB"))
+
+    cliente.post("/respaldos/full", json=SOLICITUD, headers=SYSDBA)
+
+    assert [h["variables"] for h in entorno.herramientas] == [{"ORACLE_SID": "ORCLCDB"}] * 2
 
 
 def test_si_la_limpieza_falla_responde_200_con_la_advertencia_y_su_log(cliente):

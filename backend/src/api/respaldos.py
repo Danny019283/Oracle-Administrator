@@ -11,6 +11,7 @@ from src.services.directorios import SinDirectorios, listar_directorios
 from src.services.entorno_oracle import EntornoOracle, HerramientaNoDisponible
 from src.services.errores_oracle import explicacion_de
 from src.services.expdp_runner import Conexion
+from src.services.instancia import sid_de_instancia
 from src.services.oracle_conexion import consulta_oracle
 from src.services.respaldo import (
     SCHEMAS,
@@ -204,6 +205,7 @@ def post_full(
             directorio=solicitud.directorio,
             nombre=solicitud.nombre,
             entorno=entorno,
+            sid=sid_de_instancia(consulta),
         )
     except SolicitudInvalida as error:
         return respuesta_solicitud_invalida(error)
