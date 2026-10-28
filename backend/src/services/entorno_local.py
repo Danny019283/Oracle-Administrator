@@ -4,7 +4,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path, PurePath, PureWindowsPath
 from uuid import uuid4
 
-from src.services.entorno_oracle import EntornoOracle, Salida
+from src.services.entorno_oracle import ArchivoNoLegible, EntornoOracle, Salida
 from src.services.procesos import ejecutar_proceso
 
 
@@ -65,7 +65,10 @@ class EntornoLocal(EntornoOracle):
         self._sistema.crear_carpeta(ruta)
 
     def leer_archivo(self, ruta: PurePath) -> str:
-        return self._sistema.leer_archivo(ruta)
+        try:
+            return self._sistema.leer_archivo(ruta)
+        except OSError as error:
+            raise ArchivoNoLegible(str(error)) from error
 
     def ejecutar_herramienta(
         self,

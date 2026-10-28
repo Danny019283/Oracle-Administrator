@@ -14,6 +14,10 @@ class OperacionEntornoFallida(Exception):
     """Una operación del entorno terminó con error; el mensaje es la salida del comando."""
 
 
+class ArchivoNoLegible(Exception):
+    """El archivo no se pudo leer en el entorno; el mensaje es el detalle del fallo."""
+
+
 class HerramientaNoDisponible(Exception):
     """El ejecutable no existe o no se pudo lanzar; el mensaje nombra la herramienta."""
 

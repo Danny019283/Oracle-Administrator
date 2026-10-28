@@ -3,7 +3,7 @@ import re
 import pytest
 
 from src.services.entorno_contenedor import EntornoContenedor
-from src.services.entorno_oracle import HerramientaNoDisponible, OperacionEntornoFallida, Salida
+from src.services.entorno_oracle import ArchivoNoLegible, HerramientaNoDisponible, OperacionEntornoFallida, Salida
 
 
 class ProcesoFalso:
@@ -123,6 +123,14 @@ def test_leer_archivo_ejecuta_cat_dentro_del_contenedor():
 
     assert proceso.llamadas == [(["docker", "exec", "oracle-test", "cat", "/u01/log.log"], None)]
     assert texto == "contenido del archivo"
+
+
+def test_leer_archivo_con_cat_distinto_de_cero_lanza_archivo_no_legible():
+    def proceso(args, entrada=None):
+        return Salida(codigo=1, texto="cat: /u01/log.log: No such file or directory")
+
+    with pytest.raises(ArchivoNoLegible):
+        EntornoContenedor("oracle-test", proceso).leer_archivo(EntornoContenedor.tipo_ruta("/u01/log.log"))
 
 
 def test_con_cli_podman_emite_podman_exec_con_la_misma_forma_que_docker():

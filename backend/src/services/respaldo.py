@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import PurePath
 
 from src.services.dumpfile import NombreInvalido, construir_nombres
-from src.services.entorno_oracle import EntornoOracle
+from src.services.entorno_oracle import ArchivoNoLegible, EntornoOracle
 from src.services.errores_oracle import explicar_error
 from src.services.expdp_runner import Conexion, ejecutar_expdp
 
@@ -137,6 +137,9 @@ def respaldar(
     if salida.codigo != 0:
         log = salida.texto
         if ruta_directorio is not None:
-            log = leer_log(entorno, entorno.tipo_ruta(ruta_directorio) / nombres.log)
+            try:
+                log = leer_log(entorno, entorno.tipo_ruta(ruta_directorio) / nombres.log)
+            except ArchivoNoLegible:
+                pass  # el log es la salida de expdp
         raise RespaldoFallido(salida.codigo, log)
     return ResultadoRespaldo(dmp=nombres.dmp, log=nombres.log)

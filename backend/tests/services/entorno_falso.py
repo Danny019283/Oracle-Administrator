@@ -1,6 +1,6 @@
 from pathlib import PurePosixPath
 
-from src.services.entorno_oracle import EntornoOracle, Salida
+from src.services.entorno_oracle import ArchivoNoLegible, EntornoOracle, Salida
 
 RUTA_TEMPORAL = "/tmp/herramienta.tmp"
 
@@ -23,6 +23,9 @@ class EntornoFalso(EntornoOracle):
 
     def leer_archivo(self, ruta):
         self.lecturas.append(ruta)
+        # log=None simula un log que el entorno no puede leer
+        if self.log is None:
+            raise ArchivoNoLegible(str(ruta))
         return self.log
 
     def ejecutar_herramienta(

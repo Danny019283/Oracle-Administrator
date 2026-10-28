@@ -1,6 +1,9 @@
 from pathlib import Path
 
+import pytest
+
 from src.services.entorno_local import EntornoLocal, SistemaLinux
+from src.services.entorno_oracle import ArchivoNoLegible
 
 
 def entorno():
@@ -16,6 +19,11 @@ def test_leer_archivo_devuelve_el_contenido_del_archivo_local(tmp_path):
     archivo.write_text("export terminado\n")
 
     assert entorno().leer_archivo(archivo) == "export terminado\n"
+
+
+def test_leer_archivo_con_error_de_es_lanza_archivo_no_legible(tmp_path):
+    with pytest.raises(ArchivoNoLegible):
+        entorno().leer_archivo(tmp_path / "no_existe.log")
 
 
 def test_crear_carpeta_crea_los_padres(tmp_path):

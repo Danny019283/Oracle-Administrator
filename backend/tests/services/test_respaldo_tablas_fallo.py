@@ -62,6 +62,13 @@ def test_el_mensaje_del_fallo_no_incluye_la_contrasena():
     assert "s3creta!" not in fallo.log
 
 
+def test_si_el_log_no_se_puede_leer_informa_la_salida_de_expdp_y_falla_igual():
+    fallo = fallo_de(entorno_fallido(log=None))
+
+    assert fallo.codigo == 5
+    assert fallo.log == "ORA-39002: operación no válida"
+
+
 def test_si_no_hay_ruta_del_directorio_informa_la_salida_de_expdp():
     entorno = entorno_fallido()
 

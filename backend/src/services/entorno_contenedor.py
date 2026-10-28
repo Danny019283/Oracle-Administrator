@@ -3,6 +3,7 @@ from pathlib import PurePath, PurePosixPath
 from uuid import uuid4
 
 from src.services.entorno_oracle import (
+    ArchivoNoLegible,
     EntornoOracle,
     HerramientaNoDisponible,
     OperacionEntornoFallida,
@@ -28,7 +29,10 @@ class EntornoContenedor(EntornoOracle):
             raise OperacionEntornoFallida(salida.texto)
 
     def leer_archivo(self, ruta: PurePath) -> str:
-        return self._ejecutar([self._cli, "exec", self._contenedor, "cat", str(ruta)]).texto
+        salida = self._ejecutar([self._cli, "exec", self._contenedor, "cat", str(ruta)])
+        if salida.codigo != 0:
+            raise ArchivoNoLegible(salida.texto)
+        return salida.texto
 
     def ejecutar_herramienta(
         self,
