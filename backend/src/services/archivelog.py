@@ -1,13 +1,16 @@
-from src.services.errores_oracle import explicar_error
-from src.services.expdp_runner import Ejecutor, ejecutar_con_archivo
+from pathlib import PurePath, PurePosixPath
 
-FRA_DIRECTORIO = "/opt/oracle/oradata/fast_recovery_area"
+from src.services.entorno_oracle import EntornoOracle, OperacionEntornoFallida
+from src.services.errores_oracle import explicar_error
+
+FRA_DIRECTORIO = PurePosixPath("/opt/oracle/oradata/fast_recovery_area")
 FRA_TAMANO = "10G"
 
-_SCRIPT = f"""WHENEVER SQLERROR EXIT SQL.SQLCODE
-HOST mkdir -p {FRA_DIRECTORIO}
+
+def _script(fra: PurePath) -> str:
+    return f"""WHENEVER SQLERROR EXIT SQL.SQLCODE
 ALTER SYSTEM SET db_recovery_file_dest_size={FRA_TAMANO} SCOPE=BOTH;
-ALTER SYSTEM SET db_recovery_file_dest='{FRA_DIRECTORIO}' SCOPE=BOTH;
+ALTER SYSTEM SET db_recovery_file_dest='{fra}' SCOPE=BOTH;
 SHUTDOWN IMMEDIATE
 STARTUP MOUNT
 ALTER DATABASE ARCHIVELOG;
@@ -23,11 +26,14 @@ class ArchivelogFallido(Exception):
         self.explicacion = explicar_error(log)
 
 
-def activar_archivelog(contenedor: str, ejecutar: Ejecutor) -> str:
-    salida = ejecutar_con_archivo(
-        contenedor, "archivelog", _SCRIPT,
-        lambda ruta: ["env", "ORACLE_SID=XE", "sqlplus", "-S", "/ as sysdba", f"@{ruta}"],
-        ejecutar, extension=".sql",
+def activar_archivelog(entorno: EntornoOracle, fra: PurePath) -> str:
+    try:
+        entorno.crear_carpeta(fra)
+    except OperacionEntornoFallida as error:
+        raise ArchivelogFallido(str(error)) from error
+    salida = entorno.ejecutar_herramienta(
+        "sqlplus", lambda ruta: ["-S", "/ as sysdba", f"@{ruta}"], _script(fra),
+        prefijo="archivelog", extension=".sql", variables={"ORACLE_SID": "XE"},
     )
     if salida.codigo != 0:
         raise ArchivelogFallido(salida.texto)

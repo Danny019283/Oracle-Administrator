@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from src.api.dependencias import obtener_conexion
-from src.services.archivelog import ArchivelogFallido, activar_archivelog
+from src.services.archivelog import FRA_DIRECTORIO, ArchivelogFallido, activar_archivelog
 from src.services.directorios import SinDirectorios, listar_directorios
 from src.services.docker_ejecutor import ejecutar_docker
 from src.services.entorno_contenedor import EntornoContenedor
@@ -233,7 +233,8 @@ def post_archivelog(
     _: Conexion = Depends(exigir_sysdba), ejecutar=Depends(obtener_ejecutor)
 ):
     try:
-        log = activar_archivelog(_contenedor(), ejecutar)
+        # transitorio hasta el check 17
+        log = activar_archivelog(EntornoContenedor(_contenedor(), ejecutar), FRA_DIRECTORIO)
     except ArchivelogFallido as error:
         return JSONResponse(
             status_code=500,

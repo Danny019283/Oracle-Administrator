@@ -1,46 +1,52 @@
+from pathlib import PurePosixPath
+
 import pytest
 
-from src.services.archivelog import ArchivelogFallido, activar_archivelog
-from src.services.expdp_runner import Salida
+from src.services.archivelog import FRA_DIRECTORIO, ArchivelogFallido, activar_archivelog
+from src.services.entorno_oracle import OperacionEntornoFallida, Salida
+from tests.services.entorno_falso import EntornoFalso
+
+FRA = PurePosixPath("/opt/oracle/oradata/fast_recovery_area")
 
 
-class EjecutorFalso:
-    def __init__(self, codigo_sqlplus=0, texto="Base de datos abierta"):
-        self.codigo_sqlplus = codigo_sqlplus
-        self.texto = texto
-        self.llamadas = []
-
-    def __call__(self, args, entrada=None):
-        self.llamadas.append((args, entrada))
-        if "sqlplus" in args:
-            return Salida(codigo=self.codigo_sqlplus, texto=self.texto)
-        return Salida(codigo=0, texto="")
-
-
-def sentencias(ejecutor):
-    script = next(entrada for _, entrada in ejecutor.llamadas if entrada is not None)
+def sentencias(entorno):
+    script = entorno.herramientas[0]["script"]
     return [linea.strip() for linea in script.splitlines() if linea.strip()]
 
 
-def test_ejecuta_sqlplus_como_sysdba_con_el_script_temporal_del_contenedor():
-    ejecutor = EjecutorFalso()
+def test_la_fra_por_defecto_es_la_de_oracle_como_ruta_posix():
+    assert FRA_DIRECTORIO == FRA
 
-    activar_archivelog("oracle-test", ejecutor)
 
-    ruta = ejecutor.llamadas[0][0][-1].split("cat > ")[1]
-    assert ejecutor.llamadas[1][0] == [
-        "docker", "exec", "oracle-test",
-        "env", "ORACLE_SID=XE", "sqlplus", "-S", "/ as sysdba", f"@{ruta}",
-    ]
-    assert ejecutor.llamadas[-1][0] == ["docker", "exec", "oracle-test", "rm", "-f", ruta]
+def test_crea_la_carpeta_de_la_fra_y_ejecuta_sqlplus_como_sysdba_con_el_script_temporal():
+    entorno = EntornoFalso()
+
+    activar_archivelog(entorno, FRA)
+
+    assert entorno.carpetas == [FRA]
+    herramienta = entorno.herramientas[0]
+    assert herramienta["nombre"] == "sqlplus"
+    assert herramienta["args"][:2] == ["-S", "/ as sysdba"]
+    assert herramienta["args"][2].startswith("@")
+    assert herramienta["prefijo"] == "archivelog"
+    assert herramienta["extension"] == ".sql"
+    assert herramienta["variables"] == {"ORACLE_SID": "XE"}
+
+
+def test_el_script_ya_no_crea_la_carpeta_con_host_mkdir():
+    entorno = EntornoFalso()
+
+    activar_archivelog(entorno, FRA)
+
+    assert not any("HOST" in s.upper() or "MKDIR" in s.upper() for s in sentencias(entorno))
 
 
 def test_define_la_fra_reinicia_en_mount_activa_archivelog_y_abre_la_base_en_ese_orden():
-    ejecutor = EjecutorFalso()
+    entorno = EntornoFalso()
 
-    activar_archivelog("oracle-test", ejecutor)
+    activar_archivelog(entorno, FRA)
 
-    sql = [s.upper() for s in sentencias(ejecutor)]
+    sql = [s.upper() for s in sentencias(entorno)]
     pasos = [
         "DB_RECOVERY_FILE_DEST_SIZE",
         "DB_RECOVERY_FILE_DEST=",
@@ -53,24 +59,46 @@ def test_define_la_fra_reinicia_en_mount_activa_archivelog_y_abre_la_base_en_ese
     assert posiciones == sorted(posiciones)
 
 
+def test_el_destino_de_la_fra_en_el_script_es_la_ruta_recibida():
+    entorno = EntornoFalso()
+
+    activar_archivelog(entorno, PurePosixPath("/otra/fra"))
+
+    assert "db_recovery_file_dest='/otra/fra'" in sentencias(entorno)[2]
+
+
 def test_el_script_se_detiene_en_el_primer_error_de_sql():
-    ejecutor = EjecutorFalso()
+    entorno = EntornoFalso()
 
-    activar_archivelog("oracle-test", ejecutor)
+    activar_archivelog(entorno, FRA)
 
-    assert sentencias(ejecutor)[0] == "WHENEVER SQLERROR EXIT SQL.SQLCODE"
+    assert sentencias(entorno)[0] == "WHENEVER SQLERROR EXIT SQL.SQLCODE"
 
 
 def test_devuelve_la_salida_de_sqlplus():
-    assert activar_archivelog("oracle-test", EjecutorFalso(texto="listo")) == "listo"
+    assert activar_archivelog(EntornoFalso(texto="listo"), FRA) == "listo"
 
 
 def test_si_sqlplus_falla_informa_el_error_de_oracle_con_su_log():
-    ejecutor = EjecutorFalso(codigo_sqlplus=1, texto="ORA-19809: límite de la FRA superado")
+    entorno = EntornoFalso(salidas=[Salida(1, "ORA-19809: límite de la FRA superado")])
 
     with pytest.raises(ArchivelogFallido) as error:
-        activar_archivelog("oracle-test", ejecutor)
+        activar_archivelog(entorno, FRA)
 
     assert str(error.value) == "No se pudo activar ARCHIVELOG"
     assert "ORA-19809" in error.value.log
     assert "Se superó el límite" in error.value.explicacion
+
+
+def test_si_no_se_puede_crear_la_carpeta_lanza_archivelog_fallido_y_no_ejecuta_sqlplus():
+    class EntornoSinCarpeta(EntornoFalso):
+        def crear_carpeta(self, ruta):
+            raise OperacionEntornoFallida("mkdir: Permission denied")
+
+    entorno = EntornoSinCarpeta()
+
+    with pytest.raises(ArchivelogFallido) as error:
+        activar_archivelog(entorno, FRA)
+
+    assert "Permission denied" in error.value.log
+    assert entorno.herramientas == []
