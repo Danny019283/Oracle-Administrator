@@ -26,14 +26,14 @@ class ArchivelogFallido(Exception):
         self.explicacion = explicar_error(log)
 
 
-def activar_archivelog(entorno: EntornoOracle, fra: PurePath) -> str:
+def activar_archivelog(entorno: EntornoOracle, fra: PurePath, sid: str) -> str:
     try:
         entorno.crear_carpeta(fra)
     except OperacionEntornoFallida as error:
         raise ArchivelogFallido(str(error)) from error
     salida = entorno.ejecutar_herramienta(
         "sqlplus", lambda ruta: ["-S", "/ as sysdba", f"@{ruta}"], _script(fra),
-        prefijo="archivelog", extension=".sql", variables={"ORACLE_SID": "XE"},
+        prefijo="archivelog", extension=".sql", variables={"ORACLE_SID": sid},
     )
     if salida.codigo != 0:
         raise ArchivelogFallido(salida.texto)

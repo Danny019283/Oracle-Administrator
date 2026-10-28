@@ -231,6 +231,7 @@ def post_full(
 @router.post("/full/archivelog")
 def post_archivelog(
     _: Conexion = Depends(exigir_sysdba),
+    consulta=Depends(obtener_consulta),
     entorno=Depends(obtener_entorno),
     fra=Depends(obtener_directorio_fra),
 ):
@@ -240,7 +241,7 @@ def post_archivelog(
             content={"mensaje": "Configura ORACLE_FRA_DIRECTORIO con la ruta de la zona de recuperación (FRA) del servidor de Oracle"},
         )
     try:
-        log = activar_archivelog(entorno, fra)
+        log = activar_archivelog(entorno, fra, sid_de_instancia(consulta))
     except ArchivelogFallido as error:
         return JSONResponse(
             status_code=500,

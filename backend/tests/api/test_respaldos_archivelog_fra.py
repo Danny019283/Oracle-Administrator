@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from main import app
 from src.api.dependencias import obtener_entorno
+from src.api.respaldos import obtener_consulta
 from src.api.sesion import obtener_almacen
 from src.services.expdp_runner import Conexion
 from src.services.sesiones import AlmacenSesiones
@@ -28,6 +29,8 @@ def cliente(monkeypatch):
 
 
 def usar(entorno):
+    # el SID sale de la consulta: se inyecta una falsa para no abrir una conexión real
+    app.dependency_overrides[obtener_consulta] = lambda: lambda sql, params=None: [("XE",)]
     app.dependency_overrides[obtener_entorno] = lambda: entorno
     return entorno
 

@@ -195,6 +195,15 @@ def test_activa_archivelog_y_pide_iniciar_sesion_de_nuevo(cliente):
     assert "s3creta!" not in respuesta.text
 
 
+def test_activar_archivelog_usa_el_sid_real_de_la_instancia(cliente):
+    entorno = usar(consulta=ConsultaFalsa(sid="ORCLCDB"), entorno=EntornoFalso())
+
+    respuesta = cliente.post("/respaldos/full/archivelog", headers=SYSDBA)
+
+    assert respuesta.status_code == 200
+    assert entorno.herramientas[0]["variables"] == {"ORACLE_SID": "ORCLCDB"}
+
+
 def test_si_activar_archivelog_falla_responde_500_con_mensaje_explicacion_y_log(cliente):
     usar(entorno=EntornoFalso(codigo=1, texto="ORA-19809: límite de la FRA superado"))
 
