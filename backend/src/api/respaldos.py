@@ -1,4 +1,3 @@
-import os
 from collections.abc import Callable
 from datetime import datetime
 
@@ -9,8 +8,6 @@ from pydantic import BaseModel
 from src.api.dependencias import obtener_conexion, obtener_entorno
 from src.services.archivelog import FRA_DIRECTORIO, ArchivelogFallido, activar_archivelog
 from src.services.directorios import SinDirectorios, listar_directorios
-from src.services.docker_ejecutor import ejecutar_docker
-from src.services.entorno_contenedor import EntornoContenedor
 from src.services.entorno_oracle import EntornoOracle
 from src.services.errores_oracle import explicacion_de
 from src.services.expdp_runner import Conexion
@@ -36,18 +33,10 @@ def obtener_consulta(conexion: Conexion = Depends(obtener_conexion)):
     return consulta_oracle(conexion)
 
 
-def obtener_ejecutor():
-    return ejecutar_docker
-
-
 def exigir_sysdba(conexion: Conexion = Depends(obtener_conexion)) -> Conexion:
     if not conexion.sysdba:
         raise HTTPException(status_code=403, detail="Se requiere sesión SYSDBA")
     return conexion
-
-
-def _contenedor() -> str:
-    return os.environ.get("ORACLE_CONTAINER", "oracle21c")
 
 
 class SolicitudRespaldo(BaseModel):
@@ -195,7 +184,7 @@ def post_full(
     solicitud: SolicitudRespaldoFull,
     _: Conexion = Depends(exigir_sysdba),
     consulta=Depends(obtener_consulta),
-    ejecutar=Depends(obtener_ejecutor),
+    entorno=Depends(obtener_entorno),
 ):
     try:
         directorios = listar_directorios(consulta)
@@ -208,7 +197,7 @@ def post_full(
             directorios=directorios,
             directorio=solicitud.directorio,
             nombre=solicitud.nombre,
-            entorno=EntornoContenedor(_contenedor(), ejecutar),  # transitorio hasta el check 17
+            entorno=entorno,
         )
     except SolicitudInvalida as error:
         return respuesta_solicitud_invalida(error)
@@ -231,11 +220,10 @@ def post_full(
 
 @router.post("/full/archivelog")
 def post_archivelog(
-    _: Conexion = Depends(exigir_sysdba), ejecutar=Depends(obtener_ejecutor)
+    _: Conexion = Depends(exigir_sysdba), entorno=Depends(obtener_entorno)
 ):
     try:
-        # transitorio hasta el check 17
-        log = activar_archivelog(EntornoContenedor(_contenedor(), ejecutar), FRA_DIRECTORIO)
+        log = activar_archivelog(entorno, FRA_DIRECTORIO)
     except ArchivelogFallido as error:
         return JSONResponse(
             status_code=500,
