@@ -2,7 +2,12 @@ from collections.abc import Callable, Mapping
 from pathlib import PurePath, PurePosixPath
 from uuid import uuid4
 
-from src.services.entorno_oracle import EntornoOracle, OperacionEntornoFallida, Salida
+from src.services.entorno_oracle import (
+    EntornoOracle,
+    HerramientaNoDisponible,
+    OperacionEntornoFallida,
+    Salida,
+)
 
 Ejecutor = Callable[..., Salida]
 
@@ -45,6 +50,10 @@ class EntornoContenedor(EntornoOracle):
             entrada=script,
         )
         try:
-            return self._ejecutar([*docker, *prefijo_env, nombre, *args(ruta)])
+            salida = self._ejecutar([*docker, *prefijo_env, nombre, *args(ruta)])
+            # 127 de exec: la herramienta no existe dentro del contenedor
+            if salida.codigo == 127:
+                raise HerramientaNoDisponible(nombre)
+            return salida
         finally:
             self._ejecutar([*docker, "rm", "-f", ruta])

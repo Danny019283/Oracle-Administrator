@@ -3,7 +3,7 @@ import re
 import pytest
 
 from src.services.entorno_contenedor import EntornoContenedor
-from src.services.entorno_oracle import OperacionEntornoFallida, Salida
+from src.services.entorno_oracle import HerramientaNoDisponible, OperacionEntornoFallida, Salida
 
 
 class ProcesoFalso:
@@ -91,6 +91,29 @@ def test_borra_el_temporal_aunque_la_herramienta_lance_una_excepcion():
 
     ruta = proceso.llamadas[0][0][-1].split("cat > ")[1]
     assert proceso.llamadas[-1][0] == ["docker", "exec", "oracle-test", "rm", "-f", ruta]
+
+
+def test_codigo_127_de_la_herramienta_lanza_herramienta_no_disponible_y_borra_el_temporal():
+    proceso = ProcesoFalso(codigo_herramienta=127)
+
+    with pytest.raises(HerramientaNoDisponible, match="rman"):
+        ejecutar(proceso)
+
+    ruta = proceso.llamadas[0][0][-1].split("cat > ")[1]
+    assert proceso.llamadas[-1][0] == ["docker", "exec", "oracle-test", "rm", "-f", ruta]
+
+
+def test_si_falla_al_escribir_el_temporal_no_intenta_borrar_nada():
+    llamadas = []
+
+    def proceso(args, entrada=None):
+        llamadas.append(args)
+        raise HerramientaNoDisponible("docker")
+
+    with pytest.raises(HerramientaNoDisponible, match="docker"):
+        ejecutar(proceso)
+
+    assert len(llamadas) == 1
 
 
 def test_leer_archivo_ejecuta_cat_dentro_del_contenedor():

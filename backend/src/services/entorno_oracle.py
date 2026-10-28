@@ -14,6 +14,14 @@ class OperacionEntornoFallida(Exception):
     """Una operación del entorno terminó con error; el mensaje es la salida del comando."""
 
 
+class HerramientaNoDisponible(Exception):
+    """El ejecutable no existe o no se pudo lanzar; el mensaje nombra la herramienta."""
+
+    def __init__(self, herramienta: str):
+        super().__init__(f"No se pudo ejecutar «{herramienta}»: no está disponible en el entorno.")
+        self.herramienta = herramienta
+
+
 class EntornoOracle(ABC):
     """Puerto: dónde corren las herramientas de Oracle (expdp, rman, sqlplus).
     Los servicios solo conocen esta interfaz, no el entorno concreto."""
