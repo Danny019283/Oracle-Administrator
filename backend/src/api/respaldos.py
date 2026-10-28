@@ -207,8 +207,7 @@ def post_full(
             directorios=directorios,
             directorio=solicitud.directorio,
             nombre=solicitud.nombre,
-            contenedor=_contenedor(),
-            ejecutar=ejecutar,
+            entorno=EntornoContenedor(_contenedor(), ejecutar),  # transitorio hasta el check 17
         )
     except SolicitudInvalida as error:
         return respuesta_solicitud_invalida(error)

@@ -1,9 +1,10 @@
 import pytest
 
 from src.services.directorios import Directorio
-from src.services.expdp_runner import Salida
+from src.services.entorno_oracle import Salida
 from src.services.respaldo import RespaldoFallido, SolicitudInvalida
 from src.services.respaldo_full import SinArchivelog, en_archivelog, respaldar_full
+from tests.services.entorno_falso import EntornoFalso
 
 RUTA = "/opt/oracle/Respaldos"
 DIRECTORIOS = [Directorio("RESPALDO", RUTA), Directorio("OTRO", "/tmp/otro")]
@@ -19,37 +20,22 @@ class ConsultaFalsa:
         return [(self.modo,)]
 
 
-class EjecutorFalso:
-    """Registra los scripts de RMAN; `codigos` da el código de salida de cada
-    ejecución de RMAN, en orden (backup, limpieza)."""
-
-    def __init__(self, codigos=(0, 0), textos=("log del backup", "log de la limpieza")):
-        self.codigos = list(codigos)
-        self.textos = list(textos)
-        self.llamadas = []
-        self.scripts = []
-        self._script = None
-
-    def __call__(self, args, entrada=None):
-        self.llamadas.append((args, entrada))
-        if entrada is not None:
-            self._script = entrada
-        if "rman" in args:
-            self.scripts.append(self._script)
-            indice = len(self.scripts) - 1
-            return Salida(codigo=self.codigos[indice], texto=self.textos[indice])
-        return Salida(codigo=0, texto="")
+def entorno_con(codigos=(0, 0), textos=("log del backup", "log de la limpieza")):
+    """Entorno falso con la salida de cada ejecución de RMAN, en orden (backup, limpieza)."""
+    return EntornoFalso(salidas=[Salida(c, t) for c, t in zip(codigos, textos)])
 
 
-def respaldo(ejecutor=None, consulta=None, directorio="RESPALDO", nombre="semanal"):
-    ejecutor = ejecutor or EjecutorFalso()
+def scripts(entorno):
+    return [h["script"] for h in entorno.herramientas]
+
+
+def respaldo(entorno=None, consulta=None, directorio="RESPALDO", nombre="semanal"):
     return respaldar_full(
         consulta=consulta or ConsultaFalsa(),
         directorios=DIRECTORIOS,
         directorio=directorio,
         nombre=nombre,
-        contenedor="oracle21c",
-        ejecutar=ejecutor,
+        entorno=entorno or entorno_con(),
     )
 
 
@@ -62,11 +48,11 @@ def test_en_archivelog_consulta_el_modo_de_log_de_la_base(modo, esperado):
 
 
 def test_el_backup_es_incremental_nivel_0_de_toda_la_base_en_la_ruta_del_directorio():
-    ejecutor = EjecutorFalso()
+    entorno = entorno_con()
 
-    respaldo(ejecutor)
+    respaldo(entorno)
 
-    script = ejecutor.scripts[0]
+    script = scripts(entorno)[0]
     assert "BACKUP INCREMENTAL LEVEL 0" in script
     assert "DATABASE" in script
     assert f"FORMAT '{RUTA}/semanal_%d_%T_%s_%p'" in script
@@ -74,12 +60,12 @@ def test_el_backup_es_incremental_nivel_0_de_toda_la_base_en_la_ruta_del_directo
 
 
 def test_tras_un_backup_correcto_ejecuta_la_limpieza_con_redundancy_1():
-    ejecutor = EjecutorFalso()
+    entorno = entorno_con()
 
-    respaldo(ejecutor)
+    respaldo(entorno)
 
-    assert len(ejecutor.scripts) == 2
-    limpieza = ejecutor.scripts[1]
+    assert len(scripts(entorno)) == 2
+    limpieza = scripts(entorno)[1]
     assert "CROSSCHECK BACKUP;" in limpieza
     assert "CROSSCHECK ARCHIVELOG ALL;" in limpieza
     assert "DELETE NOPROMPT OBSOLETE REDUNDANCY 1;" in limpieza
@@ -87,30 +73,30 @@ def test_tras_un_backup_correcto_ejecuta_la_limpieza_con_redundancy_1():
 
 
 def test_el_exito_devuelve_el_log_del_backup_sin_advertencia():
-    resultado = respaldo(EjecutorFalso())
+    resultado = respaldo()
 
     assert resultado.log == "log del backup"
     assert resultado.advertencia is None
 
 
 def test_si_el_backup_falla_informa_el_error_con_su_log_y_no_ejecuta_la_limpieza():
-    ejecutor = EjecutorFalso(
+    entorno = entorno_con(
         codigos=(1,), textos=("RMAN-03002: fallo\nRMAN-06059: falta un archivelog",)
     )
 
     with pytest.raises(RespaldoFallido) as error:
-        respaldo(ejecutor)
+        respaldo(entorno)
 
     assert "rman terminó con código 1" in str(error.value)
     assert "RMAN-06059" in error.value.log
     assert "Faltan archivelogs" in error.value.explicacion
-    assert len(ejecutor.scripts) == 1
+    assert len(scripts(entorno)) == 1
 
 
 def test_si_la_limpieza_falla_el_respaldo_es_exitoso_con_advertencia():
-    ejecutor = EjecutorFalso(codigos=(0, 1), textos=("log del backup", "RMAN-06059: falta"))
+    entorno = entorno_con(codigos=(0, 1), textos=("log del backup", "RMAN-06059: falta"))
 
-    resultado = respaldo(ejecutor)
+    resultado = respaldo(entorno)
 
     assert resultado.log == "log del backup"
     assert "Faltan archivelogs" in resultado.advertencia.explicacion
@@ -118,13 +104,13 @@ def test_si_la_limpieza_falla_el_respaldo_es_exitoso_con_advertencia():
 
 
 def test_sin_archivelog_no_ejecuta_rman():
-    ejecutor = EjecutorFalso()
+    entorno = entorno_con()
 
     with pytest.raises(SinArchivelog) as error:
-        respaldo(ejecutor, consulta=ConsultaFalsa("NOARCHIVELOG"))
+        respaldo(entorno, consulta=ConsultaFalsa("NOARCHIVELOG"))
 
     assert "ARCHIVELOG" in str(error.value)
-    assert ejecutor.llamadas == []
+    assert entorno.herramientas == []
 
 
 @pytest.mark.parametrize(
@@ -146,12 +132,12 @@ def test_sin_archivelog_no_ejecuta_rman():
     ],
 )
 def test_solicitud_invalida_informa_cada_dato_y_no_ejecuta_rman(directorio, nombre, errores):
-    ejecutor = EjecutorFalso()
+    entorno = entorno_con()
     consulta = ConsultaFalsa()
 
     with pytest.raises(SolicitudInvalida) as error:
-        respaldo(ejecutor, consulta, directorio, nombre)
+        respaldo(entorno, consulta, directorio, nombre)
 
     assert error.value.errores == errores
-    assert ejecutor.llamadas == []
+    assert entorno.herramientas == []
     assert consulta.sqls == []

@@ -10,10 +10,12 @@ class EntornoFalso(EntornoOracle):
 
     tipo_ruta = PurePosixPath
 
-    def __init__(self, codigo=0, texto="", log=""):
+    def __init__(self, codigo=0, texto="", log="", salidas=None):
         self.codigo = codigo
         self.texto = texto
         self.log = log
+        # salidas: una por ejecución de herramienta, en orden; sin ella se repite codigo/texto
+        self.salidas = list(salidas) if salidas else None
         self.herramientas = []
         self.lecturas = []
         self.carpetas = []
@@ -41,4 +43,6 @@ class EntornoFalso(EntornoOracle):
                 "variables": variables,
             }
         )
+        if self.salidas:
+            return self.salidas[len(self.herramientas) - 1]
         return Salida(codigo=self.codigo, texto=self.texto)
