@@ -10,6 +10,7 @@ from src.api.dependencias import obtener_conexion
 from src.services.archivelog import ArchivelogFallido, activar_archivelog
 from src.services.directorios import SinDirectorios, listar_directorios
 from src.services.docker_ejecutor import ejecutar_docker
+from src.services.entorno_contenedor import EntornoContenedor
 from src.services.errores_oracle import explicacion_de
 from src.services.expdp_runner import Conexion
 from src.services.oracle_conexion import consulta_oracle
@@ -127,8 +128,7 @@ def _respaldo(
             objetos=objetos,
             directorio=directorio,
             nombre=nombre,
-            contenedor=_contenedor(),
-            ejecutar=ejecutar,
+            entorno=EntornoContenedor(_contenedor(), ejecutar),  # transitorio hasta el check 16
             ahora=datetime.now(),
             ruta_directorio=ruta,
         )

@@ -1,9 +1,11 @@
 from datetime import datetime
+from pathlib import PurePosixPath
 
 import pytest
 
-from src.services.expdp_runner import Conexion, Salida
+from src.services.expdp_runner import Conexion
 from src.services.respaldo_tablas import RespaldoFallido, respaldar_tablas
+from tests.services.entorno_falso import EntornoFalso
 
 AHORA = datetime(2026, 10, 17, 15, 30, 45)
 CONEXION = Conexion(usuario="HR", password="s3creta!", servicio="XEPDB1")
@@ -16,87 +18,55 @@ ERROR_DUPLICADO = (
 )
 
 
-class EjecutorFalso:
-    def __init__(self, texto_expdp="ORA-39002: operación no válida", log=ERROR_DUPLICADO):
-        self.texto_expdp = texto_expdp
-        self.log = log
-        self.llamadas = []
-
-    def __call__(self, args, entrada=None):
-        self.llamadas.append((args, entrada))
-        if "expdp" in args:
-            return Salida(codigo=5, texto=self.texto_expdp)
-        if "cat" in args and entrada is None:
-            return Salida(codigo=0, texto=self.log)
-        return Salida(codigo=0, texto="")
+def entorno_fallido(texto="ORA-39002: operación no válida", log=ERROR_DUPLICADO):
+    return EntornoFalso(codigo=5, texto=texto, log=log)
 
 
-def respaldar(ejecutor):
+def respaldar(entorno, ruta_directorio=RUTA):
     return respaldar_tablas(
         conexion=CONEXION,
         tablas=["CLIENTES"],
         directorio="RESPALDO",
         nombre="ventas",
-        contenedor="oracle21c",
-        ejecutar=ejecutor,
+        entorno=entorno,
         ahora=AHORA,
-        ruta_directorio=RUTA,
+        ruta_directorio=ruta_directorio,
     )
 
 
-def fallo_de(ejecutor):
+def fallo_de(entorno):
     with pytest.raises(RespaldoFallido) as error:
-        respaldar(ejecutor)
+        respaldar(entorno)
     return error.value
 
 
 def test_si_expdp_falla_informa_el_error_con_el_contenido_del_log():
-    fallo = fallo_de(EjecutorFalso())
+    fallo = fallo_de(entorno_fallido())
 
     assert fallo.log == ERROR_DUPLICADO
     assert "ORA-27038" in fallo.log
 
 
-def test_lee_el_log_del_directorio_dentro_del_contenedor():
-    ejecutor = EjecutorFalso()
+def test_lee_el_log_del_directorio_a_traves_del_entorno():
+    entorno = entorno_fallido()
 
-    fallo_de(ejecutor)
+    fallo_de(entorno)
 
-    lecturas = [args for args, _ in ejecutor.llamadas if "cat" in args]
-    assert ["docker", "exec", "oracle21c", "cat", f"{RUTA}/{LOG}"] in lecturas
+    assert entorno.lecturas == [PurePosixPath(RUTA) / LOG]
 
 
 def test_el_mensaje_del_fallo_no_incluye_la_contrasena():
-    fallo = fallo_de(EjecutorFalso())
+    fallo = fallo_de(entorno_fallido())
 
     assert "s3creta!" not in str(fallo)
     assert "s3creta!" not in fallo.log
 
 
-def test_no_borra_ni_sobrescribe_el_dumpfile_y_si_limpia_el_parfile():
-    ejecutor = EjecutorFalso()
-
-    fallo_de(ejecutor)
-
-    borrados = [args[-1] for args, _ in ejecutor.llamadas if "rm" in args]
-    assert len(borrados) == 1
-    assert borrados[0].endswith(".par")
-    for args, _ in ejecutor.llamadas:
-        assert not any(a.endswith(".dmp") for a in args if a.startswith("/"))
-
-
 def test_si_no_hay_ruta_del_directorio_informa_la_salida_de_expdp():
-    ejecutor = EjecutorFalso(texto_expdp="ORA-39002: operación no válida")
+    entorno = entorno_fallido()
 
     with pytest.raises(RespaldoFallido) as error:
-        respaldar_tablas(
-            conexion=CONEXION,
-            tablas=["CLIENTES"],
-            directorio="RESPALDO",
-            nombre="ventas",
-            contenedor="oracle21c",
-            ejecutar=ejecutor,
-            ahora=AHORA,
-        )
+        respaldar(entorno, ruta_directorio=None)
 
     assert error.value.log == "ORA-39002: operación no válida"
+    assert entorno.lecturas == []

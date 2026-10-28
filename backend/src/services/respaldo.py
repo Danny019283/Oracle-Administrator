@@ -2,12 +2,12 @@ from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from typing import Any
 from datetime import datetime
-from pathlib import PurePosixPath
+from pathlib import PurePath
 
-from src.services.entorno_contenedor import EntornoContenedor
 from src.services.dumpfile import NombreInvalido, construir_nombres
+from src.services.entorno_oracle import EntornoOracle
 from src.services.errores_oracle import explicar_error
-from src.services.expdp_runner import Conexion, Ejecutor, ejecutar_expdp
+from src.services.expdp_runner import Conexion, ejecutar_expdp
 
 
 class SolicitudInvalida(Exception):
@@ -32,8 +32,8 @@ def listar_objetos(
     return [fila[0] for fila in filas]
 
 
-def leer_log(contenedor: str, ruta: str, ejecutar: Ejecutor) -> str:
-    return EntornoContenedor(contenedor, ejecutar).leer_archivo(PurePosixPath(ruta))
+def leer_log(entorno: EntornoOracle, ruta: PurePath) -> str:
+    return entorno.leer_archivo(ruta)
 
 
 class RespaldoFallido(Exception):
@@ -119,14 +119,13 @@ def respaldar(
     objetos: list[str],
     directorio: str,
     nombre: str,
-    contenedor: str,
-    ejecutar: Ejecutor,
+    entorno: EntornoOracle,
     ahora: datetime,
     ruta_directorio: str | None = None,
 ) -> ResultadoRespaldo:
     nombres = construir_nombres(nombre, ahora)
     salida = ejecutar_expdp(
-        contenedor,
+        entorno,
         conexion,
         [
             f"{tipo.clave_expdp}={','.join(objetos)}",
@@ -134,11 +133,10 @@ def respaldar(
             f"DUMPFILE={nombres.dmp}",
             f"LOGFILE={nombres.log}",
         ],
-        ejecutar,
     )
     if salida.codigo != 0:
         log = salida.texto
         if ruta_directorio is not None:
-            log = leer_log(contenedor, f"{ruta_directorio}/{nombres.log}", ejecutar)
+            log = leer_log(entorno, entorno.tipo_ruta(ruta_directorio) / nombres.log)
         raise RespaldoFallido(salida.codigo, log)
     return ResultadoRespaldo(dmp=nombres.dmp, log=nombres.log)

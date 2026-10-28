@@ -1,61 +1,42 @@
 from datetime import datetime
 
-from src.services.expdp_runner import Conexion, Salida
+from src.services.expdp_runner import Conexion
 from src.services.respaldo_tablas import respaldar_tablas
+from tests.services.entorno_falso import RUTA_TEMPORAL, EntornoFalso
 
 AHORA = datetime(2026, 10, 17, 15, 30, 45)
 CONEXION = Conexion(usuario="HR", password="s3creta!", servicio="XEPDB1")
 
 
-class EjecutorFalso:
-    def __init__(self, codigo_expdp=0):
-        self.codigo_expdp = codigo_expdp
-        self.llamadas = []
-
-    def __call__(self, args, entrada=None):
-        self.llamadas.append((args, entrada))
-        if "expdp" in args:
-            return Salida(codigo=self.codigo_expdp, texto="Job completado")
-        return Salida(codigo=0, texto="")
-
-
-def respaldar(ejecutor, tablas=("CLIENTES", "PEDIDOS")):
+def respaldar(entorno, tablas=("CLIENTES", "PEDIDOS")):
     return respaldar_tablas(
         conexion=CONEXION,
         tablas=list(tablas),
         directorio="RESPALDO",
         nombre="ventas",
-        contenedor="oracle21c",
-        ejecutar=ejecutor,
+        entorno=entorno,
         ahora=AHORA,
     )
 
 
-def llamada_expdp(ejecutor):
-    return next(args for args, _ in ejecutor.llamadas if "expdp" in args)
-
-
 def test_devuelve_los_nombres_del_dmp_y_del_log():
-    resultado = respaldar(EjecutorFalso())
+    resultado = respaldar(EntornoFalso(texto="Job completado"))
 
     assert resultado.dmp == "ventas_20261017_153045.dmp"
     assert resultado.log == "ventas_20261017_153045.log"
 
 
-def test_ejecuta_expdp_dentro_del_contenedor_con_los_parametros_en_un_parfile():
-    ejecutor = EjecutorFalso()
+def test_pide_expdp_al_entorno_con_los_parametros_en_un_parfile():
+    entorno = EntornoFalso(texto="Job completado")
 
-    respaldar(ejecutor)
+    respaldar(entorno)
 
-    comando = llamada_expdp(ejecutor)
-    assert comando[:3] == ["docker", "exec", "oracle21c"]
-    parfile_arg = next(a for a in comando if a.startswith("PARFILE="))
-
-    escritura = next(
-        (args, entrada) for args, entrada in ejecutor.llamadas if entrada is not None
-    )
-    assert parfile_arg.removeprefix("PARFILE=") in " ".join(escritura[0])
-    parametros = escritura[1].splitlines()
+    (herramienta,) = entorno.herramientas
+    assert herramienta["nombre"] == "expdp"
+    assert herramienta["args"] == [f"PARFILE={RUTA_TEMPORAL}"]
+    assert herramienta["prefijo"] == "expdp"
+    assert herramienta["extension"] == ".par"
+    parametros = herramienta["script"].splitlines()
     assert "USERID=HR/s3creta!@XEPDB1" in parametros
     assert "TABLES=CLIENTES,PEDIDOS" in parametros
     assert "DIRECTORY=RESPALDO" in parametros
@@ -64,22 +45,9 @@ def test_ejecuta_expdp_dentro_del_contenedor_con_los_parametros_en_un_parfile():
 
 
 def test_la_contrasena_nunca_viaja_en_los_argumentos_ni_en_el_resultado():
-    ejecutor = EjecutorFalso()
+    entorno = EntornoFalso()
 
-    resultado = respaldar(ejecutor)
+    resultado = respaldar(entorno)
 
-    for args, _ in ejecutor.llamadas:
-        assert "s3creta!" not in " ".join(args)
+    assert "s3creta!" not in " ".join(entorno.herramientas[0]["args"])
     assert "s3creta!" not in repr(resultado)
-
-
-def test_borra_el_parfile_al_terminar():
-    ejecutor = EjecutorFalso()
-
-    respaldar(ejecutor)
-
-    parfile = llamada_expdp(ejecutor)[-1].removeprefix("PARFILE=")
-    ultimo, _ = ejecutor.llamadas[-1]
-    assert ultimo[:3] == ["docker", "exec", "oracle21c"]
-    assert ultimo[3:5] == ["rm", "-f"]
-    assert ultimo[-1] == parfile

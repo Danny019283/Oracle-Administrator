@@ -3,7 +3,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from src.services.entorno_contenedor import EntornoContenedor, Ejecutor
-from src.services.entorno_oracle import Salida
+from src.services.entorno_oracle import EntornoOracle, Salida
 
 __all__ = ["Conexion", "Ejecutor", "Salida", "ejecutar_con_archivo", "ejecutar_expdp"]
 
@@ -51,17 +51,11 @@ def _separar_comando(comando: list[str]) -> tuple[dict[str, str], str, int]:
     return variables, comando[posicion], posicion + 1
 
 
-def ejecutar_expdp(
-    contenedor: str,
-    conexion: Conexion,
-    parametros: list[str],
-    ejecutar: Ejecutor,
-) -> Salida:
+def ejecutar_expdp(entorno: EntornoOracle, conexion: Conexion, parametros: list[str]) -> Salida:
     credenciales = f"{conexion.usuario}/{conexion.password}@{conexion.servicio}"
     # expdp rechaza «AS SYSDBA» sin comillas en el parfile (LRM-00112).
     userid = f'USERID="{credenciales} AS SYSDBA"' if conexion.sysdba else f"USERID={credenciales}"
     contenido = "\n".join([userid, *parametros]) + "\n"
-    return ejecutar_con_archivo(
-        contenedor, "expdp", contenido,
-        lambda ruta: ["expdp", f"PARFILE={ruta}"], ejecutar, extension=".par",
+    return entorno.ejecutar_herramienta(
+        "expdp", lambda ruta: [f"PARFILE={ruta}"], contenido, prefijo="expdp", extension=".par"
     )

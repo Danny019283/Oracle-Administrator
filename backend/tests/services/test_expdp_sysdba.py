@@ -1,23 +1,13 @@
-from src.services.expdp_runner import Conexion, Salida, ejecutar_expdp
+from src.services.expdp_runner import Conexion, ejecutar_expdp
+from tests.services.entorno_falso import RUTA_TEMPORAL, EntornoFalso
 
 PARAMETROS = ["SCHEMAS=HR", "DIRECTORY=RESPALDO", "DUMPFILE=ventas.dmp"]
 
 
-class EjecutorFalso:
-    def __init__(self):
-        self.llamadas = []
-
-    def __call__(self, args, entrada=None):
-        self.llamadas.append((args, entrada))
-        return Salida(codigo=0, texto="")
-
-
 def lineas_del_parfile(conexion):
-    ejecutor = EjecutorFalso()
-    ejecutar_expdp("oracle-test", conexion, PARAMETROS, ejecutor)
-    return ejecutor, next(
-        entrada for _, entrada in ejecutor.llamadas if entrada is not None
-    ).splitlines()
+    entorno = EntornoFalso()
+    ejecutar_expdp(entorno, conexion, PARAMETROS)
+    return entorno, entorno.herramientas[0]["script"].splitlines()
 
 
 def test_con_sesion_sysdba_el_userid_termina_en_as_sysdba_entre_comillas():
@@ -45,22 +35,24 @@ def test_el_resto_de_parametros_no_cambia_con_sysdba():
     assert lineas[1:] == PARAMETROS
 
 
-def test_la_password_no_aparece_en_los_argumentos_de_ningun_proceso():
+def test_la_password_no_aparece_en_los_argumentos_de_la_herramienta():
     for sysdba in (False, True):
         conexion = Conexion(
             usuario="SYS", password="clave-secreta", servicio="XEPDB1", sysdba=sysdba
         )
 
-        ejecutor, _ = lineas_del_parfile(conexion)
+        entorno, _ = lineas_del_parfile(conexion)
 
-        for args, _entrada in ejecutor.llamadas:
-            assert "clave-secreta" not in " ".join(args)
+        assert "clave-secreta" not in " ".join(entorno.herramientas[0]["args"])
 
 
-def test_el_parfile_se_borra_aunque_sea_sysdba():
+def test_pide_expdp_al_entorno_con_el_parfile_como_temporal():
     conexion = Conexion(usuario="SYS", password="clave", servicio="XEPDB1", sysdba=True)
 
-    ejecutor, _ = lineas_del_parfile(conexion)
+    entorno, _ = lineas_del_parfile(conexion)
 
-    ultima = ejecutor.llamadas[-1][0]
-    assert ultima[:5] == ["docker", "exec", "oracle-test", "rm", "-f"]
+    (herramienta,) = entorno.herramientas
+    assert herramienta["nombre"] == "expdp"
+    assert herramienta["args"] == [f"PARFILE={RUTA_TEMPORAL}"]
+    assert herramienta["prefijo"] == "expdp"
+    assert herramienta["extension"] == ".par"

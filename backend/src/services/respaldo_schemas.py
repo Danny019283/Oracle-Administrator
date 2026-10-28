@@ -1,7 +1,8 @@
 from collections.abc import Collection
 from datetime import datetime
 
-from src.services.expdp_runner import Conexion, Ejecutor
+from src.services.entorno_oracle import EntornoOracle
+from src.services.expdp_runner import Conexion
 from src.services.respaldo import (
     SCHEMAS,
     RespaldoFallido,
@@ -35,11 +36,8 @@ def respaldar_schemas(
     schemas: list[str],
     directorio: str,
     nombre: str,
-    contenedor: str,
-    ejecutar: Ejecutor,
+    entorno: EntornoOracle,
     ahora: datetime,
     ruta_directorio: str | None = None,
 ) -> ResultadoRespaldo:
-    return respaldar(
-        SCHEMAS, conexion, schemas, directorio, nombre, contenedor, ejecutar, ahora, ruta_directorio
-    )
+    return respaldar(SCHEMAS, conexion, schemas, directorio, nombre, entorno, ahora, ruta_directorio)

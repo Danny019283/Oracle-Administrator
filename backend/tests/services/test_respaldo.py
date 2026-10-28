@@ -1,8 +1,9 @@
 from datetime import datetime
+from pathlib import PurePosixPath
 
 import pytest
 
-from src.services.expdp_runner import Conexion, Salida
+from src.services.expdp_runner import Conexion
 from src.services.respaldo import (
     SCHEMAS,
     TABLAS,
@@ -10,43 +11,28 @@ from src.services.respaldo import (
     leer_log,
     respaldar,
 )
+from tests.services.entorno_falso import EntornoFalso
 
 AHORA = datetime(2026, 10, 17, 15, 30, 45)
 CONEXION = Conexion(usuario="HR", password="s3creta!", servicio="XEPDB1")
 RUTA = "/opt/oracle/Respaldos"
 
 
-class EjecutorFalso:
-    def __init__(self, codigo_expdp=0):
-        self.codigo_expdp = codigo_expdp
-        self.llamadas = []
-
-    def __call__(self, args, entrada=None):
-        self.llamadas.append((args, entrada))
-        if "expdp" in args:
-            return Salida(codigo=self.codigo_expdp, texto="salida de expdp")
-        if "cat" in args and entrada is None:
-            return Salida(codigo=0, texto="ORA-27038: el archivo creado ya existe")
-        return Salida(codigo=0, texto="")
-
-
-def respaldo(tipo, objetos, ejecutor, ruta_directorio=None):
+def respaldo(tipo, objetos, entorno, ruta_directorio=None):
     return respaldar(
         tipo=tipo,
         conexion=CONEXION,
         objetos=objetos,
         directorio="RESPALDO",
         nombre="ventas",
-        contenedor="oracle21c",
-        ejecutar=ejecutor,
+        entorno=entorno,
         ahora=AHORA,
         ruta_directorio=ruta_directorio,
     )
 
 
-def parametros(ejecutor):
-    entrada = next(entrada for _, entrada in ejecutor.llamadas if entrada is not None)
-    return entrada.splitlines()
+def parametros(entorno):
+    return entorno.herramientas[0]["script"].splitlines()
 
 
 @pytest.mark.parametrize(
@@ -54,34 +40,37 @@ def parametros(ejecutor):
     [(TABLAS, "TABLES", ["CLIENTES", "PEDIDOS"]), (SCHEMAS, "SCHEMAS", ["HR", "VENTAS"])],
 )
 def test_respalda_con_la_clave_de_expdp_del_tipo(tipo, clave, objetos):
-    ejecutor = EjecutorFalso()
+    entorno = EntornoFalso()
 
-    resultado = respaldo(tipo, objetos, ejecutor)
+    resultado = respaldo(tipo, objetos, entorno)
 
-    assert f"{clave}={','.join(objetos)}" in parametros(ejecutor)
+    assert f"{clave}={','.join(objetos)}" in parametros(entorno)
     assert resultado.dmp == "ventas_20261017_153045.dmp"
     assert resultado.log == "ventas_20261017_153045.log"
 
 
 @pytest.mark.parametrize("tipo", [TABLAS, SCHEMAS])
 def test_si_expdp_falla_informa_error_log_y_explicacion(tipo):
-    ejecutor = EjecutorFalso(codigo_expdp=5)
+    entorno = EntornoFalso(
+        codigo=5, texto="salida de expdp", log="ORA-27038: el archivo creado ya existe"
+    )
 
     with pytest.raises(RespaldoFallido) as error:
-        respaldo(tipo, ["X"], ejecutor, ruta_directorio=RUTA)
+        respaldo(tipo, ["X"], entorno, ruta_directorio=RUTA)
 
     assert "ORA-27038" in error.value.log
     assert "Ya existe un archivo de respaldo" in error.value.explicacion
     assert "s3creta!" not in str(error.value)
 
 
-def test_leer_log_devuelve_el_contenido_del_archivo_del_contenedor():
-    ejecutor = EjecutorFalso()
+def test_leer_log_devuelve_el_contenido_del_archivo_del_entorno():
+    entorno = EntornoFalso(log="ORA-27038: el archivo creado ya existe")
+    ruta = PurePosixPath(RUTA) / "ventas.log"
 
-    log = leer_log("oracle21c", f"{RUTA}/ventas.log", ejecutor)
+    log = leer_log(entorno, ruta)
 
     assert log == "ORA-27038: el archivo creado ya existe"
-    assert ejecutor.llamadas == [(["docker", "exec", "oracle21c", "cat", f"{RUTA}/ventas.log"], None)]
+    assert entorno.lecturas == [ruta]
 
 
 def test_el_mensaje_de_respaldo_fallido_nombra_la_herramienta():
