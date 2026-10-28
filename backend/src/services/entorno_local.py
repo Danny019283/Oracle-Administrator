@@ -1,7 +1,7 @@
 import os
 import tempfile
 from collections.abc import Callable, Mapping
-from pathlib import Path, PurePath
+from pathlib import Path, PurePath, PureWindowsPath
 from uuid import uuid4
 
 from src.services.entorno_oracle import EntornoOracle, Salida
@@ -19,11 +19,44 @@ class SistemaLinux:
     def crear_carpeta(self, ruta: PurePath) -> None:
         Path(ruta).mkdir(parents=True, exist_ok=True)
 
+    def escribir_privado(self, ruta: PurePath, texto: str) -> None:
+        # O_EXCL y 0600: nadie más puede crear ni leer el script (lleva credenciales)
+        descriptor = os.open(ruta, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "w") as archivo:
+            archivo.write(texto)
+
+    def borrar(self, ruta: PurePath) -> None:
+        Path(ruta).unlink(missing_ok=True)
+
+
+class SistemaWindows:
+    """Implementador del Bridge para Windows; `a_path` convierte la ruta en un Path real (se cambia en las pruebas)."""
+
+    tipo_ruta = PureWindowsPath
+
+    def __init__(self, a_path: Callable[[PurePath], Path] = Path):
+        self._a_path = a_path
+
+    def leer_archivo(self, ruta: PurePath) -> str:
+        return self._a_path(ruta).read_text()
+
+    def crear_carpeta(self, ruta: PurePath) -> None:
+        self._a_path(ruta).mkdir(parents=True, exist_ok=True)
+
+    def escribir_privado(self, ruta: PurePath, texto: str) -> None:
+        # sin chmod: el temporal del perfil hereda la ACL privada del usuario
+        self._a_path(ruta).write_text(texto)
+
+    def borrar(self, ruta: PurePath) -> None:
+        self._a_path(ruta).unlink(missing_ok=True)
+
 
 class EntornoLocal(EntornoOracle):
     """Estrategia: las herramientas corren en la misma máquina que el backend."""
 
-    def __init__(self, sistema: SistemaLinux, ejecutar: Callable[..., Salida] = ejecutar_proceso):
+    def __init__(
+        self, sistema: SistemaLinux | SistemaWindows, ejecutar: Callable[..., Salida] = ejecutar_proceso
+    ):
         self._sistema = sistema
         self._ejecutar = ejecutar
         self.tipo_ruta = sistema.tipo_ruta
@@ -44,12 +77,9 @@ class EntornoLocal(EntornoOracle):
         extension: str = "",
         variables: Mapping[str, str] | None = None,
     ) -> Salida:
-        ruta = Path(tempfile.gettempdir()) / f"{prefijo}_{uuid4().hex}{extension}"
-        # O_EXCL y 0600: nadie más puede crear ni leer el script (lleva credenciales)
-        descriptor = os.open(ruta, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        ruta = self.tipo_ruta(tempfile.gettempdir()) / f"{prefijo}_{uuid4().hex}{extension}"
         try:
-            with os.fdopen(descriptor, "w") as archivo:
-                archivo.write(script)
+            self._sistema.escribir_privado(ruta, script)
             return self._ejecutar([nombre, *args(str(ruta))], variables=variables)
         finally:
-            ruta.unlink(missing_ok=True)
+            self._sistema.borrar(ruta)
