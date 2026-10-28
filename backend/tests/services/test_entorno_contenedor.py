@@ -3,7 +3,7 @@ import re
 import pytest
 
 from src.services.entorno_contenedor import EntornoContenedor
-from src.services.entorno_oracle import Salida
+from src.services.entorno_oracle import OperacionEntornoFallida, Salida
 
 
 class ProcesoFalso:
@@ -123,3 +123,27 @@ def test_con_cli_podman_leer_archivo_emite_podman_exec_cat():
     EntornoContenedor("oracle-test", proceso, cli="podman").leer_archivo(EntornoContenedor.tipo_ruta("/u01/log.log"))
 
     assert proceso.llamadas == [(["podman", "exec", "oracle-test", "cat", "/u01/log.log"], None)]
+
+
+def test_crear_carpeta_ejecuta_mkdir_p_dentro_del_contenedor():
+    proceso = ProcesoFalso()
+
+    EntornoContenedor("oracle-test", proceso).crear_carpeta(EntornoContenedor.tipo_ruta("/u01/respaldos/diario"))
+
+    assert proceso.llamadas == [(["docker", "exec", "oracle-test", "mkdir", "-p", "/u01/respaldos/diario"], None)]
+
+
+def test_crear_carpeta_con_cli_podman_emite_podman_exec_mkdir_p():
+    proceso = ProcesoFalso()
+
+    EntornoContenedor("oracle-test", proceso, cli="podman").crear_carpeta(EntornoContenedor.tipo_ruta("/u01/r"))
+
+    assert proceso.llamadas == [(["podman", "exec", "oracle-test", "mkdir", "-p", "/u01/r"], None)]
+
+
+def test_crear_carpeta_con_codigo_distinto_de_cero_lanza_operacion_entorno_fallida_con_la_salida():
+    def proceso(args, entrada=None):
+        return Salida(codigo=1, texto="mkdir: permission denied")
+
+    with pytest.raises(OperacionEntornoFallida, match="mkdir: permission denied"):
+        EntornoContenedor("oracle-test", proceso).crear_carpeta(EntornoContenedor.tipo_ruta("/root/x"))

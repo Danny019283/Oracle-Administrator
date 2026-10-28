@@ -2,7 +2,7 @@ from collections.abc import Callable, Mapping
 from pathlib import PurePath, PurePosixPath
 from uuid import uuid4
 
-from src.services.entorno_oracle import EntornoOracle, Salida
+from src.services.entorno_oracle import EntornoOracle, OperacionEntornoFallida, Salida
 
 Ejecutor = Callable[..., Salida]
 
@@ -16,6 +16,11 @@ class EntornoContenedor(EntornoOracle):
         self._cli = cli
         self._contenedor = contenedor
         self._ejecutar = ejecutar
+
+    def crear_carpeta(self, ruta: PurePath) -> None:
+        salida = self._ejecutar([self._cli, "exec", self._contenedor, "mkdir", "-p", str(ruta)])
+        if salida.codigo != 0:
+            raise OperacionEntornoFallida(salida.texto)
 
     def leer_archivo(self, ruta: PurePath) -> str:
         return self._ejecutar([self._cli, "exec", self._contenedor, "cat", str(ruta)]).texto

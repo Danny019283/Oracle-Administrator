@@ -10,12 +10,20 @@ class Salida:
     texto: str
 
 
+class OperacionEntornoFallida(Exception):
+    """Una operación del entorno terminó con error; el mensaje es la salida del comando."""
+
+
 class EntornoOracle(ABC):
     """Puerto: dónde corren las herramientas de Oracle (expdp, rman, sqlplus).
     Los servicios solo conocen esta interfaz, no el entorno concreto."""
 
     # Clase pathlib del SO del servidor de Oracle, para armar rutas sin conocer el entorno.
     tipo_ruta: type[PurePath]
+
+    @abstractmethod
+    def crear_carpeta(self, ruta: PurePath) -> None:
+        """Crea la carpeta con sus padres; no falla si ya existe."""
 
     @abstractmethod
     def leer_archivo(self, ruta: PurePath) -> str: ...
