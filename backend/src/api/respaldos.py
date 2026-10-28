@@ -6,11 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from src.api.dependencias import obtener_conexion
+from src.api.dependencias import obtener_conexion, obtener_entorno
 from src.services.archivelog import FRA_DIRECTORIO, ArchivelogFallido, activar_archivelog
 from src.services.directorios import SinDirectorios, listar_directorios
 from src.services.docker_ejecutor import ejecutar_docker
 from src.services.entorno_contenedor import EntornoContenedor
+from src.services.entorno_oracle import EntornoOracle
 from src.services.errores_oracle import explicacion_de
 from src.services.expdp_runner import Conexion
 from src.services.oracle_conexion import consulta_oracle
@@ -97,7 +98,7 @@ def _respaldo(
     nombre: str,
     conexion: Conexion,
     consulta,
-    ejecutar,
+    entorno: EntornoOracle,
 ):
     try:
         disponibles = listar(consulta)
@@ -128,7 +129,7 @@ def _respaldo(
             objetos=objetos,
             directorio=directorio,
             nombre=nombre,
-            entorno=EntornoContenedor(_contenedor(), ejecutar),  # transitorio hasta el check 16
+            entorno=entorno,
             ahora=datetime.now(),
             ruta_directorio=ruta,
         )
@@ -161,11 +162,11 @@ def post_tablas(
     solicitud: SolicitudRespaldo,
     conexion: Conexion = Depends(obtener_conexion),
     consulta=Depends(obtener_consulta),
-    ejecutar=Depends(obtener_ejecutor),
+    entorno=Depends(obtener_entorno),
 ):
     return _respaldo(
         TABLAS, listar_tablas, SinTablas, solicitud.tablas, solicitud.directorio,
-        solicitud.nombre, conexion, consulta, ejecutar,
+        solicitud.nombre, conexion, consulta, entorno,
     )
 
 
@@ -174,11 +175,11 @@ def post_schemas(
     solicitud: SolicitudRespaldoSchemas,
     conexion: Conexion = Depends(obtener_conexion),
     consulta=Depends(obtener_consulta),
-    ejecutar=Depends(obtener_ejecutor),
+    entorno=Depends(obtener_entorno),
 ):
     return _respaldo(
         SCHEMAS, listar_schemas, SinSchemas, solicitud.schemas, solicitud.directorio,
-        solicitud.nombre, conexion, consulta, ejecutar,
+        solicitud.nombre, conexion, consulta, entorno,
     )
 
 

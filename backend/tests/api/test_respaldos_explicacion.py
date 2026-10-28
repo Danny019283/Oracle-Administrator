@@ -2,10 +2,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from main import app
-from src.api.respaldos import obtener_consulta, obtener_ejecutor
+from src.api.dependencias import obtener_entorno
+from src.api.respaldos import obtener_consulta
 from src.api.sesion import obtener_almacen
-from src.services.expdp_runner import Conexion, Salida
+from src.services.expdp_runner import Conexion
 from src.services.sesiones import AlmacenSesiones
+from tests.services.entorno_falso import EntornoFalso
 
 ALMACEN = AlmacenSesiones()
 TOKEN = ALMACEN.crear(Conexion(usuario="HR", password="s3creta!", servicio="XEPDB1"))
@@ -21,17 +23,6 @@ def consulta_falsa(sql, params=None):
     return [("RESPALDO", RUTA)]
 
 
-def ejecutor_que_falla(log):
-    def ejecutar(args, entrada=None):
-        if "expdp" in args:
-            return Salida(codigo=5, texto="salida de expdp")
-        if "cat" in args and entrada is None:
-            return Salida(codigo=0, texto=log)
-        return Salida(codigo=0, texto="")
-
-    return ejecutar
-
-
 @pytest.fixture
 def cliente():
     app.dependency_overrides[obtener_almacen] = lambda: ALMACEN
@@ -41,7 +32,7 @@ def cliente():
 
 def respaldar(cliente, log):
     app.dependency_overrides[obtener_consulta] = lambda: consulta_falsa
-    app.dependency_overrides[obtener_ejecutor] = lambda: ejecutor_que_falla(log)
+    app.dependency_overrides[obtener_entorno] = lambda: EntornoFalso(codigo=5, log=log)
     return cliente.post("/respaldos/tablas", json=SOLICITUD, headers=CABECERAS)
 
 

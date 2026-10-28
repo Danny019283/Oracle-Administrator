@@ -4,10 +4,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from main import app
-from src.api.respaldos import obtener_consulta, obtener_ejecutor
+from src.api.dependencias import obtener_entorno
+from src.api.respaldos import obtener_consulta
 from src.api.sesion import obtener_almacen
-from src.services.expdp_runner import Conexion, Salida
+from src.services.expdp_runner import Conexion
 from src.services.sesiones import AlmacenSesiones
+from tests.services.entorno_falso import EntornoFalso
 
 ALMACEN = AlmacenSesiones()
 TOKEN = ALMACEN.crear(Conexion(usuario="SYSTEM", password="s3creta!", servicio="XEPDB1"))
@@ -25,35 +27,22 @@ class ConsultaFalsa:
         return self.schemas if "all_users" in sql.lower() else self.directorios
 
 
-class EjecutorFalso:
-    def __init__(self, codigo_expdp=0, log="ORA-27038: el archivo creado ya existe"):
-        self.codigo_expdp = codigo_expdp
-        self.log = log
-        self.llamadas = []
-
-    def __call__(self, args, entrada=None):
-        self.llamadas.append((args, entrada))
-        if "expdp" in args:
-            return Salida(codigo=self.codigo_expdp, texto="salida de expdp")
-        if "cat" in args and entrada is None:
-            return Salida(codigo=0, texto=self.log)
-        return Salida(codigo=0, texto="")
+LOG_DUPLICADO = "ORA-27038: el archivo creado ya existe"
 
 
 @pytest.fixture
-def cliente(monkeypatch):
-    monkeypatch.setenv("ORACLE_CONTAINER", "oracle-test")
+def cliente():
     app.dependency_overrides[obtener_almacen] = lambda: ALMACEN
     yield TestClient(app)
     app.dependency_overrides.clear()
 
 
-def usar(consulta=None, ejecutor=None):
+def usar(consulta=None, entorno=None):
     consulta = consulta or ConsultaFalsa()
-    ejecutor = ejecutor or EjecutorFalso()
+    entorno = entorno or EntornoFalso(log=LOG_DUPLICADO)
     app.dependency_overrides[obtener_consulta] = lambda: consulta
-    app.dependency_overrides[obtener_ejecutor] = lambda: ejecutor
-    return ejecutor
+    app.dependency_overrides[obtener_entorno] = lambda: entorno
+    return entorno
 
 
 def test_lista_los_schemas_de_usuario(cliente):
@@ -75,7 +64,7 @@ def test_sin_schemas_responde_404_con_el_mensaje(cliente):
 
 
 def test_respalda_y_devuelve_los_nombres_del_dmp_y_del_log(cliente):
-    ejecutor = usar()
+    entorno = usar()
 
     respuesta = cliente.post("/respaldos/schemas", json=SOLICITUD, headers=CABECERAS)
 
@@ -85,14 +74,13 @@ def test_respalda_y_devuelve_los_nombres_del_dmp_y_del_log(cliente):
     assert cuerpo["log"] == cuerpo["dmp"].replace(".dmp", ".log")
     assert "s3creta!" not in respuesta.text
 
-    expdp = next(args for args, _ in ejecutor.llamadas if "expdp" in args)
-    assert expdp[:3] == ["docker", "exec", "oracle-test"]
-    parfile = next(entrada for _, entrada in ejecutor.llamadas if entrada is not None)
-    assert "SCHEMAS=HR" in parfile.splitlines()
+    (herramienta,) = entorno.herramientas
+    assert herramienta["nombre"] == "expdp"
+    assert "SCHEMAS=HR" in herramienta["script"].splitlines()
 
 
 def test_solicitud_invalida_responde_422_con_todos_los_errores_y_no_ejecuta_expdp(cliente):
-    ejecutor = usar()
+    entorno = usar()
     solicitud = {"schemas": [], "directorio": "OTRO", "nombre": ""}
 
     respuesta = cliente.post("/respaldos/schemas", json=solicitud, headers=CABECERAS)
@@ -103,21 +91,21 @@ def test_solicitud_invalida_responde_422_con_todos_los_errores_y_no_ejecuta_expd
         "El directorio OTRO no está disponible",
         "Debes ingresar un nombre de dumpfile",
     ]
-    assert ejecutor.llamadas == []
+    assert entorno.herramientas == []
 
 
 def test_sin_directorios_la_solicitud_se_rechaza_con_422(cliente):
-    ejecutor = usar(consulta=ConsultaFalsa(directorios=[]))
+    entorno = usar(consulta=ConsultaFalsa(directorios=[]))
 
     respuesta = cliente.post("/respaldos/schemas", json=SOLICITUD, headers=CABECERAS)
 
     assert respuesta.status_code == 422
     assert "El directorio RESPALDO no está disponible" in respuesta.json()["errores"]
-    assert ejecutor.llamadas == []
+    assert entorno.herramientas == []
 
 
 def test_si_expdp_falla_responde_500_con_mensaje_explicacion_y_log(cliente):
-    ejecutor = usar(ejecutor=EjecutorFalso(codigo_expdp=5))
+    entorno = usar(entorno=EntornoFalso(codigo=5, log=LOG_DUPLICADO))
 
     respuesta = cliente.post("/respaldos/schemas", json=SOLICITUD, headers=CABECERAS)
 
@@ -128,5 +116,4 @@ def test_si_expdp_falla_responde_500_con_mensaje_explicacion_y_log(cliente):
     assert cuerpo["explicacion"] == "Ya existe un archivo de respaldo con ese nombre en el directorio"
     assert "ORA-27038" in cuerpo["log"]
     assert "s3creta!" not in respuesta.text
-    lecturas = [args for args, _ in ejecutor.llamadas if "cat" in args]
-    assert lecturas and lecturas[0][-1].startswith(f"{RUTA}/ventas_")
+    assert str(entorno.lecturas[0]).startswith(f"{RUTA}/ventas_")

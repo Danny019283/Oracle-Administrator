@@ -2,10 +2,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from main import app
-from src.api.respaldos import obtener_ejecutor
+from src.api.dependencias import obtener_entorno
 from src.api.sesion import obtener_almacen
-from src.services.expdp_runner import Conexion, Salida
+from src.services.expdp_runner import Conexion
 from src.services.sesiones import AlmacenSesiones
+from tests.services.entorno_falso import EntornoFalso
 
 CONEXION = Conexion(
     usuario="SESION_USER",
@@ -50,15 +51,6 @@ def consulta_falsa(sql, params=None):
     return [("RESPALDO", RUTA)]
 
 
-class EjecutorFalso:
-    def __init__(self):
-        self.llamadas = []
-
-    def __call__(self, args, entrada=None):
-        self.llamadas.append((args, entrada))
-        return Salida(codigo=0, texto="")
-
-
 @pytest.fixture
 def reloj():
     return RelojFalso()
@@ -70,8 +62,7 @@ def almacen(reloj):
 
 
 @pytest.fixture
-def cliente(almacen, monkeypatch):
-    monkeypatch.setenv("ORACLE_CONTAINER", "oracle-test")
+def cliente(almacen):
     app.dependency_overrides[obtener_almacen] = lambda: almacen
     yield TestClient(app)
     app.dependency_overrides.clear()
@@ -142,8 +133,8 @@ def test_las_consultas_usan_la_conexion_de_la_sesion(cliente, almacen, monkeypat
 
 def test_el_respaldo_usa_las_credenciales_de_la_sesion(cliente, almacen, monkeypatch):
     monkeypatch.setattr("src.api.respaldos.consulta_oracle", lambda conexion: consulta_falsa)
-    ejecutor = EjecutorFalso()
-    app.dependency_overrides[obtener_ejecutor] = lambda: ejecutor
+    entorno = EntornoFalso()
+    app.dependency_overrides[obtener_entorno] = lambda: entorno
     token = almacen.crear(CONEXION)
 
     respuesta = cliente.post(
@@ -153,7 +144,7 @@ def test_el_respaldo_usa_las_credenciales_de_la_sesion(cliente, almacen, monkeyp
     )
 
     assert respuesta.status_code == 200
-    parfile = next(entrada for _, entrada in ejecutor.llamadas if entrada is not None)
+    parfile = entorno.herramientas[0]["script"]
     assert "USERID=SESION_USER/clave-de-sesion@SVC_SESION" in parfile.splitlines()
     assert "clave-de-sesion" not in respuesta.text
 
