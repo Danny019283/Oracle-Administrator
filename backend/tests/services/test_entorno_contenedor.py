@@ -100,3 +100,26 @@ def test_leer_archivo_ejecuta_cat_dentro_del_contenedor():
 
     assert proceso.llamadas == [(["docker", "exec", "oracle-test", "cat", "/u01/log.log"], None)]
     assert texto == "contenido del archivo"
+
+
+def test_con_cli_podman_emite_podman_exec_con_la_misma_forma_que_docker():
+    proceso = ProcesoFalso()
+
+    EntornoContenedor("oracle-test", proceso, cli="podman").ejecutar_herramienta(
+        "rman", lambda ruta: ["cmdfile=" + ruta], "x", prefijo="rman", variables={"ORACLE_SID": "XE"}
+    )
+
+    ruta = proceso.llamadas[0][0][-1].split("cat > ")[1]
+    assert [args for args, _ in proceso.llamadas] == [
+        ["podman", "exec", "-i", "oracle-test", "sh", "-c", f"umask 077; cat > {ruta}"],
+        ["podman", "exec", "oracle-test", "env", "ORACLE_SID=XE", "rman", f"cmdfile={ruta}"],
+        ["podman", "exec", "oracle-test", "rm", "-f", ruta],
+    ]
+
+
+def test_con_cli_podman_leer_archivo_emite_podman_exec_cat():
+    proceso = ProcesoFalso()
+
+    EntornoContenedor("oracle-test", proceso, cli="podman").leer_archivo(EntornoContenedor.tipo_ruta("/u01/log.log"))
+
+    assert proceso.llamadas == [(["podman", "exec", "oracle-test", "cat", "/u01/log.log"], None)]
