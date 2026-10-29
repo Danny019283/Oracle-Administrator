@@ -18,6 +18,7 @@ const MODULOS_DISPONIBLES = [
   'Auditoría de la BD',
   'Seguridad de usuarios',
   'Creación de respaldos',
+  'Administración de archivos de respaldos y directorios',
 ]
 
 const RESPALDOS: { tipo: TipoRespaldo; titulo: string }[] = [

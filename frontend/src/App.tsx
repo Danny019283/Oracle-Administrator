@@ -1,6 +1,7 @@
 import { useState, useSyncExternalStore, type ReactNode } from 'react'
 import './App.css'
 import { MenuPrincipal, MenuRespaldos } from './menu/Menu'
+import { Directorios } from './directorios/Directorios'
 import { Auditoria } from './auditoria/Auditoria'
 import { Performance } from './performance/Performance'
 import { RespaldoFull } from './respaldos/RespaldoFull'
@@ -13,7 +14,7 @@ import { ModalLogin } from './sesion/ModalLogin'
 import { alCambiarSesion, cerrarSesion, motivoDeSalida, sesionActual, type Sesion } from './sesion/sesion'
 import { ToggleTema } from './tema/ToggleTema'
 
-type VistaModulo = 'tablespaces' | 'tuning' | 'performance' | 'auditoria' | 'seguridad'
+type VistaModulo = 'tablespaces' | 'tuning' | 'performance' | 'auditoria' | 'seguridad' | 'directorios'
 
 type Vista = 'principal' | 'respaldos' | 'tablas' | 'schemas' | 'full' | VistaModulo
 
@@ -23,6 +24,7 @@ const VISTA_DE_MODULO: Record<string, VistaModulo> = {
   'Performance de la base de datos': 'performance',
   'Auditoría de la BD': 'auditoria',
   'Seguridad de usuarios': 'seguridad',
+  'Administración de archivos de respaldos y directorios': 'directorios',
 }
 
 function MarcaBaseDeDatos() {
@@ -128,6 +130,7 @@ function Navegador({ sesion }: { sesion: Sesion | null }) {
         {vista === 'performance' && <Performance token={sesion.token} />}
         {vista === 'auditoria' && <Auditoria token={sesion.token} />}
         {vista === 'seguridad' && <Seguridad token={sesion.token} />}
+        {vista === 'directorios' && <Directorios token={sesion.token} />}
       </>
     )
   }

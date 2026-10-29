@@ -12,6 +12,7 @@ export default defineConfig({
       '/seguridad': 'http://localhost:8000',
       '/tablespaces': 'http://localhost:8000',
       '/tuning': 'http://localhost:8000',
+      '/directorios': 'http://localhost:8000',
     },
   },
   test: { environment: 'jsdom' },

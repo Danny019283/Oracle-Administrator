@@ -105,6 +105,21 @@ describe('navegación de una pantalla a la vez', () => {
     expect(boton('Schemas')).not.toBeNull()
   })
 
+  it('al elegir «Administración de archivos de respaldos y directorios» aparece su pantalla con «Volver» y «Volver» regresa al menú', () => {
+    render(<App />)
+
+    fireEvent.click(boton('Administración de archivos de respaldos y directorios')!)
+
+    expect(titulo('Administración de archivos de respaldos y directorios')).not.toBeNull()
+    expect(boton('Creación de respaldos')).toBeNull()
+
+    fireEvent.click(boton('Volver')!)
+
+    expect(titulo('Administración de archivos de respaldos y directorios')).toBeNull()
+    expect(boton('Creación de respaldos')).not.toBeNull()
+    expect(boton('Volver')).toBeNull()
+  })
+
   it('el menú principal no muestra ningún botón «Volver»', () => {
     render(<App />)
 
