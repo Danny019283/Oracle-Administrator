@@ -52,6 +52,48 @@ describe('llamar a la API de administración', () => {
     expect(JSON.parse(opciones.body as string)).toEqual({ usuario: 'HR' })
   })
 
+  it('PUT envía el cuerpo en JSON con el token y el método PUT', async () => {
+    const fetchFalso = vi.fn(async () => respuesta({ mensaje: 'listo' }))
+    vi.stubGlobal('fetch', fetchFalso)
+
+    const r = await llamar(TOKEN, '/directorios/RESPALDOS', { ruta: '/opt/oracle' }, 'PUT')
+
+    expect(r).toEqual({ ok: true, datos: { mensaje: 'listo' } })
+    const [url, opciones] = fetchFalso.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe('/directorios/RESPALDOS')
+    expect(opciones.method).toBe('PUT')
+    expect(opciones.headers).toEqual({
+      Authorization: `Bearer ${TOKEN}`,
+      'Content-Type': 'application/json',
+    })
+    expect(JSON.parse(opciones.body as string)).toEqual({ ruta: '/opt/oracle' })
+  })
+
+  it('DELETE envía solo el token y el método DELETE, sin cuerpo', async () => {
+    const fetchFalso = vi.fn(async () => respuesta({ mensaje: 'listo' }))
+    vi.stubGlobal('fetch', fetchFalso)
+
+    const r = await llamar(TOKEN, '/directorios/RESPALDOS', undefined, 'DELETE')
+
+    expect(r).toEqual({ ok: true, datos: { mensaje: 'listo' } })
+    expect(fetchFalso).toHaveBeenCalledWith('/directorios/RESPALDOS', {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    })
+  })
+
+  it('PUT y DELETE usan el mismo manejo de errores', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => respuesta({ errores: ['ruta inválida'] }, 422)))
+    expect(await llamar(TOKEN, '/directorios/X', { ruta: 'x' }, 'PUT')).toEqual({
+      ok: false,
+      aviso: { tipo: 'error', textos: ['ruta inválida'] },
+    })
+
+    vi.stubGlobal('fetch', vi.fn(async () => respuestaDelProxy(502)))
+    const r = await llamar(TOKEN, '/directorios/X', undefined, 'DELETE')
+    expect(r.ok).toBe(false)
+  })
+
   it('no envía ninguna cabecera X-Oracle-*', async () => {
     const fetchFalso = vi.fn(async () => respuesta({}))
     vi.stubGlobal('fetch', fetchFalso)

@@ -34,6 +34,7 @@ export async function llamar<T>(
   token: string,
   url: string,
   cuerpo?: unknown,
+  metodo?: 'PUT' | 'DELETE',
 ): Promise<Respuesta<T>> {
   const opciones: RequestInit =
     cuerpo === undefined
@@ -43,6 +44,7 @@ export async function llamar<T>(
           headers: { ...cabeceras(token), 'Content-Type': 'application/json' },
           body: JSON.stringify(cuerpo),
         }
+  if (metodo) opciones.method = metodo
   let r: Response
   try {
     r = await fetch(url, opciones)
