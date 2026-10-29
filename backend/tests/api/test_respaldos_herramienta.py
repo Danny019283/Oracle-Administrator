@@ -45,7 +45,7 @@ class EntornoSinHerramienta(EntornoFalso):
     def crear_carpeta(self, ruta):
         raise HerramientaNoDisponible(self.herramienta)
 
-    def ejecutar_herramienta(self, *args, **kwargs):
+    def ejecutar(self, comando):
         raise HerramientaNoDisponible(self.herramienta)
 
 

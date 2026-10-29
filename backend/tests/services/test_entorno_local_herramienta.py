@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from src.services.entorno_local import EntornoLocal, SistemaLinux
-from src.services.entorno_oracle import HerramientaNoDisponible, Salida
+from src.services.entorno_oracle import ComandoHerramienta, HerramientaNoDisponible, Salida
 
 
 class ProcesoFalso:
@@ -29,8 +29,10 @@ class ProcesoFalso:
 
 def ejecutar(proceso, script="linea1\nlinea2\n", **opciones):
     entorno = EntornoLocal(SistemaLinux(), proceso)
-    return entorno.ejecutar_herramienta(
-        "rman", lambda ruta: ["target", "/", f"cmdfile={ruta}"], script, prefijo="rman", extension=".rman", **opciones
+    return entorno.ejecutar(
+        ComandoHerramienta(
+            "rman", lambda ruta: ["target", "/", f"cmdfile={ruta}"], script, prefijo="rman", extension=".rman", **opciones
+        )
     )
 
 

@@ -3,7 +3,13 @@ import re
 import pytest
 
 from src.services.entorno_contenedor import EntornoContenedor
-from src.services.entorno_oracle import ArchivoNoLegible, HerramientaNoDisponible, OperacionEntornoFallida, Salida
+from src.services.entorno_oracle import (
+    ArchivoNoLegible,
+    ComandoHerramienta,
+    HerramientaNoDisponible,
+    OperacionEntornoFallida,
+    Salida,
+)
 
 
 class ProcesoFalso:
@@ -23,8 +29,10 @@ class ProcesoFalso:
 
 def ejecutar(proceso, script="linea1\nlinea2\n", **opciones):
     entorno = EntornoContenedor("oracle-test", proceso)
-    return entorno.ejecutar_herramienta(
-        "rman", lambda ruta: ["target", "/", f"cmdfile={ruta}"], script, prefijo="rman", extension=".rman", **opciones
+    return entorno.ejecutar(
+        ComandoHerramienta(
+            "rman", lambda ruta: ["target", "/", f"cmdfile={ruta}"], script, prefijo="rman", extension=".rman", **opciones
+        )
     )
 
 
@@ -136,8 +144,8 @@ def test_leer_archivo_con_cat_distinto_de_cero_lanza_archivo_no_legible():
 def test_con_cli_podman_emite_podman_exec_con_la_misma_forma_que_docker():
     proceso = ProcesoFalso()
 
-    EntornoContenedor("oracle-test", proceso, cli="podman").ejecutar_herramienta(
-        "rman", lambda ruta: ["cmdfile=" + ruta], "x", prefijo="rman", variables={"ORACLE_SID": "XE"}
+    EntornoContenedor("oracle-test", proceso, cli="podman").ejecutar(
+        ComandoHerramienta("rman", lambda ruta: ["cmdfile=" + ruta], "x", prefijo="rman", variables={"ORACLE_SID": "XE"})
     )
 
     ruta = proceso.llamadas[0][0][-1].split("cat > ")[1]

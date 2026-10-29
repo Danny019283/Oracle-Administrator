@@ -1,7 +1,7 @@
 import os
 from dataclasses import dataclass, field
 
-from src.services.entorno_oracle import EntornoOracle, Salida
+from src.services.entorno_oracle import ComandoHerramienta, EntornoOracle, Salida
 
 __all__ = ["Conexion", "Salida", "ejecutar_expdp"]
 
@@ -21,6 +21,6 @@ def ejecutar_expdp(entorno: EntornoOracle, conexion: Conexion, parametros: list[
     # expdp rechaza «AS SYSDBA» sin comillas en el parfile (LRM-00112).
     userid = f'USERID="{credenciales} AS SYSDBA"' if conexion.sysdba else f"USERID={credenciales}"
     contenido = "\n".join([userid, *parametros]) + "\n"
-    return entorno.ejecutar_herramienta(
-        "expdp", lambda ruta: [f"PARFILE={ruta}"], contenido, prefijo="expdp", extension=".par"
+    return entorno.ejecutar(
+        ComandoHerramienta("expdp", lambda ruta: [f"PARFILE={ruta}"], contenido, prefijo="expdp", extension=".par")
     )

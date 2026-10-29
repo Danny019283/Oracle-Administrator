@@ -1,6 +1,6 @@
 from pathlib import PurePath, PurePosixPath
 
-from src.services.entorno_oracle import EntornoOracle, OperacionEntornoFallida
+from src.services.entorno_oracle import ComandoHerramienta, EntornoOracle, OperacionEntornoFallida
 from src.services.errores_oracle import explicar_error
 
 FRA_DIRECTORIO = PurePosixPath("/opt/oracle/oradata/fast_recovery_area")
@@ -31,9 +31,11 @@ def activar_archivelog(entorno: EntornoOracle, fra: PurePath, sid: str) -> str:
         entorno.crear_carpeta(fra)
     except OperacionEntornoFallida as error:
         raise ArchivelogFallido(str(error)) from error
-    salida = entorno.ejecutar_herramienta(
-        "sqlplus", lambda ruta: ["-S", "/ as sysdba", f"@{ruta}"], _script(fra),
-        prefijo="archivelog", extension=".sql", variables={"ORACLE_SID": sid},
+    salida = entorno.ejecutar(
+        ComandoHerramienta(
+            "sqlplus", lambda ruta: ["-S", "/ as sysdba", f"@{ruta}"], _script(fra),
+            prefijo="archivelog", extension=".sql", variables={"ORACLE_SID": sid},
+        )
     )
     if salida.codigo != 0:
         raise ArchivelogFallido(salida.texto)

@@ -56,15 +56,3 @@ class EntornoOracle(ABC):
     def ejecutar(self, comando: ComandoHerramienta) -> Salida:
         """Escribe `comando.script` en un temporal privado (sin que aparezca en los argumentos
         del proceso), ejecuta `comando.nombre` con `comando.args(ruta_del_temporal)` y siempre lo borra."""
-
-    def ejecutar_herramienta(
-        self,
-        nombre: str,
-        args: Callable[[str], list[str]],
-        script: str,
-        *,
-        prefijo: str,
-        extension: str = "",
-        variables: Mapping[str, str] | None = None,
-    ) -> Salida:
-        return self.ejecutar(ComandoHerramienta(nombre, args, script, prefijo, extension, variables))

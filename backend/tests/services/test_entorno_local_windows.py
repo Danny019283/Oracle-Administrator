@@ -4,7 +4,7 @@ from pathlib import PureWindowsPath
 import pytest
 
 from src.services.entorno_local import EntornoLocal, SistemaWindows
-from src.services.entorno_oracle import Salida
+from src.services.entorno_oracle import ComandoHerramienta, Salida
 
 TEMPORAL = r"C:\Users\ana\AppData\Local\Temp"
 
@@ -78,8 +78,8 @@ def test_crear_carpeta_crea_los_padres_de_la_ruta_de_windows(estado):
 def test_el_temporal_va_en_el_directorio_temporal_del_perfil_con_el_script(estado):
     proceso = ProcesoFalso(estado)
 
-    entorno(estado, proceso).ejecutar_herramienta(
-        "rman", lambda ruta: ["target", "/", f"@{ruta}"], "linea1\n", prefijo="rman", extension=".rman"
+    entorno(estado, proceso).ejecutar(
+        ComandoHerramienta("rman", lambda ruta: ["target", "/", f"@{ruta}"], "linea1\n", prefijo="rman", extension=".rman")
     )
 
     assert proceso.temporal.parent == PureWindowsPath(TEMPORAL)
@@ -93,8 +93,10 @@ def test_rman_y_sqlplus_se_lanzan_local_con_oracle_sid_en_el_proceso(estado):
     local = entorno(estado, proceso)
     variables = {"ORACLE_SID": "ORCL"}
 
-    local.ejecutar_herramienta("rman", lambda r: ["target", "/", f"@{r}"], "x", prefijo="rman", variables=variables)
-    local.ejecutar_herramienta("sqlplus", lambda r: ["-S", "/ as sysdba", f"@{r}"], "x", prefijo="sql", variables=variables)
+    local.ejecutar(ComandoHerramienta("rman", lambda r: ["target", "/", f"@{r}"], "x", prefijo="rman", variables=variables))
+    local.ejecutar(
+        ComandoHerramienta("sqlplus", lambda r: ["-S", "/ as sysdba", f"@{r}"], "x", prefijo="sql", variables=variables)
+    )
 
     assert proceso.llamadas[0][0][:3] == ["rman", "target", "/"]
     assert proceso.llamadas[1][0][:3] == ["sqlplus", "-S", "/ as sysdba"]
@@ -106,10 +108,10 @@ def test_borra_el_temporal_al_terminar_y_si_el_proceso_falla(estado):
     local = entorno(estado, proceso)
 
     with pytest.raises(RuntimeError):
-        local.ejecutar_herramienta("rman", lambda r: [f"@{r}"], "x", prefijo="rman")
+        local.ejecutar(ComandoHerramienta("rman", lambda r: [f"@{r}"], "x", prefijo="rman"))
     assert estado["archivos"] == {}
 
     proceso.error = None
-    local.ejecutar_herramienta("rman", lambda r: [f"@{r}"], "x", prefijo="rman")
+    local.ejecutar(ComandoHerramienta("rman", lambda r: [f"@{r}"], "x", prefijo="rman"))
     assert proceso.contenido == "x"
     assert estado["archivos"] == {}
