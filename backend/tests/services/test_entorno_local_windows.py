@@ -19,7 +19,7 @@ class ArchivoFalso:
     def write_text(self, texto):
         self.estado["archivos"][self.ruta] = texto
 
-    def read_text(self):
+    def read_text(self, errors="strict"):
         return self.estado["archivos"][self.ruta]
 
     def mkdir(self, parents=False, exist_ok=False):

@@ -10,7 +10,9 @@ def ejecutar_proceso(
 ) -> Salida:
     entorno = {**os.environ, **variables} if variables else None
     try:
-        resultado = subprocess.run(args, input=entrada, capture_output=True, text=True, env=entorno)
+        resultado = subprocess.run(
+            args, input=entrada, capture_output=True, text=True, errors="replace", env=entorno
+        )
     except (FileNotFoundError, PermissionError):
         raise HerramientaNoDisponible(args[0]) from None
     return Salida(

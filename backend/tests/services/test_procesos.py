@@ -33,6 +33,12 @@ def test_acepta_variables_de_entorno_y_conserva_las_del_proceso():
     assert salida.texto == "valor True"
 
 
+def test_bytes_invalidos_en_la_salida_no_lanzan_y_se_reemplazan():
+    salida = ejecutar_proceso(python("import sys; sys.stdout.buffer.write(b'a\\xffb')"))
+
+    assert salida.texto == "a�b"
+
+
 def test_ejecutable_inexistente_lanza_herramienta_no_disponible_que_nombra_la_herramienta():
     with pytest.raises(HerramientaNoDisponible, match="herramienta-que-no-existe") as error:
         ejecutar_proceso(["herramienta-que-no-existe", "-x"])

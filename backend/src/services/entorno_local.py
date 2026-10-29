@@ -14,7 +14,7 @@ class SistemaLinux:
     tipo_ruta = Path
 
     def leer_archivo(self, ruta: PurePath) -> str:
-        return Path(ruta).read_text()
+        return Path(ruta).read_text(errors="replace")
 
     def crear_carpeta(self, ruta: PurePath) -> None:
         Path(ruta).mkdir(parents=True, exist_ok=True)
@@ -38,7 +38,7 @@ class SistemaWindows:
         self._a_path = a_path
 
     def leer_archivo(self, ruta: PurePath) -> str:
-        return self._a_path(ruta).read_text()
+        return self._a_path(ruta).read_text(errors="replace")
 
     def crear_carpeta(self, ruta: PurePath) -> None:
         self._a_path(ruta).mkdir(parents=True, exist_ok=True)

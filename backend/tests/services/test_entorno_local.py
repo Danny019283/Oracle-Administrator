@@ -21,6 +21,13 @@ def test_leer_archivo_devuelve_el_contenido_del_archivo_local(tmp_path):
     assert entorno().leer_archivo(archivo) == "export terminado\n"
 
 
+def test_leer_archivo_con_bytes_invalidos_los_reemplaza(tmp_path):
+    archivo = tmp_path / "expdp.log"
+    archivo.write_bytes(b"a\xffb")
+
+    assert entorno().leer_archivo(archivo) == "a�b"
+
+
 def test_leer_archivo_con_error_de_es_lanza_archivo_no_legible(tmp_path):
     with pytest.raises(ArchivoNoLegible):
         entorno().leer_archivo(tmp_path / "no_existe.log")
