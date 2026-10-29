@@ -38,3 +38,31 @@ def post_directorio(
         return {"mensaje": f"Directorio {nombre} creado"}
 
     return responder(crear)
+
+
+@router.put("/{nombre}")
+def put_directorio(
+    nombre: str,
+    solicitud: SolicitudDirectorio,
+    consulta=Depends(obtener_consulta_admin),
+    sentencia=Depends(obtener_sentencia),
+    entorno=Depends(obtener_entorno),
+):
+    def editar():
+        directorios.editar_directorio(consulta, sentencia, entorno, nombre, solicitud.ruta)
+        return {"mensaje": f"Directorio {nombre.strip().upper()} actualizado"}
+
+    return responder(editar)
+
+
+@router.delete("/{nombre}")
+def delete_directorio(
+    nombre: str,
+    consulta=Depends(obtener_consulta_admin),
+    sentencia=Depends(obtener_sentencia),
+):
+    def eliminar():
+        directorios.eliminar_directorio(consulta, sentencia, nombre)
+        return {"mensaje": f"Directorio {nombre.strip().upper()} eliminado"}
+
+    return responder(eliminar)

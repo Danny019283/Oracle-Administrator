@@ -183,3 +183,107 @@ def test_crear_directorio_si_oracle_rechaza_explica_el_error(cliente):
 
     assert respuesta.status_code == 500
     assert respuesta.json()["error"].startswith("ORA-01031")
+
+
+def test_editar_directorio_da_permisos_ejecuta_create_or_replace_y_responde_200(cliente):
+    sentencia = SentenciaFalsa()
+    entorno = EntornoFalso()
+    usar([("BACKUP", "/u01/viejo")], entorno, sentencia)
+
+    respuesta = cliente.put("/directorios/backup", json={"ruta": "/opt/oracle/nuevo"}, headers=CABECERAS)
+
+    assert respuesta.status_code == 200
+    assert respuesta.json() == {"mensaje": "Directorio BACKUP actualizado"}
+    assert [str(r) for r in entorno.permisos] == ["/opt/oracle/nuevo"]
+    assert sentencia.sqls == ["CREATE OR REPLACE DIRECTORY BACKUP AS '/opt/oracle/nuevo'"]
+
+
+def test_editar_directorio_inexistente_responde_404(cliente):
+    sentencia = SentenciaFalsa()
+    usar([], sentencia=sentencia)
+
+    respuesta = cliente.put("/directorios/backup", json={"ruta": "/opt/oracle/nuevo"}, headers=CABECERAS)
+
+    assert respuesta.status_code == 404
+    assert sentencia.sqls == []
+
+
+def test_editar_directorio_del_sistema_responde_422(cliente):
+    sentencia = SentenciaFalsa()
+    usar([("DATA_PUMP_DIR", "/u01/dpdump")], sentencia=sentencia)
+
+    respuesta = cliente.put("/directorios/data_pump_dir", json={"ruta": "/opt/oracle/nuevo"}, headers=CABECERAS)
+
+    assert respuesta.status_code == 422
+    assert sentencia.sqls == []
+
+
+def test_editar_directorio_con_ruta_invalida_responde_422(cliente):
+    sentencia = SentenciaFalsa()
+    usar([("BACKUP", "/u01/viejo")], sentencia=sentencia)
+
+    respuesta = cliente.put("/directorios/backup", json={"ruta": "relativa"}, headers=CABECERAS)
+
+    assert respuesta.status_code == 422
+    assert respuesta.json()["errores"]
+    assert sentencia.sqls == []
+
+
+def test_editar_directorio_con_fallo_de_permisos_responde_500_sin_ejecutar_sentencias(cliente):
+    sentencia = SentenciaFalsa()
+    usar([("BACKUP", "/u01/viejo")], EntornoFalso(fallo_permisos="chown: no such file"), sentencia)
+
+    respuesta = cliente.put("/directorios/backup", json={"ruta": "/opt/oracle/nuevo"}, headers=CABECERAS)
+
+    assert respuesta.status_code == 500
+    assert respuesta.json()["error"] == "chown: no such file"
+    assert sentencia.sqls == []
+
+
+def test_editar_directorio_si_oracle_rechaza_explica_el_error(cliente):
+    usar([("BACKUP", "/u01/viejo")], sentencia=SentenciaFalsa(error="ORA-01031: insufficient privileges"))
+
+    respuesta = cliente.put("/directorios/backup", json={"ruta": "/opt/oracle/nuevo"}, headers=CABECERAS)
+
+    assert respuesta.status_code == 500
+    assert respuesta.json()["error"].startswith("ORA-01031")
+
+
+def test_eliminar_directorio_ejecuta_drop_y_responde_200(cliente):
+    sentencia = SentenciaFalsa()
+    usar([("BACKUP", "/u01/viejo")], sentencia=sentencia)
+
+    respuesta = cliente.delete("/directorios/backup", headers=CABECERAS)
+
+    assert respuesta.status_code == 200
+    assert respuesta.json() == {"mensaje": "Directorio BACKUP eliminado"}
+    assert sentencia.sqls == ["DROP DIRECTORY BACKUP"]
+
+
+def test_eliminar_directorio_inexistente_responde_404(cliente):
+    sentencia = SentenciaFalsa()
+    usar([], sentencia=sentencia)
+
+    respuesta = cliente.delete("/directorios/backup", headers=CABECERAS)
+
+    assert respuesta.status_code == 404
+    assert sentencia.sqls == []
+
+
+def test_eliminar_directorio_del_sistema_responde_422(cliente):
+    sentencia = SentenciaFalsa()
+    usar([("DATA_PUMP_DIR", "/u01/dpdump")], sentencia=sentencia)
+
+    respuesta = cliente.delete("/directorios/data_pump_dir", headers=CABECERAS)
+
+    assert respuesta.status_code == 422
+    assert sentencia.sqls == []
+
+
+def test_eliminar_directorio_si_oracle_rechaza_explica_el_error(cliente):
+    usar([("BACKUP", "/u01/viejo")], sentencia=SentenciaFalsa(error="ORA-01031: insufficient privileges"))
+
+    respuesta = cliente.delete("/directorios/backup", headers=CABECERAS)
+
+    assert respuesta.status_code == 500
+    assert respuesta.json()["error"].startswith("ORA-01031")
