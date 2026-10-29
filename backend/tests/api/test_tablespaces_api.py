@@ -107,6 +107,21 @@ def test_crear_tablespace_invalido_responde_422_con_los_errores(cliente):
     assert sentencia.sqls == []
 
 
+def test_sin_carpeta_de_datafiles_responde_el_mensaje_claro_y_no_crea(cliente):
+    sentencia = usar()
+    app.dependency_overrides[obtener_consulta_admin] = lambda: lambda sql, params=None: [(None,)]
+
+    respuesta = cliente.post(
+        "/tablespaces",
+        json={"nombre": "ventas", "archivo": "ventas01.dbf", "tamano": "100M"},
+        headers=CABECERAS,
+    )
+
+    assert respuesta.status_code == 422
+    assert "carpeta de datafiles" in respuesta.json()["errores"][0]
+    assert sentencia.sqls == []
+
+
 def test_si_oracle_rechaza_explica_el_error(cliente):
     usar(SentenciaFalsa(error="ORA-01543: tablespace 'VENTAS' already exists"))
 

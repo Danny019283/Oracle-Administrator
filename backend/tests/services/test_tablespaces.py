@@ -128,6 +128,18 @@ def test_crea_tablespace_en_carpeta_estilo_windows():
     )
 
 
+@pytest.mark.parametrize("filas", [[], [(None,)], [("",)]])
+def test_sin_carpeta_de_datafiles_lanza_error_claro_y_no_crea(filas):
+    sentencia = SentenciaFalsa()
+
+    with pytest.raises(tablespaces.TablespaceInvalido, match="carpeta de datafiles"):
+        tablespaces.crear_tablespace(
+            lambda sql, params=None: filas, sentencia, "ventas", "PERMANENT", "ventas01.dbf", "100M"
+        )
+
+    assert sentencia.sqls == []
+
+
 def test_crea_tablespace_temporal_con_tempfile_y_sin_autoextend():
     sentencia = SentenciaFalsa()
 

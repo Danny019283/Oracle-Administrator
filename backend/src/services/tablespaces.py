@@ -121,7 +121,12 @@ def detalle_tablespace(consulta: Consulta, tablespace: str) -> dict[str, Any]:
 
 def carpeta_datafiles(consulta: Consulta) -> str:
     filas = consulta(SQL_CARPETA_DATAFILES)
-    return filas[0][0] if filas else ""
+    carpeta = filas[0][0] if filas else None
+    if not carpeta:
+        raise TablespaceInvalido(
+            ["No se pudo determinar la carpeta de datafiles: la consulta no devolvió ninguna ruta"]
+        )
+    return carpeta
 
 
 def _tamano(valor: str, que: str, errores: list[str]) -> str:
