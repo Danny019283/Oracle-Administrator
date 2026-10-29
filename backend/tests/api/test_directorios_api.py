@@ -43,6 +43,8 @@ class SentenciaFalsa:
 
 def usar(filas, entorno=None, sentencia=None, schemas=()):
     def consulta(sql, params=None):
+        if "instance_name" in sql.lower():
+            return [("XE",)]
         if "all_users" in sql.lower():
             return [(params["schema"],)] if params["schema"] in schemas else []
         return filas
@@ -133,7 +135,7 @@ def test_crear_directorio_da_permisos_ejecuta_create_sin_grant_y_responde_200(cl
 
     assert respuesta.status_code == 200
     assert respuesta.json() == {"mensaje": "Directorio BACKUP creado"}
-    assert [str(r) for r in entorno.permisos] == ["/opt/oracle/respaldos"]
+    assert [(str(r), sid) for r, sid in entorno.permisos] == [("/opt/oracle/respaldos", "XE")]
     assert sentencia.sqls == ["CREATE DIRECTORY BACKUP AS '/opt/oracle/respaldos'"]
 
 
@@ -232,7 +234,7 @@ def test_editar_directorio_da_permisos_ejecuta_create_or_replace_y_responde_200(
 
     assert respuesta.status_code == 200
     assert respuesta.json() == {"mensaje": "Directorio BACKUP actualizado"}
-    assert [str(r) for r in entorno.permisos] == ["/opt/oracle/nuevo"]
+    assert [(str(r), sid) for r, sid in entorno.permisos] == [("/opt/oracle/nuevo", "XE")]
     assert sentencia.sqls == ["CREATE OR REPLACE DIRECTORY BACKUP AS '/opt/oracle/nuevo'"]
 
 

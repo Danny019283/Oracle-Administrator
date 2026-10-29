@@ -48,10 +48,25 @@ def test_crear_carpeta_no_falla_si_ya_existe(tmp_path):
 
 
 @pytest.mark.parametrize("sistema", [SistemaLinux(), SistemaWindows()])
-def test_dar_permisos_a_oracle_no_hace_nada(sistema, tmp_path):
+def test_dar_permisos_a_oracle_con_sistema_sin_comportamiento_todavia_no_hace_nada(sistema, tmp_path):
     llamadas = []
     entorno_local = EntornoLocal(sistema, ejecutar=lambda *args, **kwargs: llamadas.append(args))
 
-    assert entorno_local.dar_permisos_a_oracle(entorno_local.tipo_ruta(tmp_path)) is None
+    assert entorno_local.dar_permisos_a_oracle(entorno_local.tipo_ruta(tmp_path), "XE") is None
 
     assert llamadas == []
+
+
+def test_dar_permisos_a_oracle_delega_en_el_sistema_con_ruta_sid_y_su_ejecutor(tmp_path):
+    llamadas = []
+
+    class SistemaEspia(SistemaLinux):
+        def dar_permisos_a_oracle(self, ruta, sid, ejecutar):
+            llamadas.append((ruta, sid, ejecutar))
+
+    def ejecutor(*args, **kwargs):
+        pass
+
+    EntornoLocal(SistemaEspia(), ejecutor).dar_permisos_a_oracle(tmp_path, "XE")
+
+    assert llamadas == [(tmp_path, "XE", ejecutor)]

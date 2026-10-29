@@ -28,6 +28,9 @@ class SistemaLinux:
     def borrar(self, ruta: PurePath) -> None:
         Path(ruta).unlink(missing_ok=True)
 
+    def dar_permisos_a_oracle(self, ruta: PurePath, sid: str, ejecutar: Callable[..., Salida]) -> None:
+        pass
+
 
 class SistemaWindows:
     """Implementador del Bridge para Windows; `a_path` convierte la ruta en un Path real (se cambia en las pruebas)."""
@@ -50,6 +53,9 @@ class SistemaWindows:
     def borrar(self, ruta: PurePath) -> None:
         self._a_path(ruta).unlink(missing_ok=True)
 
+    def dar_permisos_a_oracle(self, ruta: PurePath, sid: str, ejecutar: Callable[..., Salida]) -> None:
+        pass
+
 
 class EntornoLocal(EntornoOracle):
     """Estrategia: las herramientas corren en la misma máquina que el backend."""
@@ -64,9 +70,8 @@ class EntornoLocal(EntornoOracle):
     def crear_carpeta(self, ruta: PurePath) -> None:
         self._sistema.crear_carpeta(ruta)
 
-    def dar_permisos_a_oracle(self, ruta: PurePath) -> None:
-        # Oracle corre como el mismo usuario del backend: no hay permisos que ajustar
-        pass
+    def dar_permisos_a_oracle(self, ruta: PurePath, sid: str) -> None:
+        self._sistema.dar_permisos_a_oracle(ruta, sid, self._ejecutar)
 
     def leer_archivo(self, ruta: PurePath) -> str:
         try:

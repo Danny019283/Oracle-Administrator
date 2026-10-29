@@ -32,7 +32,8 @@ class EntornoContenedor(EntornoOracle):
         if salida.codigo != 0:
             raise OperacionEntornoFallida(salida.texto)
 
-    def dar_permisos_a_oracle(self, ruta: PurePath) -> None:
+    def dar_permisos_a_oracle(self, ruta: PurePath, sid: str) -> None:
+        # sid se ignora: el contenedor tiene un solo usuario de Oracle
         for comando in (["chown", self._usuario_oracle], ["chmod", "u+rwx"]):
             salida = self._ejecutar([self._cli, "exec", "-u", "root", self._contenedor, *comando, str(ruta)])
             if salida.codigo != 0:

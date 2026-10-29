@@ -24,10 +24,13 @@ class ConsultaFalsa:
     def __init__(self, filas, schemas=()):
         self.filas = filas
         self.schemas = schemas
+        self.sid = "XE"
         self.sqls = []
 
     def __call__(self, sql, params=None):
         self.sqls.append(sql.lower())
+        if "instance_name" in sql.lower():
+            return [(self.sid,)]
         if "all_users" in sql.lower():
             return [(params["schema"],)] if params["schema"] in self.schemas else []
         return self.filas
@@ -140,7 +143,7 @@ def test_crear_directorio_con_schema_da_permisos_y_ejecuta_create_y_grant_al_sch
     )
 
     assert nombre == "RESPALDO"
-    assert entorno.permisos == ["/opt/oracle/respaldos"]
+    assert entorno.permisos == [("/opt/oracle/respaldos", "XE")]
     assert sentencia.sqls == [
         "CREATE DIRECTORY RESPALDO AS '/opt/oracle/respaldos'",
         "GRANT READ, WRITE ON DIRECTORY RESPALDO TO HR",
@@ -155,7 +158,7 @@ def test_crear_directorio_sin_schema_no_ejecuta_ningun_grant(schema):
 
     crear_directorio(consulta, sentencia, entorno, "respaldo", "/opt/oracle/respaldos", schema)
 
-    assert entorno.permisos == ["/opt/oracle/respaldos"]
+    assert entorno.permisos == [("/opt/oracle/respaldos", "XE")]
     assert sentencia.sqls == ["CREATE DIRECTORY RESPALDO AS '/opt/oracle/respaldos'"]
     assert not any("all_users" in sql for sql in consulta.sqls)
 
@@ -208,7 +211,20 @@ def test_crear_directorio_valida_la_ruta_con_el_tipo_del_entorno():
 
     crear_directorio(ConsultaFalsa([]), SentenciaFalsa(), entorno, "r", "C:\\respaldos")
 
-    assert entorno.permisos == ["C:\\respaldos"]
+    assert entorno.permisos == [("C:\\respaldos", "XE")]
+
+
+def test_crear_directorio_pasa_el_sid_de_la_instancia_al_entorno_sin_consultarlo_si_hay_errores():
+    entorno = EntornoFalso()
+    consulta = ConsultaFalsa([])
+    consulta.sid = "ORCL"
+
+    with pytest.raises(DirectorioInvalido):
+        crear_directorio(consulta, SentenciaFalsa(), entorno, "ok", "relativa")
+    assert not any("instance_name" in sql for sql in consulta.sqls)
+
+    crear_directorio(consulta, SentenciaFalsa(), entorno, "ok", "/opt/r")
+    assert entorno.permisos == [("/opt/r", "ORCL")]
 
 
 def test_crear_directorio_si_fallan_los_permisos_no_ejecuta_sentencias():
@@ -227,7 +243,7 @@ def test_editar_directorio_da_permisos_y_ejecuta_solo_create_or_replace():
 
     editar_directorio(ConsultaFalsa([("RESPALDO", "/x")]), sentencia, entorno, "respaldo", "/opt/nueva")
 
-    assert entorno.permisos == ["/opt/nueva"]
+    assert entorno.permisos == [("/opt/nueva", "XE")]
     assert sentencia.sqls == ["CREATE OR REPLACE DIRECTORY RESPALDO AS '/opt/nueva'"]
 
 
@@ -237,7 +253,7 @@ def test_editar_directorio_valida_la_ruta_con_el_tipo_del_entorno():
 
     editar_directorio(ConsultaFalsa([("R", "x")]), SentenciaFalsa(), entorno, "r", "C:\\respaldos")
 
-    assert entorno.permisos == ["C:\\respaldos"]
+    assert entorno.permisos == [("C:\\respaldos", "XE")]
 
 
 @pytest.mark.parametrize(
@@ -266,6 +282,16 @@ def test_editar_directorio_del_sistema_dice_que_no_se_puede_editar():
         )
 
     assert "no se puede editar ni eliminar" in str(error.value)
+
+
+def test_editar_directorio_pasa_el_sid_de_la_instancia_al_entorno():
+    entorno = EntornoFalso()
+    consulta = ConsultaFalsa([("R", "/x")])
+    consulta.sid = "ORCL"
+
+    editar_directorio(consulta, SentenciaFalsa(), entorno, "r", "/opt/r")
+
+    assert entorno.permisos == [("/opt/r", "ORCL")]
 
 
 def test_editar_directorio_si_fallan_los_permisos_no_ejecuta_sentencias():

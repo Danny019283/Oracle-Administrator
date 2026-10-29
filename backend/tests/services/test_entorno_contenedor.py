@@ -191,7 +191,7 @@ def test_crear_carpeta_con_codigo_distinto_de_cero_lanza_operacion_entorno_falli
 def test_dar_permisos_a_oracle_ejecuta_chown_y_chmod_como_root_en_orden():
     proceso = ProcesoFalso()
 
-    EntornoContenedor("oracle-test", proceso).dar_permisos_a_oracle(EntornoContenedor.tipo_ruta("/u01/respaldos"))
+    EntornoContenedor("oracle-test", proceso).dar_permisos_a_oracle(EntornoContenedor.tipo_ruta("/u01/respaldos"), "XE")
 
     assert proceso.llamadas == [
         (["docker", "exec", "-u", "root", "oracle-test", "chown", "oracle:oinstall", "/u01/respaldos"], None),
@@ -199,11 +199,20 @@ def test_dar_permisos_a_oracle_ejecuta_chown_y_chmod_como_root_en_orden():
     ]
 
 
+def test_dar_permisos_a_oracle_ignora_el_sid():
+    con_xe, con_orcl = ProcesoFalso(), ProcesoFalso()
+
+    EntornoContenedor("oracle-test", con_xe).dar_permisos_a_oracle(EntornoContenedor.tipo_ruta("/u01/r"), "XE")
+    EntornoContenedor("oracle-test", con_orcl).dar_permisos_a_oracle(EntornoContenedor.tipo_ruta("/u01/r"), "ORCL")
+
+    assert con_xe.llamadas == con_orcl.llamadas
+
+
 def test_dar_permisos_a_oracle_con_podman_y_usuario_propio():
     proceso = ProcesoFalso()
 
     EntornoContenedor("oracle-test", proceso, cli="podman", usuario_oracle="grid:asmadmin").dar_permisos_a_oracle(
-        EntornoContenedor.tipo_ruta("/u01/r")
+        EntornoContenedor.tipo_ruta("/u01/r"), "XE"
     )
 
     assert proceso.llamadas[0][0] == ["podman", "exec", "-u", "root", "oracle-test", "chown", "grid:asmadmin", "/u01/r"]
@@ -212,7 +221,7 @@ def test_dar_permisos_a_oracle_con_podman_y_usuario_propio():
 def test_dar_permisos_a_oracle_nunca_crea_la_carpeta():
     proceso = ProcesoFalso()
 
-    EntornoContenedor("oracle-test", proceso).dar_permisos_a_oracle(EntornoContenedor.tipo_ruta("/u01/r"))
+    EntornoContenedor("oracle-test", proceso).dar_permisos_a_oracle(EntornoContenedor.tipo_ruta("/u01/r"), "XE")
 
     assert all("mkdir" not in args for args, _ in proceso.llamadas)
 
@@ -225,7 +234,7 @@ def test_dar_permisos_a_oracle_si_chown_falla_lanza_con_la_salida_y_no_ejecuta_c
         return Salida(codigo=1, texto="chown: No such file or directory")
 
     with pytest.raises(OperacionEntornoFallida, match="No such file or directory"):
-        EntornoContenedor("oracle-test", proceso).dar_permisos_a_oracle(EntornoContenedor.tipo_ruta("/no/existe"))
+        EntornoContenedor("oracle-test", proceso).dar_permisos_a_oracle(EntornoContenedor.tipo_ruta("/no/existe"), "XE")
 
     assert len(llamadas) == 1
 
@@ -235,4 +244,4 @@ def test_dar_permisos_a_oracle_si_chmod_falla_lanza_con_la_salida():
         return Salida(codigo=1 if "chmod" in args else 0, texto="chmod: Operation not permitted")
 
     with pytest.raises(OperacionEntornoFallida, match="Operation not permitted"):
-        EntornoContenedor("oracle-test", proceso).dar_permisos_a_oracle(EntornoContenedor.tipo_ruta("/u01/r"))
+        EntornoContenedor("oracle-test", proceso).dar_permisos_a_oracle(EntornoContenedor.tipo_ruta("/u01/r"), "XE")

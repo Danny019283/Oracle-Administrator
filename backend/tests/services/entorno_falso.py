@@ -26,8 +26,8 @@ class EntornoFalso(EntornoOracle):
     def crear_carpeta(self, ruta):
         self.carpetas.append(ruta)
 
-    def dar_permisos_a_oracle(self, ruta):
-        self.permisos.append(ruta)
+    def dar_permisos_a_oracle(self, ruta, sid):
+        self.permisos.append((ruta, sid))
         if self.fallo_permisos is not None:
             raise OperacionEntornoFallida(self.fallo_permisos)
 

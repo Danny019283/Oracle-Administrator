@@ -5,6 +5,7 @@ from pathlib import PurePath, PureWindowsPath
 from typing import Any
 
 from src.services.entorno_oracle import EntornoOracle
+from src.services.instancia import sid_de_instancia
 from src.services.identificadores import IdentificadorInvalido, normalizar_identificador
 from src.services.oracle_ejecucion import Sentencia
 
@@ -114,7 +115,7 @@ def crear_directorio(
     if errores:
         raise DirectorioInvalido(errores)
 
-    entorno.dar_permisos_a_oracle(ruta)
+    entorno.dar_permisos_a_oracle(ruta, sid_de_instancia(consulta))
     sentencia(f"CREATE DIRECTORY {nombre} AS '{ruta}'")
     if schema:
         sentencia(f"GRANT READ, WRITE ON DIRECTORY {nombre} TO {schema}")
@@ -145,7 +146,7 @@ def editar_directorio(
         raise DirectorioInvalido(errores)
     _exigir_modificable(consulta, nombre)
 
-    entorno.dar_permisos_a_oracle(ruta)
+    entorno.dar_permisos_a_oracle(ruta, sid_de_instancia(consulta))
     sentencia(f"CREATE OR REPLACE DIRECTORY {nombre} AS '{ruta}'")
 
 
