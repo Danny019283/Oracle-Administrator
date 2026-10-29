@@ -16,6 +16,12 @@ WHERE EXISTS (SELECT 1 FROM all_tab_privs p
 ORDER BY d.directory_name
 """
 
+_SQL_TODOS = """
+SELECT directory_name, directory_path
+FROM all_directories
+ORDER BY directory_name
+"""
+
 
 class SinDirectorios(Exception):
     pass
@@ -44,6 +50,10 @@ def listar_directorios(consulta: Consulta) -> list[Directorio]:
             "No hay directorios disponibles. Debes crear uno desde esta pantalla para poder respaldar"
         )
     return [Directorio(nombre=nombre, ruta=ruta) for nombre, ruta in filas]
+
+
+def listar_todos_directorios(consulta: Consulta) -> list[Directorio]:
+    return [Directorio(nombre=nombre, ruta=ruta) for nombre, ruta in consulta(_SQL_TODOS)]
 
 
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")

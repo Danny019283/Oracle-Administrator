@@ -9,6 +9,7 @@ from src.services.directorios import (
     SinDirectorios,
     ejemplos_ruta,
     listar_directorios,
+    listar_todos_directorios,
     validar_ruta,
 )
 
@@ -54,6 +55,23 @@ def test_sin_directorios_informa_y_sugiere_crear_uno():
     mensaje = str(error.value)
     assert "No hay directorios disponibles" in mensaje
     assert "crear" in mensaje.lower()
+
+
+def test_listar_todos_devuelve_todos_sin_filtrar_por_grants_y_ordenados():
+    consulta = ConsultaFalsa([("A_DIR", "/a"), ("B_DIR", "/b")])
+
+    assert listar_todos_directorios(consulta) == [
+        Directorio(nombre="A_DIR", ruta="/a"),
+        Directorio(nombre="B_DIR", ruta="/b"),
+    ]
+    sql = consulta.sqls[0]
+    assert "all_directories" in sql
+    assert "all_tab_privs" not in sql
+    assert "order by" in sql
+
+
+def test_listar_todos_sin_filas_devuelve_lista_vacia():
+    assert listar_todos_directorios(ConsultaFalsa([])) == []
 
 
 @pytest.mark.parametrize(
