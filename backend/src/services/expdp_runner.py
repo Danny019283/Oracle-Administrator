@@ -17,7 +17,7 @@ class Conexion:
 
 
 def ejecutar_expdp(entorno: EntornoOracle, conexion: Conexion, parametros: list[str]) -> Salida:
-    credenciales = f"{conexion.usuario}/{conexion.password}@{conexion.servicio}"
+    credenciales = f"{conexion.usuario}/{conexion.password}@{conexion.host}:{conexion.puerto}/{conexion.servicio}"
     # expdp rechaza «AS SYSDBA» sin comillas en el parfile (LRM-00112).
     userid = f'USERID="{credenciales} AS SYSDBA"' if conexion.sysdba else f"USERID={credenciales}"
     contenido = "\n".join([userid, *parametros]) + "\n"

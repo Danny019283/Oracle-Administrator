@@ -145,7 +145,7 @@ def test_el_respaldo_usa_las_credenciales_de_la_sesion(cliente, almacen, monkeyp
 
     assert respuesta.status_code == 200
     parfile = entorno.herramientas[0]["script"]
-    assert "USERID=SESION_USER/clave-de-sesion@SVC_SESION" in parfile.splitlines()
+    assert "USERID=SESION_USER/clave-de-sesion@db.sesion:1555/SVC_SESION" in parfile.splitlines()
     assert "clave-de-sesion" not in respuesta.text
 
 

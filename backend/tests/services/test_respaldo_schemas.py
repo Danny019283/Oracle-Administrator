@@ -8,7 +8,7 @@ from src.services.respaldo_schemas import RespaldoFallido, respaldar_schemas
 from tests.services.entorno_falso import RUTA_TEMPORAL, EntornoFalso
 
 AHORA = datetime(2026, 10, 17, 15, 30, 45)
-CONEXION = Conexion(usuario="SYSTEM", password="s3creta!", servicio="XEPDB1")
+CONEXION = Conexion(usuario="SYSTEM", password="s3creta!", servicio="XEPDB1", host="db.sesion", puerto=1555)
 RUTA = "/opt/oracle/Respaldos"
 LOG = "ventas_20261017_153045.log"
 ERROR_DUPLICADO = (
@@ -46,7 +46,7 @@ def test_pide_expdp_al_entorno_con_schemas_en_un_parfile():
     assert herramienta["nombre"] == "expdp"
     assert herramienta["args"] == [f"PARFILE={RUTA_TEMPORAL}"]
     parametros = herramienta["script"].splitlines()
-    assert "USERID=SYSTEM/s3creta!@XEPDB1" in parametros
+    assert "USERID=SYSTEM/s3creta!@db.sesion:1555/XEPDB1" in parametros
     assert "SCHEMAS=HR,VENTAS" in parametros
     assert not any(p.startswith("TABLES=") for p in parametros)
     assert "DIRECTORY=RESPALDO" in parametros

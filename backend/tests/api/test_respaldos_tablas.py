@@ -12,7 +12,7 @@ from src.services.sesiones import AlmacenSesiones
 from tests.services.entorno_falso import EntornoFalso
 
 ALMACEN = AlmacenSesiones()
-TOKEN = ALMACEN.crear(Conexion(usuario="HR", password="s3creta!", servicio="XEPDB1"))
+TOKEN = ALMACEN.crear(Conexion(usuario="HR", password="s3creta!", servicio="XEPDB1", host="db.sesion", puerto=1555))
 CABECERAS = {"Authorization": f"Bearer {TOKEN}"}
 RUTA = "/opt/oracle/Respaldos"
 SOLICITUD = {"tablas": ["CLIENTES"], "directorio": "RESPALDO", "nombre": "ventas"}
@@ -96,7 +96,7 @@ def test_respalda_y_devuelve_los_nombres_del_dmp_y_del_log(cliente):
     (herramienta,) = entorno.herramientas
     assert herramienta["nombre"] == "expdp"
     parfile = herramienta["script"].splitlines()
-    assert "USERID=HR/s3creta!@XEPDB1" in parfile
+    assert "USERID=HR/s3creta!@db.sesion:1555/XEPDB1" in parfile
     assert "TABLES=CLIENTES" in parfile
 
 

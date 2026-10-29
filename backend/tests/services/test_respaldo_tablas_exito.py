@@ -5,7 +5,7 @@ from src.services.respaldo_tablas import respaldar_tablas
 from tests.services.entorno_falso import RUTA_TEMPORAL, EntornoFalso
 
 AHORA = datetime(2026, 10, 17, 15, 30, 45)
-CONEXION = Conexion(usuario="HR", password="s3creta!", servicio="XEPDB1")
+CONEXION = Conexion(usuario="HR", password="s3creta!", servicio="XEPDB1", host="db.sesion", puerto=1555)
 
 
 def respaldar(entorno, tablas=("CLIENTES", "PEDIDOS")):
@@ -37,7 +37,7 @@ def test_pide_expdp_al_entorno_con_los_parametros_en_un_parfile():
     assert herramienta["prefijo"] == "expdp"
     assert herramienta["extension"] == ".par"
     parametros = herramienta["script"].splitlines()
-    assert "USERID=HR/s3creta!@XEPDB1" in parametros
+    assert "USERID=HR/s3creta!@db.sesion:1555/XEPDB1" in parametros
     assert "TABLES=CLIENTES,PEDIDOS" in parametros
     assert "DIRECTORY=RESPALDO" in parametros
     assert "DUMPFILE=ventas_20261017_153045.dmp" in parametros
