@@ -5,6 +5,7 @@ from fastapi import FastAPI
 
 from src.api.auditoria import router as auditoria_router
 from src.api.dependencias import fijar_entorno
+from src.api.directorios import router as directorios_router
 from src.api.performance import router as performance_router
 from src.api.respaldos import router as respaldos_router
 from src.api.seguridad import router as seguridad_router
@@ -25,6 +26,7 @@ app.include_router(auditoria_router)
 app.include_router(seguridad_router)
 app.include_router(tablespaces_router)
 app.include_router(tuning_router)
+app.include_router(directorios_router)
 
 
 @app.get("/")

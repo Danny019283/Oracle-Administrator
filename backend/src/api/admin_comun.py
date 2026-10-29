@@ -9,6 +9,8 @@ from fastapi.responses import JSONResponse
 
 from src.api.respaldos import obtener_conexion
 from src.services.auditoria import PoliticaInvalida
+from src.services.directorios import DirectorioInvalido, DirectorioNoEncontrado
+from src.services.entorno_oracle import OperacionEntornoFallida
 from src.services.errores_admin import explicar_error_admin
 from src.services.expdp_runner import Conexion
 from src.services.identificadores import IdentificadorInvalido
@@ -36,17 +38,27 @@ def responder(accion: Callable[[], Any]):
     """Ejecuta la acción y traduce los errores a respuestas uniformes.
 
     - 422 {"errores": [...]} cuando la solicitud no es válida.
-    - 404 {"detail"} cuando el usuario, tablespace, schema, tabla o índice no se puede administrar.
-    - 500 {"mensaje", "explicacion", "error"} cuando Oracle rechaza la operación.
+    - 404 {"detail"} cuando el usuario, tablespace, schema, tabla, índice o directorio no se puede administrar.
+    - 500 {"mensaje", "explicacion", "error"} cuando Oracle rechaza la operación o fallan los permisos de la carpeta.
     """
     try:
         return accion()
-    except (PoliticaInvalida, SolicitudInvalida, TablespaceInvalido, SolicitudTuningInvalida) as error:
+    except (PoliticaInvalida, SolicitudInvalida, TablespaceInvalido, SolicitudTuningInvalida, DirectorioInvalido) as error:
         return JSONResponse(status_code=422, content={"errores": error.errores})
     except (IdentificadorInvalido, SesionInvalida) as error:
         return JSONResponse(status_code=422, content={"errores": [str(error)]})
-    except (UsuarioNoAdministrable, TablespaceNoEncontrado, ObjetoNoEncontrado) as error:
+    except (UsuarioNoAdministrable, TablespaceNoEncontrado, ObjetoNoEncontrado, DirectorioNoEncontrado) as error:
         return JSONResponse(status_code=404, content={"detail": str(error)})
+    except OperacionEntornoFallida as error:
+        texto = str(error).strip()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "mensaje": "No se pudieron dar permisos a Oracle sobre la carpeta",
+                "explicacion": "La carpeta debe existir en el contenedor (creada o montada) y Oracle debe poder escribir en ella",
+                "error": texto.splitlines()[0] if texto else "",
+            },
+        )
     except oracledb.Error as error:
         texto = str(error).strip()
         return JSONResponse(
