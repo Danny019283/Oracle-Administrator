@@ -4,6 +4,10 @@ from dataclasses import dataclass
 from pathlib import PurePath, PureWindowsPath
 from typing import Any
 
+from src.services.entorno_oracle import EntornoOracle
+from src.services.identificadores import IdentificadorInvalido, normalizar_identificador
+from src.services.oracle_ejecucion import Sentencia
+
 Consulta = Callable[..., Sequence[Sequence[Any]]]
 
 _SQL = """
@@ -78,3 +82,29 @@ def ejemplos_ruta(tipo_ruta: type[PurePath]) -> list[str]:
     if issubclass(tipo_ruta, PureWindowsPath):
         return ["C:\\respaldos", "\\\\servidor\\recurso"]
     return ["/opt/oracle/respaldos"]
+
+
+def crear_directorio(
+    consulta: Consulta,
+    sentencia: Sentencia,
+    entorno: EntornoOracle,
+    usuario: str,
+    nombre: str,
+    ruta: str,
+) -> str:
+    errores = []
+    try:
+        nombre = normalizar_identificador(nombre, "el directorio")
+    except IdentificadorInvalido as error:
+        errores.append(str(error))
+    errores += validar_ruta(ruta, entorno.tipo_ruta)
+    if not errores and any(d.nombre == nombre for d in listar_todos_directorios(consulta)):
+        errores.append(f"Ya existe un directorio llamado {nombre}")
+    if errores:
+        raise DirectorioInvalido(errores)
+
+    usuario = normalizar_identificador(usuario, "el usuario")
+    entorno.dar_permisos_a_oracle(ruta)
+    sentencia(f"CREATE DIRECTORY {nombre} AS '{ruta}'")
+    sentencia(f"GRANT READ, WRITE ON DIRECTORY {nombre} TO {usuario}")
+    return nombre

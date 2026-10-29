@@ -2,11 +2,15 @@ from pathlib import PurePosixPath, PureWindowsPath
 
 import pytest
 
+from src.services.entorno_oracle import OperacionEntornoFallida
+from tests.services.entorno_falso import EntornoFalso
+
 from src.services.directorios import (
     Directorio,
     DirectorioInvalido,
     DirectorioNoEncontrado,
     SinDirectorios,
+    crear_directorio,
     ejemplos_ruta,
     listar_directorios,
     listar_todos_directorios,
@@ -112,3 +116,74 @@ def test_excepciones_de_directorio():
     assert DirectorioInvalido(["a", "b"]).errores == ["a", "b"]
     assert str(DirectorioInvalido(["a", "b"])) == "a; b"
     assert issubclass(DirectorioNoEncontrado, Exception)
+
+
+class SentenciaFalsa:
+    def __init__(self):
+        self.sqls = []
+
+    def __call__(self, sql, params=None):
+        self.sqls.append(sql)
+
+
+def test_crear_directorio_da_permisos_y_ejecuta_create_y_grant_en_orden():
+    entorno = EntornoFalso()
+    sentencia = SentenciaFalsa()
+
+    nombre = crear_directorio(
+        ConsultaFalsa([]), sentencia, entorno, "SYSTEM", "respaldo", "/opt/oracle/respaldos"
+    )
+
+    assert nombre == "RESPALDO"
+    assert entorno.permisos == ["/opt/oracle/respaldos"]
+    assert sentencia.sqls == [
+        "CREATE DIRECTORY RESPALDO AS '/opt/oracle/respaldos'",
+        "GRANT READ, WRITE ON DIRECTORY RESPALDO TO SYSTEM",
+    ]
+
+
+def test_crear_directorio_comprueba_duplicado_en_all_directories_sin_grants():
+    consulta = ConsultaFalsa([("RESPALDO", "/x")])
+    entorno = EntornoFalso()
+    sentencia = SentenciaFalsa()
+
+    with pytest.raises(DirectorioInvalido):
+        crear_directorio(consulta, sentencia, entorno, "SYSTEM", "respaldo", "/opt/r")
+
+    assert "all_directories" in consulta.sqls[0]
+    assert "all_tab_privs" not in consulta.sqls[0]
+    assert entorno.permisos == [] and sentencia.sqls == []
+
+
+@pytest.mark.parametrize(
+    "nombre, ruta, texto",
+    [("1mal", "/opt/r", "nombre"), ("ok", "relativa", "absoluta"), ("", "", "obligatori")],
+)
+def test_crear_directorio_invalido_no_toca_entorno_ni_sentencias(nombre, ruta, texto):
+    entorno = EntornoFalso()
+    sentencia = SentenciaFalsa()
+
+    with pytest.raises(DirectorioInvalido) as error:
+        crear_directorio(ConsultaFalsa([]), sentencia, entorno, "SYSTEM", nombre, ruta)
+
+    assert texto in str(error.value)
+    assert entorno.permisos == [] and sentencia.sqls == []
+
+
+def test_crear_directorio_valida_la_ruta_con_el_tipo_del_entorno():
+    entorno = EntornoFalso()
+    entorno.tipo_ruta = PureWindowsPath
+
+    crear_directorio(ConsultaFalsa([]), SentenciaFalsa(), entorno, "SYSTEM", "r", "C:\\respaldos")
+
+    assert entorno.permisos == ["C:\\respaldos"]
+
+
+def test_crear_directorio_si_fallan_los_permisos_no_ejecuta_sentencias():
+    entorno = EntornoFalso(fallo_permisos="chown: no such file")
+    sentencia = SentenciaFalsa()
+
+    with pytest.raises(OperacionEntornoFallida):
+        crear_directorio(ConsultaFalsa([]), sentencia, entorno, "SYSTEM", "r", "/opt/r")
+
+    assert sentencia.sqls == []
