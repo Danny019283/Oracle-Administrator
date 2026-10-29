@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from src.services.entorno_local import EntornoLocal, SistemaLinux
+from src.services.entorno_local import EntornoLocal, SistemaLinux, SistemaWindows
 from src.services.entorno_oracle import ArchivoNoLegible
 
 
@@ -45,3 +45,13 @@ def test_crear_carpeta_no_falla_si_ya_existe(tmp_path):
     entorno().crear_carpeta(tmp_path)
 
     assert tmp_path.is_dir()
+
+
+@pytest.mark.parametrize("sistema", [SistemaLinux(), SistemaWindows()])
+def test_dar_permisos_a_oracle_no_hace_nada(sistema, tmp_path):
+    llamadas = []
+    entorno_local = EntornoLocal(sistema, ejecutar=lambda *args, **kwargs: llamadas.append(args))
+
+    assert entorno_local.dar_permisos_a_oracle(entorno_local.tipo_ruta(tmp_path)) is None
+
+    assert llamadas == []

@@ -19,8 +19,11 @@ class EntornoContenedor(EntornoOracle):
 
     tipo_ruta = PurePosixPath
 
-    def __init__(self, contenedor: str, ejecutar: Ejecutor, cli: str = "docker"):
+    def __init__(
+        self, contenedor: str, ejecutar: Ejecutor, cli: str = "docker", usuario_oracle: str = "oracle:oinstall"
+    ):
         self._cli = cli
+        self._usuario_oracle = usuario_oracle
         self._contenedor = contenedor
         self._ejecutar = ejecutar
 
@@ -28,6 +31,12 @@ class EntornoContenedor(EntornoOracle):
         salida = self._ejecutar([self._cli, "exec", self._contenedor, "mkdir", "-p", str(ruta)])
         if salida.codigo != 0:
             raise OperacionEntornoFallida(salida.texto)
+
+    def dar_permisos_a_oracle(self, ruta: PurePath) -> None:
+        for comando in (["chown", self._usuario_oracle], ["chmod", "u+rwx"]):
+            salida = self._ejecutar([self._cli, "exec", "-u", "root", self._contenedor, *comando, str(ruta)])
+            if salida.codigo != 0:
+                raise OperacionEntornoFallida(salida.texto)
 
     def leer_archivo(self, ruta: PurePath) -> str:
         salida = self._ejecutar([self._cli, "exec", self._contenedor, "cat", str(ruta)])

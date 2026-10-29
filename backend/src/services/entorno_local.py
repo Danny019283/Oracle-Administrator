@@ -64,6 +64,10 @@ class EntornoLocal(EntornoOracle):
     def crear_carpeta(self, ruta: PurePath) -> None:
         self._sistema.crear_carpeta(ruta)
 
+    def dar_permisos_a_oracle(self, ruta: PurePath) -> None:
+        # Oracle corre como el mismo usuario del backend: no hay permisos que ajustar
+        pass
+
     def leer_archivo(self, ruta: PurePath) -> str:
         try:
             return self._sistema.leer_archivo(ruta)

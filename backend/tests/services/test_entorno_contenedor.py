@@ -186,3 +186,53 @@ def test_crear_carpeta_con_codigo_distinto_de_cero_lanza_operacion_entorno_falli
 
     with pytest.raises(OperacionEntornoFallida, match="mkdir: permission denied"):
         EntornoContenedor("oracle-test", proceso).crear_carpeta(EntornoContenedor.tipo_ruta("/root/x"))
+
+
+def test_dar_permisos_a_oracle_ejecuta_chown_y_chmod_como_root_en_orden():
+    proceso = ProcesoFalso()
+
+    EntornoContenedor("oracle-test", proceso).dar_permisos_a_oracle(EntornoContenedor.tipo_ruta("/u01/respaldos"))
+
+    assert proceso.llamadas == [
+        (["docker", "exec", "-u", "root", "oracle-test", "chown", "oracle:oinstall", "/u01/respaldos"], None),
+        (["docker", "exec", "-u", "root", "oracle-test", "chmod", "u+rwx", "/u01/respaldos"], None),
+    ]
+
+
+def test_dar_permisos_a_oracle_con_podman_y_usuario_propio():
+    proceso = ProcesoFalso()
+
+    EntornoContenedor("oracle-test", proceso, cli="podman", usuario_oracle="grid:asmadmin").dar_permisos_a_oracle(
+        EntornoContenedor.tipo_ruta("/u01/r")
+    )
+
+    assert proceso.llamadas[0][0] == ["podman", "exec", "-u", "root", "oracle-test", "chown", "grid:asmadmin", "/u01/r"]
+
+
+def test_dar_permisos_a_oracle_nunca_crea_la_carpeta():
+    proceso = ProcesoFalso()
+
+    EntornoContenedor("oracle-test", proceso).dar_permisos_a_oracle(EntornoContenedor.tipo_ruta("/u01/r"))
+
+    assert all("mkdir" not in args for args, _ in proceso.llamadas)
+
+
+def test_dar_permisos_a_oracle_si_chown_falla_lanza_con_la_salida_y_no_ejecuta_chmod():
+    llamadas = []
+
+    def proceso(args, entrada=None):
+        llamadas.append(args)
+        return Salida(codigo=1, texto="chown: No such file or directory")
+
+    with pytest.raises(OperacionEntornoFallida, match="No such file or directory"):
+        EntornoContenedor("oracle-test", proceso).dar_permisos_a_oracle(EntornoContenedor.tipo_ruta("/no/existe"))
+
+    assert len(llamadas) == 1
+
+
+def test_dar_permisos_a_oracle_si_chmod_falla_lanza_con_la_salida():
+    def proceso(args, entrada=None):
+        return Salida(codigo=1 if "chmod" in args else 0, texto="chmod: Operation not permitted")
+
+    with pytest.raises(OperacionEntornoFallida, match="Operation not permitted"):
+        EntornoContenedor("oracle-test", proceso).dar_permisos_a_oracle(EntornoContenedor.tipo_ruta("/u01/r"))

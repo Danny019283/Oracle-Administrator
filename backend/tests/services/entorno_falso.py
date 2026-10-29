@@ -1,6 +1,6 @@
 from pathlib import PurePosixPath
 
-from src.services.entorno_oracle import ArchivoNoLegible, EntornoOracle, Salida
+from src.services.entorno_oracle import ArchivoNoLegible, EntornoOracle, OperacionEntornoFallida, Salida
 
 RUTA_TEMPORAL = "/tmp/herramienta.tmp"
 
@@ -10,7 +10,7 @@ class EntornoFalso(EntornoOracle):
 
     tipo_ruta = PurePosixPath
 
-    def __init__(self, codigo=0, texto="", log="", salidas=None):
+    def __init__(self, codigo=0, texto="", log="", salidas=None, fallo_permisos=None):
         self.codigo = codigo
         self.texto = texto
         self.log = log
@@ -19,9 +19,17 @@ class EntornoFalso(EntornoOracle):
         self.herramientas = []
         self.lecturas = []
         self.carpetas = []
+        self.permisos = []
+        # fallo_permisos: texto con el que dar_permisos_a_oracle lanza OperacionEntornoFallida
+        self.fallo_permisos = fallo_permisos
 
     def crear_carpeta(self, ruta):
         self.carpetas.append(ruta)
+
+    def dar_permisos_a_oracle(self, ruta):
+        self.permisos.append(ruta)
+        if self.fallo_permisos is not None:
+            raise OperacionEntornoFallida(self.fallo_permisos)
 
     def leer_archivo(self, ruta):
         self.lecturas.append(ruta)

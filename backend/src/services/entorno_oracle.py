@@ -50,6 +50,10 @@ class EntornoOracle(ABC):
         """Crea la carpeta con sus padres; no falla si ya existe."""
 
     @abstractmethod
+    def dar_permisos_a_oracle(self, ruta: PurePath) -> None:
+        """Deja la carpeta (que debe existir) en manos del usuario de Oracle; nunca la crea."""
+
+    @abstractmethod
     def leer_archivo(self, ruta: PurePath) -> str: ...
 
     @abstractmethod
