@@ -9,6 +9,7 @@ from src.services.entorno_oracle import (
     ArchivoNoLegible,
     ComandoHerramienta,
     EntornoOracle,
+    HerramientaNoDisponible,
     OperacionEntornoFallida,
     Salida,
 )
@@ -36,7 +37,27 @@ class SistemaLinux:
         Path(ruta).unlink(missing_ok=True)
 
     def dar_permisos_a_oracle(self, ruta: PurePath, sid: str, ejecutar: Callable[..., Salida]) -> None:
-        pass
+        proceso = f"ora_pmon_{sid}"
+        try:
+            salida = ejecutar(["ps", "-C", proceso, "-o", "user="])
+        except HerramientaNoDisponible as error:
+            raise OperacionEntornoFallida(f"Falló «ps -C {proceso}»: {error}") from error
+        if salida.codigo != 0:
+            raise OperacionEntornoFallida(f"Falló «ps -C {proceso}»: {salida.texto}")
+        usuario = next((linea.strip() for linea in salida.texto.splitlines() if linea.strip()), "")
+        if not usuario:
+            raise OperacionEntornoFallida(
+                f"«ps -C {proceso}» no devolvió ningún usuario: ¿la instancia {sid} está en marcha?"
+            )
+        # el usuario va a un argumento de setfacl: sin guion inicial ni caracteres raros
+        if not re.fullmatch(r"[\w.][\w.-]*", usuario, re.ASCII):
+            raise OperacionEntornoFallida(f"«ps -C {proceso}» devolvió un usuario no válido: {usuario!r}")
+        try:
+            salida = ejecutar(["setfacl", "-m", f"u:{usuario}:rwx", str(ruta)])
+        except HerramientaNoDisponible as error:
+            raise OperacionEntornoFallida(f"Falló «setfacl {ruta}»: {error} Instale el paquete acl.") from error
+        if salida.codigo != 0:
+            raise OperacionEntornoFallida(f"Falló «setfacl {ruta}»: {salida.texto}")
 
 
 class SistemaWindows:

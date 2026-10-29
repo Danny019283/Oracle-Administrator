@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from src.services.entorno_local import EntornoLocal, SistemaLinux, SistemaWindows
-from src.services.entorno_oracle import ArchivoNoLegible
+from src.services.entorno_local import EntornoLocal, SistemaLinux
+from src.services.entorno_oracle import ArchivoNoLegible, HerramientaNoDisponible, OperacionEntornoFallida, Salida
 
 
 def entorno():
@@ -47,14 +47,76 @@ def test_crear_carpeta_no_falla_si_ya_existe(tmp_path):
     assert tmp_path.is_dir()
 
 
-@pytest.mark.parametrize("sistema", [SistemaLinux()])
-def test_dar_permisos_a_oracle_con_sistema_sin_comportamiento_todavia_no_hace_nada(sistema, tmp_path):
-    llamadas = []
-    entorno_local = EntornoLocal(sistema, ejecutar=lambda *args, **kwargs: llamadas.append(args))
+class EjecutorSecuencia:
+    """Ejecutor falso: devuelve las salidas dadas en orden (o lanza si es una excepción) y anota los argumentos."""
 
-    assert entorno_local.dar_permisos_a_oracle(entorno_local.tipo_ruta(tmp_path), "XE") is None
+    def __init__(self, *salidas):
+        self.salidas = list(salidas)
+        self.llamadas = []
 
-    assert llamadas == []
+    def __call__(self, args, entrada=None, variables=None):
+        self.llamadas.append(args)
+        salida = self.salidas.pop(0)
+        if isinstance(salida, Exception):
+            raise salida
+        return salida
+
+
+@pytest.mark.parametrize("texto_ps", ["oracle", "  oracle\n", "\n\n oracle \n"])
+def test_dar_permisos_en_linux_da_acl_al_propietario_del_proceso_pmon(texto_ps, tmp_path):
+    ejecutor = EjecutorSecuencia(Salida(codigo=0, texto=texto_ps), Salida(codigo=0, texto=""))
+
+    SistemaLinux().dar_permisos_a_oracle(tmp_path, "ORCL", ejecutor)
+
+    assert ejecutor.llamadas == [
+        ["ps", "-C", "ora_pmon_ORCL", "-o", "user="],
+        ["setfacl", "-m", "u:oracle:rwx", str(tmp_path)],
+    ]
+
+
+def test_dar_permisos_en_linux_con_ps_fallido_no_ejecuta_setfacl(tmp_path):
+    ejecutor = EjecutorSecuencia(Salida(codigo=1, texto="boom"))
+
+    with pytest.raises(OperacionEntornoFallida, match="ps -C ora_pmon_ORCL"):
+        SistemaLinux().dar_permisos_a_oracle(tmp_path, "ORCL", ejecutor)
+
+    assert len(ejecutor.llamadas) == 1
+
+
+@pytest.mark.parametrize("texto_ps", ["", "  \n \n"])
+def test_dar_permisos_en_linux_con_ps_sin_usuario_falla_con_mensaje_claro(texto_ps, tmp_path):
+    ejecutor = EjecutorSecuencia(Salida(codigo=0, texto=texto_ps))
+
+    with pytest.raises(OperacionEntornoFallida, match="ps -C ora_pmon_ORCL"):
+        SistemaLinux().dar_permisos_a_oracle(tmp_path, "ORCL", ejecutor)
+
+    assert len(ejecutor.llamadas) == 1
+
+
+def test_dar_permisos_en_linux_con_setfacl_fallido_lanza_con_su_salida(tmp_path):
+    ejecutor = EjecutorSecuencia(
+        Salida(codigo=0, texto="oracle"), Salida(codigo=1, texto="Operation not supported")
+    )
+
+    with pytest.raises(OperacionEntornoFallida, match="setfacl.*Operation not supported"):
+        SistemaLinux().dar_permisos_a_oracle(tmp_path, "ORCL", ejecutor)
+
+
+def test_dar_permisos_en_linux_sin_setfacl_instalado_lanza_error_claro(tmp_path):
+    ejecutor = EjecutorSecuencia(Salida(codigo=0, texto="oracle"), HerramientaNoDisponible("setfacl"))
+
+    with pytest.raises(OperacionEntornoFallida, match="setfacl"):
+        SistemaLinux().dar_permisos_a_oracle(tmp_path, "ORCL", ejecutor)
+
+
+@pytest.mark.parametrize("usuario", ["ora cle", "ora;cle", "$(id)", "-m", "a\tb c"])
+def test_dar_permisos_en_linux_con_usuario_raro_lanza_sin_ejecutar_setfacl(usuario, tmp_path):
+    ejecutor = EjecutorSecuencia(Salida(codigo=0, texto=usuario))
+
+    with pytest.raises(OperacionEntornoFallida, match="usuario"):
+        SistemaLinux().dar_permisos_a_oracle(tmp_path, "ORCL", ejecutor)
+
+    assert len(ejecutor.llamadas) == 1
 
 
 def test_dar_permisos_a_oracle_delega_en_el_sistema_con_ruta_sid_y_su_ejecutor(tmp_path):
