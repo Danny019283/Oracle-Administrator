@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from src.api.dependencias import obtener_conexion, obtener_directorio_fra, obtener_entorno
-from src.services.archivelog import ArchivelogFallido, activar_archivelog
+from src.services.archivelog import ArchivelogFallido, activar_archivelog, derivar_fra
 from src.services.directorios import SinDirectorios, listar_directorios
 from src.services.entorno_oracle import EntornoOracle, HerramientaNoDisponible
 from src.services.errores_oracle import explicacion_de
@@ -235,6 +235,8 @@ def post_archivelog(
     entorno=Depends(obtener_entorno),
     fra=Depends(obtener_directorio_fra),
 ):
+    if fra is None:
+        fra = derivar_fra(consulta, entorno.tipo_ruta)
     if fra is None:
         return JSONResponse(
             status_code=500,

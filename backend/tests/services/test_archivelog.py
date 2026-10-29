@@ -1,8 +1,13 @@
-from pathlib import PurePosixPath
+from pathlib import PurePosixPath, PureWindowsPath
 
 import pytest
 
-from src.services.archivelog import FRA_DIRECTORIO, ArchivelogFallido, activar_archivelog
+from src.services.archivelog import (
+    FRA_DIRECTORIO,
+    ArchivelogFallido,
+    activar_archivelog,
+    derivar_fra,
+)
 from src.services.entorno_oracle import OperacionEntornoFallida, Salida
 from tests.services.entorno_falso import EntornoFalso
 
@@ -110,3 +115,19 @@ def test_si_no_se_puede_crear_la_carpeta_lanza_archivelog_fallido_y_no_ejecuta_s
 
     assert "Permission denied" in error.value.log
     assert entorno.herramientas == []
+
+
+def test_deriva_la_fra_de_la_carpeta_padre_de_los_datafiles_en_windows():
+    consulta = lambda sql, params=None: [("C:\\APP\\ORADATA\\XE\\",)]
+
+    assert derivar_fra(consulta, PureWindowsPath) == PureWindowsPath("C:\\APP\\ORADATA\\fast_recovery_area")
+
+
+def test_deriva_la_fra_de_la_carpeta_padre_de_los_datafiles_en_linux():
+    consulta = lambda sql, params=None: [("/u01/oradata/XE/",)]
+
+    assert derivar_fra(consulta, PurePosixPath) == PurePosixPath("/u01/oradata/fast_recovery_area")
+
+
+def test_sin_carpeta_de_datafiles_no_hay_fra_derivada():
+    assert derivar_fra(lambda sql, params=None: [], PurePosixPath) is None

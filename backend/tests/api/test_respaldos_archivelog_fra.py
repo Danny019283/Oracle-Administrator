@@ -1,4 +1,4 @@
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import pytest
 from fastapi.testclient import TestClient
@@ -18,6 +18,17 @@ SYSDBA = {"Authorization": f"Bearer {TOKEN}"}
 
 class EntornoFalsoLocal(EntornoFalso):
     tipo_ruta = Path
+
+
+class EntornoFalsoWindows(EntornoFalso):
+    tipo_ruta = PureWindowsPath
+
+
+def consulta_con_carpeta(carpeta):
+    def consulta(sql, params=None):
+        return [(carpeta,)] if "INSTR(file_name" in sql else [("XE",)]
+
+    return consulta
 
 
 @pytest.fixture
@@ -66,8 +77,21 @@ def test_en_local_con_variable_usa_la_ruta_del_so_de_la_estrategia(cliente, monk
     assert isinstance(entorno.carpetas[0], Path)
 
 
-def test_en_local_sin_variable_pide_configurarla_y_no_ejecuta_nada(cliente):
+def test_en_local_sin_variable_deriva_la_ruta_de_la_consulta_y_la_usa(cliente):
+    entorno = usar(EntornoFalsoWindows())
+    app.dependency_overrides[obtener_consulta] = lambda: consulta_con_carpeta("C:\\APP\\ORADATA\\XE\\")
+
+    respuesta = cliente.post("/respaldos/full/archivelog", headers=SYSDBA)
+
+    fra = PureWindowsPath("C:\\APP\\ORADATA\\fast_recovery_area")
+    assert respuesta.status_code == 200
+    assert entorno.carpetas == [fra]
+    assert f"db_recovery_file_dest='{fra}'" in entorno.herramientas[0]["script"]
+
+
+def test_en_local_sin_variable_y_sin_carpeta_pide_configurarla_y_no_ejecuta_nada(cliente):
     entorno = usar(EntornoFalsoLocal())
+    app.dependency_overrides[obtener_consulta] = lambda: consulta_con_carpeta(None)
 
     respuesta = cliente.post("/respaldos/full/archivelog", headers=SYSDBA)
 
