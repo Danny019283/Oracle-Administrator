@@ -12,6 +12,7 @@ export function Directorios({ token }: { token: string }) {
   const [ejemplos, setEjemplos] = useState<string[]>([])
   const [aviso, setAviso] = useState<Aviso | null>(null)
   const [creando, setCreando] = useState(false)
+  const [editando, setEditando] = useState(false)
   const [nombre, setNombre] = useState('')
   const [ruta, setRuta] = useState('')
 
@@ -37,15 +38,26 @@ export function Directorios({ token }: { token: string }) {
     setCreando(true)
   }
 
-  const crear = async () => {
-    const r = await llamar<Mensaje>(token, '/directorios', { nombre, ruta })
+  const abrirEditar = (d: Directorio) => {
+    setAviso(null)
+    setNombre(d.nombre)
+    setRuta(d.ruta)
+    setEditando(true)
+  }
+
+  // Crear y editar comparten formulario: editar solo envía la ruta y el nombre queda de solo lectura.
+  const enviar = async () => {
+    const r = editando
+      ? await llamar<Mensaje>(token, `/directorios/${encodeURIComponent(nombre)}`, { ruta }, 'PUT')
+      : await llamar<Mensaje>(token, '/directorios', { nombre, ruta })
     if (!r.ok) return setAviso(r.aviso)
     await cargar()
     setCreando(false)
+    setEditando(false)
     setAviso({ tipo: 'ok', textos: [r.datos.mensaje] })
   }
 
-  if (creando) {
+  if (creando || editando) {
     return (
       <section className="vista">
         <button
@@ -54,11 +66,12 @@ export function Directorios({ token }: { token: string }) {
           onClick={() => {
             setAviso(null)
             setCreando(false)
+            setEditando(false)
           }}
         >
           ← Lista de directorios
         </button>
-        <h1>Crear directorio</h1>
+        <h1>{editando ? 'Editar directorio' : 'Crear directorio'}</h1>
         <p className="apoyo">El nombre se guarda en mayúsculas. La carpeta debe existir y Oracle debe poder escribir en ella.</p>
 
         <MostrarAviso aviso={aviso} />
@@ -66,7 +79,7 @@ export function Directorios({ token }: { token: string }) {
         <div className="panel">
           <label className="campo">
             Nombre del directorio
-            <input value={nombre} onChange={(e) => setNombre(e.target.value)} />
+            <input value={nombre} readOnly={editando} onChange={(e) => setNombre(e.target.value)} />
           </label>
           <label className="campo">
             Ruta de la carpeta
@@ -75,8 +88,8 @@ export function Directorios({ token }: { token: string }) {
           <p className="ayuda">Por ejemplo {ejemplos.join(' o ')}</p>
         </div>
 
-        <button type="button" className="accion" onClick={() => void crear()}>
-          Crear
+        <button type="button" className="accion" onClick={() => void enviar()}>
+          {editando ? 'Guardar' : 'Crear'}
         </button>
       </section>
     )
@@ -103,6 +116,14 @@ export function Directorios({ token }: { token: string }) {
           columnas={[
             { titulo: 'Nombre', valor: (d: Directorio) => d.nombre },
             { titulo: 'Ruta', valor: (d: Directorio) => d.ruta },
+            {
+              titulo: 'Acciones',
+              valor: (d: Directorio) => (
+                <button type="button" className="boton" aria-label={`Editar ${d.nombre}`} onClick={() => abrirEditar(d)}>
+                  Editar
+                </button>
+              ),
+            },
           ]}
           filas={directorios}
           clave={(d) => d.nombre}

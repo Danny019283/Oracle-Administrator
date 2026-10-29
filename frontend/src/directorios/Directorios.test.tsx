@@ -139,3 +139,77 @@ describe('crear directorio', () => {
     expect(fetchFalso).toHaveBeenCalledTimes(2)
   })
 })
+
+describe('editar directorio', () => {
+  const respuestas = (...siguientes: unknown[]) => {
+    const cola = [...siguientes]
+    fetchFalso = vi.fn(async () => cola.shift())
+    vi.stubGlobal('fetch', fetchFalso)
+  }
+
+  const lista = ok({ directorios: [DATA_PUMP, RESPALDOS], ejemplos_ruta: ['/opt/oracle/respaldos', 'C:\\respaldos'] })
+  const fallo = (status: number, cuerpo: unknown) => ({ ok: false, status, json: async () => cuerpo })
+
+  const abrirFormulario = async () => {
+    render(<Directorios token={TOKEN} />)
+    await screen.findByText('RESPALDOS')
+    fireEvent.click(screen.getByRole('button', { name: 'Editar RESPALDOS' }))
+  }
+
+  const cambiarYEnviar = async () => {
+    fireEvent.change(await screen.findByLabelText('Ruta de la carpeta'), { target: { value: '/opt/oracle/otra' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+  }
+
+  it('el formulario muestra el nombre sin poder editarlo, la ruta actual y los ejemplos del servidor', async () => {
+    respuestas(lista)
+    await abrirFormulario()
+
+    const nombre = (await screen.findByLabelText('Nombre del directorio')) as HTMLInputElement
+    expect(nombre.value).toBe('RESPALDOS')
+    expect(nombre.readOnly || nombre.disabled).toBe(true)
+    expect((screen.getByLabelText('Ruta de la carpeta') as HTMLInputElement).value).toBe('/opt/oracle/respaldos')
+    expect(screen.getByText(/C:\\respaldos/)).not.toBeNull()
+  })
+
+  it('al confirmar envía PUT /directorios/{nombre} solo con la ruta', async () => {
+    respuestas(lista, ok({ mensaje: 'Directorio RESPALDOS actualizado' }), lista)
+    await abrirFormulario()
+    await cambiarYEnviar()
+
+    await waitFor(() => expect(fetchFalso).toHaveBeenCalledTimes(3))
+    const [url, opciones] = fetchFalso.mock.calls[1]
+    expect(url).toBe('/directorios/RESPALDOS')
+    expect(opciones.method).toBe('PUT')
+    expect(JSON.parse(opciones.body)).toEqual({ ruta: '/opt/oracle/otra' })
+  })
+
+  it('si se edita informa el cambio y recarga la lista', async () => {
+    const CAMBIADO = { nombre: 'RESPALDOS', ruta: '/opt/oracle/otra' }
+    respuestas(
+      lista,
+      ok({ mensaje: 'Directorio RESPALDOS actualizado' }),
+      ok({ directorios: [CAMBIADO], ejemplos_ruta: [] }),
+    )
+    await abrirFormulario()
+    await cambiarYEnviar()
+
+    expect((await screen.findByRole('status')).textContent).toContain('Directorio RESPALDOS actualizado')
+    expect(await screen.findByText('/opt/oracle/otra')).not.toBeNull()
+    expect(fetchFalso).toHaveBeenCalledTimes(3)
+    expect(fetchFalso.mock.calls[2][0]).toBe('/directorios')
+  })
+
+  it.each([
+    [404, { mensaje: 'El directorio no existe' }, 'El directorio no existe'],
+    [422, { errores: ['La ruta debe ser absoluta'] }, 'La ruta debe ser absoluta'],
+    [500, { mensaje: 'No se pudieron dar permisos', explicacion: 'La carpeta debe existir', error: 'chown: sin permiso' }, 'chown: sin permiso'],
+  ])('ante %i muestra el aviso y no recarga la lista', async (status, cuerpo, texto) => {
+    respuestas(lista, fallo(status, cuerpo))
+    await abrirFormulario()
+    await cambiarYEnviar()
+
+    expect((await screen.findByRole('alert')).textContent).toContain(texto)
+    expect(fetchFalso).toHaveBeenCalledTimes(2)
+  })
+})
