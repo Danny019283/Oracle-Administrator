@@ -213,3 +213,69 @@ describe('editar directorio', () => {
     expect(fetchFalso).toHaveBeenCalledTimes(2)
   })
 })
+
+describe('eliminar directorio', () => {
+  const respuestas = (...siguientes: unknown[]) => {
+    const cola = [...siguientes]
+    fetchFalso = vi.fn(async () => cola.shift())
+    vi.stubGlobal('fetch', fetchFalso)
+  }
+
+  const lista = ok({ directorios: [DATA_PUMP, RESPALDOS], ejemplos_ruta: ['/opt/oracle/respaldos'] })
+  const fallo = (status: number, cuerpo: unknown) => ({ ok: false, status, json: async () => cuerpo })
+
+  const pedirEliminar = async () => {
+    render(<Directorios token={TOKEN} />)
+    await screen.findByText('RESPALDOS')
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminar RESPALDOS' }))
+  }
+
+  it('pedir eliminar muestra la confirmación y no envía nada todavía', async () => {
+    respuestas(lista)
+    await pedirEliminar()
+
+    expect(screen.getByRole('button', { name: 'Sí, confirmar' })).not.toBeNull()
+    expect(fetchFalso).toHaveBeenCalledTimes(1)
+  })
+
+  it('cancelar no envía ninguna petición ni cambia la lista', async () => {
+    respuestas(lista)
+    await pedirEliminar()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+
+    expect(screen.queryByRole('button', { name: 'Sí, confirmar' })).toBeNull()
+    expect(screen.getByText('RESPALDOS')).not.toBeNull()
+    expect(fetchFalso).toHaveBeenCalledTimes(1)
+  })
+
+  it('confirmar envía DELETE /directorios/{nombre}, informa y recarga la lista', async () => {
+    respuestas(
+      lista,
+      ok({ mensaje: 'Directorio RESPALDOS eliminado' }),
+      ok({ directorios: [DATA_PUMP], ejemplos_ruta: [] }),
+    )
+    await pedirEliminar()
+    fireEvent.click(screen.getByRole('button', { name: 'Sí, confirmar' }))
+
+    expect((await screen.findByRole('status')).textContent).toContain('Directorio RESPALDOS eliminado')
+    await waitFor(() => expect(screen.queryByText('/opt/oracle/respaldos')).toBeNull())
+    expect(fetchFalso).toHaveBeenCalledTimes(3)
+    const [url, opciones] = fetchFalso.mock.calls[1]
+    expect(url).toBe('/directorios/RESPALDOS')
+    expect(opciones.method).toBe('DELETE')
+    expect(fetchFalso.mock.calls[2][0]).toBe('/directorios')
+  })
+
+  it.each([
+    [404, { mensaje: 'El directorio no existe' }, 'El directorio no existe'],
+    [422, { errores: ['No se puede editar ni eliminar un directorio del sistema'] }, 'No se puede editar ni eliminar'],
+    [500, { mensaje: 'Oracle rechazó la operación', explicacion: 'Revisa el directorio', error: 'ORA-00955' }, 'ORA-00955'],
+  ])('ante %i muestra el aviso y no recarga la lista', async (status, cuerpo, texto) => {
+    respuestas(lista, fallo(status, cuerpo))
+    await pedirEliminar()
+    fireEvent.click(screen.getByRole('button', { name: 'Sí, confirmar' }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain(texto)
+    expect(fetchFalso).toHaveBeenCalledTimes(2)
+  })
+})

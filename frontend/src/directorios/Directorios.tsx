@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import '../admin/admin.css'
 import { llamar, type Aviso } from '../admin/api'
-import { MostrarAviso, Tabla } from '../admin/Avisos'
+import { BotonConfirmar, MostrarAviso, Tabla } from '../admin/Avisos'
 
 type Directorio = { nombre: string; ruta: string }
 
@@ -54,6 +54,13 @@ export function Directorios({ token }: { token: string }) {
     await cargar()
     setCreando(false)
     setEditando(false)
+    setAviso({ tipo: 'ok', textos: [r.datos.mensaje] })
+  }
+
+  const eliminar = async (d: Directorio) => {
+    const r = await llamar<Mensaje>(token, `/directorios/${encodeURIComponent(d.nombre)}`, undefined, 'DELETE')
+    if (!r.ok) return setAviso(r.aviso)
+    await cargar()
     setAviso({ tipo: 'ok', textos: [r.datos.mensaje] })
   }
 
@@ -119,9 +126,16 @@ export function Directorios({ token }: { token: string }) {
             {
               titulo: 'Acciones',
               valor: (d: Directorio) => (
-                <button type="button" className="boton" aria-label={`Editar ${d.nombre}`} onClick={() => abrirEditar(d)}>
-                  Editar
-                </button>
+                <>
+                  <button type="button" className="boton" aria-label={`Editar ${d.nombre}`} onClick={() => abrirEditar(d)}>
+                    Editar
+                  </button>
+                  <BotonConfirmar
+                    etiqueta={`Eliminar ${d.nombre}`}
+                    pregunta={`¿Eliminar el directorio ${d.nombre}? Los archivos de la carpeta no se borran.`}
+                    onConfirmar={() => void eliminar(d)}
+                  />
+                </>
               ),
             },
           ]}
