@@ -60,6 +60,8 @@ def listar_todos_directorios(consulta: Consulta) -> list[Directorio]:
     return [Directorio(nombre=nombre, ruta=ruta) for nombre, ruta in consulta(_SQL_TODOS)]
 
 
+DIRECTORIOS_DEL_SISTEMA = {"DATA_PUMP_DIR"}
+
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 
 
@@ -108,3 +110,27 @@ def crear_directorio(
     sentencia(f"CREATE DIRECTORY {nombre} AS '{ruta}'")
     sentencia(f"GRANT READ, WRITE ON DIRECTORY {nombre} TO {usuario}")
     return nombre
+
+
+def editar_directorio(
+    consulta: Consulta,
+    sentencia: Sentencia,
+    entorno: EntornoOracle,
+    nombre: str,
+    ruta: str,
+) -> None:
+    errores = []
+    try:
+        nombre = normalizar_identificador(nombre, "el directorio")
+    except IdentificadorInvalido as error:
+        errores.append(str(error))
+    errores += validar_ruta(ruta, entorno.tipo_ruta)
+    if errores:
+        raise DirectorioInvalido(errores)
+    if nombre not in {d.nombre for d in listar_todos_directorios(consulta)}:
+        raise DirectorioNoEncontrado(f"No existe el directorio {nombre}")
+    if nombre in DIRECTORIOS_DEL_SISTEMA:
+        raise DirectorioInvalido([f"El directorio {nombre} no se puede editar ni eliminar"])
+
+    entorno.dar_permisos_a_oracle(ruta)
+    sentencia(f"CREATE OR REPLACE DIRECTORY {nombre} AS '{ruta}'")

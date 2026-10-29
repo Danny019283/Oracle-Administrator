@@ -11,6 +11,7 @@ from src.services.directorios import (
     DirectorioNoEncontrado,
     SinDirectorios,
     crear_directorio,
+    editar_directorio,
     ejemplos_ruta,
     listar_directorios,
     listar_todos_directorios,
@@ -185,5 +186,62 @@ def test_crear_directorio_si_fallan_los_permisos_no_ejecuta_sentencias():
 
     with pytest.raises(OperacionEntornoFallida):
         crear_directorio(ConsultaFalsa([]), sentencia, entorno, "SYSTEM", "r", "/opt/r")
+
+    assert sentencia.sqls == []
+
+
+def test_editar_directorio_da_permisos_y_ejecuta_solo_create_or_replace():
+    entorno = EntornoFalso()
+    sentencia = SentenciaFalsa()
+
+    editar_directorio(ConsultaFalsa([("RESPALDO", "/x")]), sentencia, entorno, "respaldo", "/opt/nueva")
+
+    assert entorno.permisos == ["/opt/nueva"]
+    assert sentencia.sqls == ["CREATE OR REPLACE DIRECTORY RESPALDO AS '/opt/nueva'"]
+
+
+def test_editar_directorio_valida_la_ruta_con_el_tipo_del_entorno():
+    entorno = EntornoFalso()
+    entorno.tipo_ruta = PureWindowsPath
+
+    editar_directorio(ConsultaFalsa([("R", "x")]), SentenciaFalsa(), entorno, "r", "C:\\respaldos")
+
+    assert entorno.permisos == ["C:\\respaldos"]
+
+
+@pytest.mark.parametrize(
+    "nombre, ruta, filas, excepcion",
+    [
+        ("r", "relativa", [("R", "/x")], DirectorioInvalido),
+        ("1mal", "/opt/r", [("R", "/x")], DirectorioInvalido),
+        ("otro", "/opt/r", [("R", "/x")], DirectorioNoEncontrado),
+        ("data_pump_dir", "/opt/r", [("DATA_PUMP_DIR", "/x")], DirectorioInvalido),
+    ],
+)
+def test_editar_directorio_con_error_no_toca_entorno_ni_sentencias(nombre, ruta, filas, excepcion):
+    entorno = EntornoFalso()
+    sentencia = SentenciaFalsa()
+
+    with pytest.raises(excepcion):
+        editar_directorio(ConsultaFalsa(filas), sentencia, entorno, nombre, ruta)
+
+    assert entorno.permisos == [] and sentencia.sqls == []
+
+
+def test_editar_directorio_del_sistema_dice_que_no_se_puede_editar():
+    with pytest.raises(DirectorioInvalido) as error:
+        editar_directorio(
+            ConsultaFalsa([("DATA_PUMP_DIR", "/x")]), SentenciaFalsa(), EntornoFalso(), "DATA_PUMP_DIR", "/r"
+        )
+
+    assert "no se puede editar ni eliminar" in str(error.value)
+
+
+def test_editar_directorio_si_fallan_los_permisos_no_ejecuta_sentencias():
+    entorno = EntornoFalso(fallo_permisos="chown: no such file")
+    sentencia = SentenciaFalsa()
+
+    with pytest.raises(OperacionEntornoFallida):
+        editar_directorio(ConsultaFalsa([("R", "/x")]), sentencia, entorno, "r", "/opt/r")
 
     assert sentencia.sqls == []
