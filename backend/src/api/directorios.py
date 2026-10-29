@@ -11,6 +11,7 @@ router = APIRouter(prefix="/directorios")
 class SolicitudDirectorio(BaseModel):
     nombre: str = ""
     ruta: str = ""
+    schema: str | None = None
 
 
 @router.get("")
@@ -31,7 +32,9 @@ def post_directorio(
     entorno=Depends(obtener_entorno),
 ):
     def crear():
-        nombre = directorios.crear_directorio(consulta, sentencia, entorno, solicitud.nombre, solicitud.ruta)
+        nombre = directorios.crear_directorio(
+            consulta, sentencia, entorno, solicitud.nombre, solicitud.ruta, solicitud.schema
+        )
         return {"mensaje": f"Directorio {nombre} creado"}
 
     return responder(crear)
