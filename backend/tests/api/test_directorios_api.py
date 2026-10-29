@@ -117,7 +117,7 @@ def test_responder_mapea_fallo_de_permisos_a_500_con_mensaje_explicacion_y_error
     assert cuerpo["error"] == "chown: no such file"
 
 
-def test_crear_directorio_da_permisos_ejecuta_create_y_grant_y_responde_200(cliente):
+def test_crear_directorio_da_permisos_ejecuta_create_sin_grant_y_responde_200(cliente):
     sentencia = SentenciaFalsa()
     entorno = EntornoFalso()
     usar([], entorno, sentencia)
@@ -129,10 +129,7 @@ def test_crear_directorio_da_permisos_ejecuta_create_y_grant_y_responde_200(clie
     assert respuesta.status_code == 200
     assert respuesta.json() == {"mensaje": "Directorio BACKUP creado"}
     assert [str(r) for r in entorno.permisos] == ["/opt/oracle/respaldos"]
-    assert sentencia.sqls == [
-        "CREATE DIRECTORY BACKUP AS '/opt/oracle/respaldos'",
-        "GRANT READ, WRITE ON DIRECTORY BACKUP TO SYSTEM",
-    ]
+    assert sentencia.sqls == ["CREATE DIRECTORY BACKUP AS '/opt/oracle/respaldos'"]
 
 
 def test_crear_directorio_invalido_responde_422_con_los_errores_y_no_ejecuta_nada(cliente):

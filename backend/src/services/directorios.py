@@ -26,6 +26,8 @@ FROM all_directories
 ORDER BY directory_name
 """
 
+_SQL_SCHEMA = "SELECT username FROM all_users WHERE username = :schema"
+
 
 class SinDirectorios(Exception):
     pass
@@ -90,9 +92,9 @@ def crear_directorio(
     consulta: Consulta,
     sentencia: Sentencia,
     entorno: EntornoOracle,
-    usuario: str,
     nombre: str,
     ruta: str,
+    schema: str | None = None,
 ) -> str:
     errores = []
     try:
@@ -100,15 +102,22 @@ def crear_directorio(
     except IdentificadorInvalido as error:
         errores.append(str(error))
     errores += validar_ruta(ruta, entorno.tipo_ruta)
+    if schema:
+        try:
+            schema = normalizar_identificador(schema, "el schema")
+        except IdentificadorInvalido as error:
+            errores.append(str(error))
     if not errores and any(d.nombre == nombre for d in listar_todos_directorios(consulta)):
         errores.append(f"Ya existe un directorio llamado {nombre}")
+    if not errores and schema and not consulta(_SQL_SCHEMA, {"schema": schema}):
+        errores.append(f"No existe el schema {schema}")
     if errores:
         raise DirectorioInvalido(errores)
 
-    usuario = normalizar_identificador(usuario, "el usuario")
     entorno.dar_permisos_a_oracle(ruta)
     sentencia(f"CREATE DIRECTORY {nombre} AS '{ruta}'")
-    sentencia(f"GRANT READ, WRITE ON DIRECTORY {nombre} TO {usuario}")
+    if schema:
+        sentencia(f"GRANT READ, WRITE ON DIRECTORY {nombre} TO {schema}")
     return nombre
 
 

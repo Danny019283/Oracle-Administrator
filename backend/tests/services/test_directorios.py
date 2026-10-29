@@ -21,12 +21,15 @@ from src.services.directorios import (
 
 
 class ConsultaFalsa:
-    def __init__(self, filas):
+    def __init__(self, filas, schemas=()):
         self.filas = filas
+        self.schemas = schemas
         self.sqls = []
 
     def __call__(self, sql, params=None):
         self.sqls.append(sql.lower())
+        if "all_users" in sql.lower():
+            return [(params["schema"],)] if params["schema"] in self.schemas else []
         return self.filas
 
 
@@ -128,20 +131,47 @@ class SentenciaFalsa:
         self.sqls.append(sql)
 
 
-def test_crear_directorio_da_permisos_y_ejecuta_create_y_grant_en_orden():
+def test_crear_directorio_con_schema_da_permisos_y_ejecuta_create_y_grant_al_schema_en_orden():
     entorno = EntornoFalso()
     sentencia = SentenciaFalsa()
 
     nombre = crear_directorio(
-        ConsultaFalsa([]), sentencia, entorno, "SYSTEM", "respaldo", "/opt/oracle/respaldos"
+        ConsultaFalsa([], schemas=["HR"]), sentencia, entorno, "respaldo", "/opt/oracle/respaldos", "hr"
     )
 
     assert nombre == "RESPALDO"
     assert entorno.permisos == ["/opt/oracle/respaldos"]
     assert sentencia.sqls == [
         "CREATE DIRECTORY RESPALDO AS '/opt/oracle/respaldos'",
-        "GRANT READ, WRITE ON DIRECTORY RESPALDO TO SYSTEM",
+        "GRANT READ, WRITE ON DIRECTORY RESPALDO TO HR",
     ]
+
+
+@pytest.mark.parametrize("schema", [None, ""])
+def test_crear_directorio_sin_schema_no_ejecuta_ningun_grant(schema):
+    entorno = EntornoFalso()
+    sentencia = SentenciaFalsa()
+    consulta = ConsultaFalsa([])
+
+    crear_directorio(consulta, sentencia, entorno, "respaldo", "/opt/oracle/respaldos", schema)
+
+    assert entorno.permisos == ["/opt/oracle/respaldos"]
+    assert sentencia.sqls == ["CREATE DIRECTORY RESPALDO AS '/opt/oracle/respaldos'"]
+    assert not any("all_users" in sql for sql in consulta.sqls)
+
+
+@pytest.mark.parametrize(
+    "schema, texto", [("1mal", "schema"), ("hr", "HR")]
+)
+def test_crear_directorio_con_schema_invalido_o_inexistente_no_toca_entorno_ni_sentencias(schema, texto):
+    entorno = EntornoFalso()
+    sentencia = SentenciaFalsa()
+
+    with pytest.raises(DirectorioInvalido) as error:
+        crear_directorio(ConsultaFalsa([]), sentencia, entorno, "respaldo", "/opt/r", schema)
+
+    assert texto in str(error.value)
+    assert entorno.permisos == [] and sentencia.sqls == []
 
 
 def test_crear_directorio_comprueba_duplicado_en_all_directories_sin_grants():
@@ -150,7 +180,7 @@ def test_crear_directorio_comprueba_duplicado_en_all_directories_sin_grants():
     sentencia = SentenciaFalsa()
 
     with pytest.raises(DirectorioInvalido):
-        crear_directorio(consulta, sentencia, entorno, "SYSTEM", "respaldo", "/opt/r")
+        crear_directorio(consulta, sentencia, entorno, "respaldo", "/opt/r")
 
     assert "all_directories" in consulta.sqls[0]
     assert "all_tab_privs" not in consulta.sqls[0]
@@ -166,7 +196,7 @@ def test_crear_directorio_invalido_no_toca_entorno_ni_sentencias(nombre, ruta, t
     sentencia = SentenciaFalsa()
 
     with pytest.raises(DirectorioInvalido) as error:
-        crear_directorio(ConsultaFalsa([]), sentencia, entorno, "SYSTEM", nombre, ruta)
+        crear_directorio(ConsultaFalsa([]), sentencia, entorno, nombre, ruta)
 
     assert texto in str(error.value)
     assert entorno.permisos == [] and sentencia.sqls == []
@@ -176,7 +206,7 @@ def test_crear_directorio_valida_la_ruta_con_el_tipo_del_entorno():
     entorno = EntornoFalso()
     entorno.tipo_ruta = PureWindowsPath
 
-    crear_directorio(ConsultaFalsa([]), SentenciaFalsa(), entorno, "SYSTEM", "r", "C:\\respaldos")
+    crear_directorio(ConsultaFalsa([]), SentenciaFalsa(), entorno, "r", "C:\\respaldos")
 
     assert entorno.permisos == ["C:\\respaldos"]
 
@@ -186,7 +216,7 @@ def test_crear_directorio_si_fallan_los_permisos_no_ejecuta_sentencias():
     sentencia = SentenciaFalsa()
 
     with pytest.raises(OperacionEntornoFallida):
-        crear_directorio(ConsultaFalsa([]), sentencia, entorno, "SYSTEM", "r", "/opt/r")
+        crear_directorio(ConsultaFalsa([]), sentencia, entorno, "r", "/opt/r")
 
     assert sentencia.sqls == []
 
