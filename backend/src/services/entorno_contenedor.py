@@ -1,9 +1,10 @@
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from pathlib import PurePath, PurePosixPath
 from uuid import uuid4
 
 from src.services.entorno_oracle import (
     ArchivoNoLegible,
+    ComandoHerramienta,
     EntornoOracle,
     HerramientaNoDisponible,
     OperacionEntornoFallida,
@@ -34,30 +35,21 @@ class EntornoContenedor(EntornoOracle):
             raise ArchivoNoLegible(salida.texto)
         return salida.texto
 
-    def ejecutar_herramienta(
-        self,
-        nombre: str,
-        args: Callable[[str], list[str]],
-        script: str,
-        *,
-        prefijo: str,
-        extension: str = "",
-        variables: Mapping[str, str] | None = None,
-    ) -> Salida:
-        ruta = f"/tmp/{prefijo}_{uuid4().hex}{extension}"
+    def ejecutar(self, comando: ComandoHerramienta) -> Salida:
+        ruta = f"/tmp/{comando.prefijo}_{uuid4().hex}{comando.extension}"
         docker = [self._cli, "exec", self._contenedor]
-        entorno = [f"{clave}={valor}" for clave, valor in (variables or {}).items()]
+        entorno = [f"{clave}={valor}" for clave, valor in (comando.variables or {}).items()]
         prefijo_env = ["env", *entorno] if entorno else []
 
         self._ejecutar(
             [self._cli, "exec", "-i", self._contenedor, "sh", "-c", f"umask 077; cat > {ruta}"],
-            entrada=script,
+            entrada=comando.script,
         )
         try:
-            salida = self._ejecutar([*docker, *prefijo_env, nombre, *args(ruta)])
+            salida = self._ejecutar([*docker, *prefijo_env, comando.nombre, *comando.args(ruta)])
             # 127 de exec: la herramienta no existe dentro del contenedor
             if salida.codigo == 127:
-                raise HerramientaNoDisponible(nombre)
+                raise HerramientaNoDisponible(comando.nombre)
             return salida
         finally:
             self._ejecutar([*docker, "rm", "-f", ruta])

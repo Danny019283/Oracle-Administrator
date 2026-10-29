@@ -10,6 +10,18 @@ class Salida:
     texto: str
 
 
+@dataclass(frozen=True)
+class ComandoHerramienta:
+    """Comando: una herramienta de Oracle lista para ejecutarse, con su script temporal."""
+
+    nombre: str
+    args: Callable[[str], list[str]]
+    script: str
+    prefijo: str
+    extension: str = ""
+    variables: Mapping[str, str] | None = None
+
+
 class OperacionEntornoFallida(Exception):
     """Una operación del entorno terminó con error; el mensaje es la salida del comando."""
 
@@ -41,6 +53,10 @@ class EntornoOracle(ABC):
     def leer_archivo(self, ruta: PurePath) -> str: ...
 
     @abstractmethod
+    def ejecutar(self, comando: ComandoHerramienta) -> Salida:
+        """Escribe `comando.script` en un temporal privado (sin que aparezca en los argumentos
+        del proceso), ejecuta `comando.nombre` con `comando.args(ruta_del_temporal)` y siempre lo borra."""
+
     def ejecutar_herramienta(
         self,
         nombre: str,
@@ -51,5 +67,4 @@ class EntornoOracle(ABC):
         extension: str = "",
         variables: Mapping[str, str] | None = None,
     ) -> Salida:
-        """Escribe `script` en un temporal privado (sin que aparezca en los argumentos
-        del proceso), ejecuta `nombre` con `args(ruta_del_temporal)` y siempre lo borra."""
+        return self.ejecutar(ComandoHerramienta(nombre, args, script, prefijo, extension, variables))

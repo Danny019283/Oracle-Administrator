@@ -30,17 +30,15 @@ class EntornoFalso(EntornoOracle):
             raise ArchivoNoLegible(str(ruta))
         return self.log
 
-    def ejecutar_herramienta(
-        self, nombre, args, script, *, prefijo, extension="", variables=None
-    ):
+    def ejecutar(self, comando):
         self.herramientas.append(
             {
-                "nombre": nombre,
-                "args": args(RUTA_TEMPORAL),
-                "script": script,
-                "prefijo": prefijo,
-                "extension": extension,
-                "variables": variables,
+                "nombre": comando.nombre,
+                "args": comando.args(RUTA_TEMPORAL),
+                "script": comando.script,
+                "prefijo": comando.prefijo,
+                "extension": comando.extension,
+                "variables": comando.variables,
             }
         )
         if self.salidas:

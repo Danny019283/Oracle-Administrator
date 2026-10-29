@@ -1,10 +1,10 @@
 import os
 import tempfile
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from pathlib import Path, PurePath, PureWindowsPath
 from uuid import uuid4
 
-from src.services.entorno_oracle import ArchivoNoLegible, EntornoOracle, Salida
+from src.services.entorno_oracle import ArchivoNoLegible, ComandoHerramienta, EntornoOracle, Salida
 from src.services.procesos import ejecutar_proceso
 
 
@@ -70,19 +70,10 @@ class EntornoLocal(EntornoOracle):
         except OSError as error:
             raise ArchivoNoLegible(str(error)) from error
 
-    def ejecutar_herramienta(
-        self,
-        nombre: str,
-        args: Callable[[str], list[str]],
-        script: str,
-        *,
-        prefijo: str,
-        extension: str = "",
-        variables: Mapping[str, str] | None = None,
-    ) -> Salida:
-        ruta = self.tipo_ruta(tempfile.gettempdir()) / f"{prefijo}_{uuid4().hex}{extension}"
+    def ejecutar(self, comando: ComandoHerramienta) -> Salida:
+        ruta = self.tipo_ruta(tempfile.gettempdir()) / f"{comando.prefijo}_{uuid4().hex}{comando.extension}"
         try:
-            self._sistema.escribir_privado(ruta, script)
-            return self._ejecutar([nombre, *args(str(ruta))], variables=variables)
+            self._sistema.escribir_privado(ruta, comando.script)
+            return self._ejecutar([comando.nombre, *comando.args(str(ruta))], variables=comando.variables)
         finally:
             self._sistema.borrar(ruta)
