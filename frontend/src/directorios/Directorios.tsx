@@ -5,6 +5,8 @@ import { BotonConfirmar, MostrarAviso, Tabla } from '../admin/Avisos'
 
 type Directorio = { nombre: string; ruta: string }
 
+type Usuario = { usuario: string }
+
 type Mensaje = { mensaje: string }
 
 export function Directorios({ token }: { token: string }) {
@@ -16,6 +18,7 @@ export function Directorios({ token }: { token: string }) {
   const [nombre, setNombre] = useState('')
   const [ruta, setRuta] = useState('')
   const [schema, setSchema] = useState('')
+  const [usuarios, setUsuarios] = useState<Usuario[]>([])
 
   const cargar = useCallback(
     () =>
@@ -37,7 +40,12 @@ export function Directorios({ token }: { token: string }) {
     setNombre('')
     setRuta('')
     setSchema('')
+    setUsuarios([])
     setCreando(true)
+    void llamar<{ usuarios: Usuario[] }>(token, '/seguridad/usuarios').then((r) => {
+      if (r.ok) setUsuarios(r.datos.usuarios)
+      else setAviso(r.aviso)
+    })
   }
 
   const abrirEditar = (d: Directorio) => {
@@ -48,11 +56,11 @@ export function Directorios({ token }: { token: string }) {
   }
 
   // Crear y editar comparten formulario: editar solo envía la ruta y el nombre queda de solo lectura.
-  // El schema solo se envía al crear y únicamente si tiene valor.
+  // El schema solo se envía al crear y únicamente si se eligió un usuario (la opción vacía es «Sin schema»).
   const enviar = async () => {
     const r = editando
       ? await llamar<Mensaje>(token, `/directorios/${encodeURIComponent(nombre)}`, { ruta }, 'PUT')
-      : await llamar<Mensaje>(token, '/directorios', { nombre, ruta, ...(schema.trim() && { schema: schema.trim() }) })
+      : await llamar<Mensaje>(token, '/directorios', { nombre, ruta, ...(schema && { schema }) })
     if (!r.ok) return setAviso(r.aviso)
     await cargar()
     setCreando(false)
@@ -99,7 +107,14 @@ export function Directorios({ token }: { token: string }) {
           {!editando && (
             <label className="campo">
               Schema (opcional)
-              <input value={schema} onChange={(e) => setSchema(e.target.value)} />
+              <select value={schema} onChange={(e) => setSchema(e.target.value)}>
+                <option value="">Sin schema</option>
+                {usuarios.map((u) => (
+                  <option key={u.usuario} value={u.usuario}>
+                    {u.usuario}
+                  </option>
+                ))}
+              </select>
             </label>
           )}
         </div>

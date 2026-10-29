@@ -72,11 +72,23 @@ describe('crear directorio', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Crear' }))
   }
 
+  const USUARIOS = ok({ usuarios: [{ usuario: 'HR', estado: 'OPEN' }, { usuario: 'SCOTT', estado: 'OPEN' }] })
+  let usuariosFalso: ReturnType<typeof vi.fn>
+
+  // /seguridad/usuarios se responde aparte para que fetchFalso solo cuente las llamadas de directorios.
   const respuestas = (...siguientes: unknown[]) => {
     const cola = [...siguientes]
     fetchFalso = vi.fn(async () => cola.shift())
-    vi.stubGlobal('fetch', fetchFalso)
+    usuariosFalso = vi.fn(async () => usuarios)
+    vi.stubGlobal('fetch', (url: string, opciones?: unknown) =>
+      url === '/seguridad/usuarios' ? usuariosFalso(url, opciones) : fetchFalso(url, opciones),
+    )
   }
+
+  let usuarios: unknown
+  beforeEach(() => {
+    usuarios = USUARIOS
+  })
 
   const lista = ok({ directorios: [DATA_PUMP, RESPALDOS], ejemplos_ruta: ['/opt/oracle/respaldos', 'C:\\respaldos'] })
   const fallo = (status: number, cuerpo: unknown) => ({ ok: false, status, json: async () => cuerpo })
@@ -139,40 +151,59 @@ describe('crear directorio', () => {
     expect(fetchFalso).toHaveBeenCalledTimes(2)
   })
 
-  it('el formulario de crear ofrece el campo opcional Schema', async () => {
+  it('Schema es una lista con «Sin schema» por defecto y un elemento por usuario', async () => {
     respuestas(lista)
     await abrirFormulario()
 
-    expect(await screen.findByLabelText(/Schema/)).not.toBeNull()
+    const campo = (await screen.findByLabelText(/Schema/)) as HTMLSelectElement
+    expect(campo.tagName).toBe('SELECT')
+    await screen.findByRole('option', { name: 'HR' })
+    expect(Array.from(campo.options).map((o) => o.textContent)).toEqual(['Sin schema', 'HR', 'SCOTT'])
+    expect(campo.value).toBe('')
+    expect(usuariosFalso).toHaveBeenCalledTimes(1)
   })
 
-  it.each(['', '   '])('con el schema %j vacío el POST no lleva schema', async (schema) => {
+  it('por defecto el POST no lleva schema', async () => {
     respuestas(lista, ok({ mensaje: 'Directorio NUEVO creado' }), lista)
     await abrirFormulario()
-    fireEvent.change(await screen.findByLabelText(/Schema/), { target: { value: schema } })
+    await screen.findByRole('option', { name: 'HR' })
     await rellenarYEnviar()
 
     await waitFor(() => expect(fetchFalso).toHaveBeenCalledTimes(3))
     expect(JSON.parse(fetchFalso.mock.calls[1][1].body)).toEqual({ nombre: 'nuevo', ruta: '/opt/oracle/nuevo' })
   })
 
-  it('con schema escrito el POST lleva nombre, ruta y schema', async () => {
+  it('al elegir un usuario el POST lleva nombre, ruta y schema', async () => {
     respuestas(lista, ok({ mensaje: 'Directorio NUEVO creado' }), lista)
     await abrirFormulario()
-    fireEvent.change(await screen.findByLabelText(/Schema/), { target: { value: 'HR' } })
+    await screen.findByRole('option', { name: 'HR' })
+    fireEvent.change(screen.getByLabelText(/Schema/), { target: { value: 'HR' } })
     await rellenarYEnviar()
 
     await waitFor(() => expect(fetchFalso).toHaveBeenCalledTimes(3))
     expect(JSON.parse(fetchFalso.mock.calls[1][1].body)).toEqual({ nombre: 'nuevo', ruta: '/opt/oracle/nuevo', schema: 'HR' })
   })
 
-  it('ante 422 por schema inválido o inexistente muestra el aviso y no recarga la lista', async () => {
-    respuestas(lista, fallo(422, { errores: ['El schema NOEXISTE no existe'] }))
+  it('si falla la carga de usuarios muestra el aviso y se puede crear sin schema', async () => {
+    respuestas(lista, ok({ mensaje: 'Directorio NUEVO creado' }), lista)
+    usuarios = fallo(500, { mensaje: 'No se pudo listar los usuarios' })
     await abrirFormulario()
-    fireEvent.change(await screen.findByLabelText(/Schema/), { target: { value: 'NOEXISTE' } })
+
+    expect((await screen.findByRole('alert')).textContent).toContain('No se pudo listar los usuarios')
     await rellenarYEnviar()
 
-    expect((await screen.findByRole('alert')).textContent).toContain('El schema NOEXISTE no existe')
+    await waitFor(() => expect(fetchFalso).toHaveBeenCalledTimes(3))
+    expect(JSON.parse(fetchFalso.mock.calls[1][1].body)).toEqual({ nombre: 'nuevo', ruta: '/opt/oracle/nuevo' })
+  })
+
+  it('ante 422 por schema inválido o inexistente muestra el aviso y no recarga la lista', async () => {
+    respuestas(lista, fallo(422, { errores: ['El schema HR no existe'] }))
+    await abrirFormulario()
+    await screen.findByRole('option', { name: 'HR' })
+    fireEvent.change(screen.getByLabelText(/Schema/), { target: { value: 'HR' } })
+    await rellenarYEnviar()
+
+    expect((await screen.findByRole('alert')).textContent).toContain('El schema HR no existe')
     expect(fetchFalso).toHaveBeenCalledTimes(2)
   })
 })
