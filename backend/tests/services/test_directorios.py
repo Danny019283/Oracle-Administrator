@@ -12,6 +12,7 @@ from src.services.directorios import (
     SinDirectorios,
     crear_directorio,
     editar_directorio,
+    eliminar_directorio,
     ejemplos_ruta,
     listar_directorios,
     listar_todos_directorios,
@@ -245,3 +246,28 @@ def test_editar_directorio_si_fallan_los_permisos_no_ejecuta_sentencias():
         editar_directorio(ConsultaFalsa([("R", "/x")]), sentencia, entorno, "r", "/opt/r")
 
     assert sentencia.sqls == []
+
+
+def test_eliminar_directorio_ejecuta_solo_drop_directory():
+    sentencia = SentenciaFalsa()
+
+    eliminar_directorio(ConsultaFalsa([("RESPALDO", "/x")]), sentencia, "respaldo")
+
+    assert sentencia.sqls == ["DROP DIRECTORY RESPALDO"]
+
+
+@pytest.mark.parametrize(
+    "nombre, filas, excepcion, texto",
+    [
+        ("1mal", [("R", "/x")], DirectorioInvalido, ""),
+        ("otro", [("R", "/x")], DirectorioNoEncontrado, "otro".upper()),
+        ("data_pump_dir", [("DATA_PUMP_DIR", "/x")], DirectorioInvalido, "no se puede editar ni eliminar"),
+    ],
+)
+def test_eliminar_directorio_con_error_no_ejecuta_sentencias(nombre, filas, excepcion, texto):
+    sentencia = SentenciaFalsa()
+
+    with pytest.raises(excepcion) as error:
+        eliminar_directorio(ConsultaFalsa(filas), sentencia, nombre)
+
+    assert texto in str(error.value) and sentencia.sqls == []

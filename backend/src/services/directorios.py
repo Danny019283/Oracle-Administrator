@@ -112,6 +112,13 @@ def crear_directorio(
     return nombre
 
 
+def _exigir_modificable(consulta: Consulta, nombre: str) -> None:
+    if nombre not in {d.nombre for d in listar_todos_directorios(consulta)}:
+        raise DirectorioNoEncontrado(f"No existe el directorio {nombre}")
+    if nombre in DIRECTORIOS_DEL_SISTEMA:
+        raise DirectorioInvalido([f"El directorio {nombre} no se puede editar ni eliminar"])
+
+
 def editar_directorio(
     consulta: Consulta,
     sentencia: Sentencia,
@@ -127,10 +134,16 @@ def editar_directorio(
     errores += validar_ruta(ruta, entorno.tipo_ruta)
     if errores:
         raise DirectorioInvalido(errores)
-    if nombre not in {d.nombre for d in listar_todos_directorios(consulta)}:
-        raise DirectorioNoEncontrado(f"No existe el directorio {nombre}")
-    if nombre in DIRECTORIOS_DEL_SISTEMA:
-        raise DirectorioInvalido([f"El directorio {nombre} no se puede editar ni eliminar"])
+    _exigir_modificable(consulta, nombre)
 
     entorno.dar_permisos_a_oracle(ruta)
     sentencia(f"CREATE OR REPLACE DIRECTORY {nombre} AS '{ruta}'")
+
+
+def eliminar_directorio(consulta: Consulta, sentencia: Sentencia, nombre: str) -> None:
+    try:
+        nombre = normalizar_identificador(nombre, "el directorio")
+    except IdentificadorInvalido as error:
+        raise DirectorioInvalido([str(error)])
+    _exigir_modificable(consulta, nombre)
+    sentencia(f"DROP DIRECTORY {nombre}")
