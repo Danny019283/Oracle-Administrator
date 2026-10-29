@@ -112,6 +112,22 @@ def test_crea_tablespace_permanente_en_la_carpeta_de_datafiles():
     ]
 
 
+def test_crea_tablespace_en_carpeta_estilo_windows():
+    carpeta = "C:\\APP\\ORADATA\\XE\\"
+
+    def consulta(sql, params=None):
+        # Oracle solo devuelve la carpeta si la consulta corta también en «\»
+        return [(carpeta if r"INSTR(file_name,'\',-1)" in sql else "",)]
+
+    sentencia = SentenciaFalsa()
+
+    tablespaces.crear_tablespace(consulta, sentencia, "ventas", "PERMANENT", "ventas01.dbf", "100M")
+
+    assert sentencia.sqls[0].startswith(
+        "CREATE TABLESPACE VENTAS DATAFILE 'C:\\APP\\ORADATA\\XE\\ventas01.dbf' SIZE 100M"
+    )
+
+
 def test_crea_tablespace_temporal_con_tempfile_y_sin_autoextend():
     sentencia = SentenciaFalsa()
 

@@ -67,7 +67,7 @@ def test_lista_tablespaces_con_uso_real(cliente, admin):
     assert {"SYSTEM", "SYSAUX", "USERS", "TEMP"} <= set(nombres)
     assert nombres["TEMP"]["tipo"] == "TEMPORARY"
     assert nombres["USERS"]["tamano_mb"] > 0
-    assert respuesta.json()["carpeta"].endswith("/")
+    assert respuesta.json()["carpeta"].endswith(("/", "\\"))
 
 
 @pytest.mark.integration

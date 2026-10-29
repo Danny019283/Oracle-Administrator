@@ -41,8 +41,8 @@ ORDER BY 1
 
 # Los archivos nuevos se crean en la misma carpeta que los del tablespace SYSTEM,
 # así el administrador solo elige el nombre del archivo, nunca una ruta.
-SQL_CARPETA_DATAFILES = """
-SELECT SUBSTR(file_name, 1, INSTR(file_name, '/', -1))
+SQL_CARPETA_DATAFILES = r"""
+SELECT SUBSTR(file_name, 1, GREATEST(INSTR(file_name,'/',-1), INSTR(file_name,'\',-1)))
 FROM dba_data_files WHERE tablespace_name = 'SYSTEM'
 FETCH FIRST 1 ROWS ONLY
 """
