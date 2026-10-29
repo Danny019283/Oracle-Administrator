@@ -129,53 +129,82 @@ class EjecutorSecuencia:
         return self.salidas.pop(0)
 
 
-def salida_sc(cuenta):
-    return Salida(codigo=0, texto=f"[SC] QueryServiceConfig CORRECTO\n\n        TIPO               : 10  WIN32_OWN_PROCESS\n        SERVICE_START_NAME : {cuenta}\n")
+CLAVE = "HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\OracleServiceORCL"
+CONSULTA_REG = ["reg", "query", r"HKLM\SYSTEM\CurrentControlSet\Services\OracleServiceORCL", "/v", "ObjectName"]
+
+
+def salida_reg(cuenta):
+    return Salida(codigo=0, texto=f"\n{CLAVE}\n    ObjectName    REG_SZ    {cuenta}\n\n")
 
 
 RUTA = PureWindowsPath(r"C:\respaldos")
 
 
 @pytest.mark.parametrize(
-    "cuenta_sc, cuenta_icacls",
+    "cuenta_reg, cuenta_icacls",
     [
         ("oracleuser", "oracleuser"),
         ("LocalSystem", "SYSTEM"),
-        (r"NT SERVICE\OracleServiceORCL", r"NT SERVICE\OracleServiceORCL"),
         (r"DOMINIO\svc_oracle", r"DOMINIO\svc_oracle"),
     ],
 )
-def test_dar_permisos_otorga_modificar_a_la_cuenta_del_servicio(cuenta_sc, cuenta_icacls):
-    ejecutor = EjecutorSecuencia(salida_sc(cuenta_sc), Salida(codigo=0, texto="ok"))
+def test_dar_permisos_otorga_modificar_a_la_cuenta_del_servicio(cuenta_reg, cuenta_icacls):
+    ejecutor = EjecutorSecuencia(salida_reg(cuenta_reg), Salida(codigo=0, texto="ok"))
 
     SistemaWindows().dar_permisos_a_oracle(RUTA, "ORCL", ejecutor)
 
     assert ejecutor.llamadas == [
-        ["sc", "qc", "OracleServiceORCL"],
+        CONSULTA_REG,
         ["icacls", str(RUTA), "/grant", f"{cuenta_icacls}:(OI)(CI)M"],
     ]
 
 
-def test_dar_permisos_con_sc_fallido_no_ejecuta_icacls():
-    ejecutor = EjecutorSecuencia(Salida(codigo=1060, texto="El servicio no existe"))
+def test_dar_permisos_con_la_salida_real_de_reg_conserva_el_espacio_interno_de_la_cuenta():
+    texto = (
+        "\r\nHKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\OracleServiceXE\r\n"
+        "    ObjectName    REG_SZ    NT SERVICE\\OracleServiceXE\r\n\r\n"
+    )
+    ejecutor = EjecutorSecuencia(Salida(codigo=0, texto=texto), Salida(codigo=0, texto="ok"))
 
-    with pytest.raises(OperacionEntornoFallida, match="sc qc.*El servicio no existe"):
+    SistemaWindows().dar_permisos_a_oracle(RUTA, "XE", ejecutor)
+
+    assert ejecutor.llamadas[1] == ["icacls", str(RUTA), "/grant", r"NT SERVICE\OracleServiceXE:(OI)(CI)M"]
+
+
+def test_dar_permisos_con_reg_fallido_no_ejecuta_icacls():
+    ejecutor = EjecutorSecuencia(Salida(codigo=1, texto="ERROR: El sistema no puede encontrar la clave"))
+
+    with pytest.raises(OperacionEntornoFallida, match="reg query.*El sistema no puede encontrar la clave"):
         SistemaWindows().dar_permisos_a_oracle(RUTA, "ORCL", ejecutor)
 
     assert len(ejecutor.llamadas) == 1
 
 
-def test_dar_permisos_sin_cuenta_en_la_salida_de_sc_falla_con_mensaje_claro():
-    ejecutor = EjecutorSecuencia(Salida(codigo=0, texto="[SC] QueryServiceConfig CORRECTO"))
+def test_dar_permisos_sin_objectname_en_la_salida_de_reg_falla_con_mensaje_claro():
+    ejecutor = EjecutorSecuencia(Salida(codigo=0, texto=f"\n{CLAVE}\n"))
 
-    with pytest.raises(OperacionEntornoFallida, match="SERVICE_START_NAME.*sc qc OracleServiceORCL"):
+    with pytest.raises(OperacionEntornoFallida, match="reg query"):
         SistemaWindows().dar_permisos_a_oracle(RUTA, "ORCL", ejecutor)
 
     assert len(ejecutor.llamadas) == 1
+
+
+def test_dar_permisos_ignora_cabeceras_y_mensajes_en_espanol_de_reg():
+    texto = (
+        "Fin de la búsqueda: 1 coincidencias encontradas.\n"
+        f"{CLAVE}\n"
+        "    ObjectName    REG_SZ    LocalSystem\n"
+        "ERROR: Acceso denegado a otra clave REG_SZ\n"
+    )
+    ejecutor = EjecutorSecuencia(Salida(codigo=0, texto=texto), Salida(codigo=0, texto="ok"))
+
+    SistemaWindows().dar_permisos_a_oracle(RUTA, "ORCL", ejecutor)
+
+    assert ejecutor.llamadas[1] == ["icacls", str(RUTA), "/grant", "SYSTEM:(OI)(CI)M"]
 
 
 def test_dar_permisos_con_icacls_fallido_lanza_error_con_su_salida():
-    ejecutor = EjecutorSecuencia(salida_sc("LocalSystem"), Salida(codigo=5, texto="Acceso denegado"))
+    ejecutor = EjecutorSecuencia(salida_reg("LocalSystem"), Salida(codigo=5, texto="Acceso denegado"))
 
     with pytest.raises(OperacionEntornoFallida, match="icacls.*Acceso denegado"):
         SistemaWindows().dar_permisos_a_oracle(RUTA, "ORCL", ejecutor)
