@@ -1,10 +1,17 @@
 import os
+import re
 import tempfile
 from collections.abc import Callable
 from pathlib import Path, PurePath, PureWindowsPath
 from uuid import uuid4
 
-from src.services.entorno_oracle import ArchivoNoLegible, ComandoHerramienta, EntornoOracle, Salida
+from src.services.entorno_oracle import (
+    ArchivoNoLegible,
+    ComandoHerramienta,
+    EntornoOracle,
+    OperacionEntornoFallida,
+    Salida,
+)
 from src.services.procesos import ejecutar_proceso
 
 
@@ -54,7 +61,19 @@ class SistemaWindows:
         self._a_path(ruta).unlink(missing_ok=True)
 
     def dar_permisos_a_oracle(self, ruta: PurePath, sid: str, ejecutar: Callable[..., Salida]) -> None:
-        pass
+        servicio = f"OracleService{sid}"
+        salida = ejecutar(["sc", "qc", servicio])
+        if salida.codigo != 0:
+            raise OperacionEntornoFallida(f"Falló «sc qc {servicio}»: {salida.texto}")
+        coincidencia = re.search(r"SERVICE_START_NAME\s*:\s*(\S.*?)\s*$", salida.texto, re.MULTILINE)
+        if not coincidencia:
+            raise OperacionEntornoFallida(
+                f"No se pudo leer SERVICE_START_NAME de la salida de «sc qc {servicio}»: {salida.texto}"
+            )
+        cuenta = "SYSTEM" if coincidencia[1] == "LocalSystem" else coincidencia[1]
+        salida = ejecutar(["icacls", str(ruta), "/grant", f"{cuenta}:(OI)(CI)M"])
+        if salida.codigo != 0:
+            raise OperacionEntornoFallida(f"Falló «icacls {ruta}»: {salida.texto}")
 
 
 class EntornoLocal(EntornoOracle):

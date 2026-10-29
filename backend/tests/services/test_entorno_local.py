@@ -47,7 +47,7 @@ def test_crear_carpeta_no_falla_si_ya_existe(tmp_path):
     assert tmp_path.is_dir()
 
 
-@pytest.mark.parametrize("sistema", [SistemaLinux(), SistemaWindows()])
+@pytest.mark.parametrize("sistema", [SistemaLinux()])
 def test_dar_permisos_a_oracle_con_sistema_sin_comportamiento_todavia_no_hace_nada(sistema, tmp_path):
     llamadas = []
     entorno_local = EntornoLocal(sistema, ejecutar=lambda *args, **kwargs: llamadas.append(args))

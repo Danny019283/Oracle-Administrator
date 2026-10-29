@@ -4,7 +4,7 @@ from pathlib import PureWindowsPath
 import pytest
 
 from src.services.entorno_local import EntornoLocal, SistemaWindows
-from src.services.entorno_oracle import ComandoHerramienta, Salida
+from src.services.entorno_oracle import ComandoHerramienta, OperacionEntornoFallida, Salida
 
 TEMPORAL = r"C:\Users\ana\AppData\Local\Temp"
 
@@ -115,3 +115,67 @@ def test_borra_el_temporal_al_terminar_y_si_el_proceso_falla(estado):
     local.ejecutar(ComandoHerramienta("rman", lambda r: [f"@{r}"], "x", prefijo="rman"))
     assert proceso.contenido == "x"
     assert estado["archivos"] == {}
+
+
+class EjecutorSecuencia:
+    """Ejecutor falso: devuelve las salidas dadas en orden y anota los argumentos de cada llamada."""
+
+    def __init__(self, *salidas):
+        self.salidas = list(salidas)
+        self.llamadas = []
+
+    def __call__(self, args, entrada=None, variables=None):
+        self.llamadas.append(args)
+        return self.salidas.pop(0)
+
+
+def salida_sc(cuenta):
+    return Salida(codigo=0, texto=f"[SC] QueryServiceConfig CORRECTO\n\n        TIPO               : 10  WIN32_OWN_PROCESS\n        SERVICE_START_NAME : {cuenta}\n")
+
+
+RUTA = PureWindowsPath(r"C:\respaldos")
+
+
+@pytest.mark.parametrize(
+    "cuenta_sc, cuenta_icacls",
+    [
+        ("oracleuser", "oracleuser"),
+        ("LocalSystem", "SYSTEM"),
+        (r"NT SERVICE\OracleServiceORCL", r"NT SERVICE\OracleServiceORCL"),
+        (r"DOMINIO\svc_oracle", r"DOMINIO\svc_oracle"),
+    ],
+)
+def test_dar_permisos_otorga_modificar_a_la_cuenta_del_servicio(cuenta_sc, cuenta_icacls):
+    ejecutor = EjecutorSecuencia(salida_sc(cuenta_sc), Salida(codigo=0, texto="ok"))
+
+    SistemaWindows().dar_permisos_a_oracle(RUTA, "ORCL", ejecutor)
+
+    assert ejecutor.llamadas == [
+        ["sc", "qc", "OracleServiceORCL"],
+        ["icacls", str(RUTA), "/grant", f"{cuenta_icacls}:(OI)(CI)M"],
+    ]
+
+
+def test_dar_permisos_con_sc_fallido_no_ejecuta_icacls():
+    ejecutor = EjecutorSecuencia(Salida(codigo=1060, texto="El servicio no existe"))
+
+    with pytest.raises(OperacionEntornoFallida, match="sc qc.*El servicio no existe"):
+        SistemaWindows().dar_permisos_a_oracle(RUTA, "ORCL", ejecutor)
+
+    assert len(ejecutor.llamadas) == 1
+
+
+def test_dar_permisos_sin_cuenta_en_la_salida_de_sc_falla_con_mensaje_claro():
+    ejecutor = EjecutorSecuencia(Salida(codigo=0, texto="[SC] QueryServiceConfig CORRECTO"))
+
+    with pytest.raises(OperacionEntornoFallida, match="SERVICE_START_NAME.*sc qc OracleServiceORCL"):
+        SistemaWindows().dar_permisos_a_oracle(RUTA, "ORCL", ejecutor)
+
+    assert len(ejecutor.llamadas) == 1
+
+
+def test_dar_permisos_con_icacls_fallido_lanza_error_con_su_salida():
+    ejecutor = EjecutorSecuencia(salida_sc("LocalSystem"), Salida(codigo=5, texto="Acceso denegado"))
+
+    with pytest.raises(OperacionEntornoFallida, match="icacls.*Acceso denegado"):
+        SistemaWindows().dar_permisos_a_oracle(RUTA, "ORCL", ejecutor)
