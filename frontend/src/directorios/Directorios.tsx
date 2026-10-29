@@ -15,6 +15,7 @@ export function Directorios({ token }: { token: string }) {
   const [editando, setEditando] = useState(false)
   const [nombre, setNombre] = useState('')
   const [ruta, setRuta] = useState('')
+  const [schema, setSchema] = useState('')
 
   const cargar = useCallback(
     () =>
@@ -35,6 +36,7 @@ export function Directorios({ token }: { token: string }) {
     setAviso(null)
     setNombre('')
     setRuta('')
+    setSchema('')
     setCreando(true)
   }
 
@@ -46,10 +48,11 @@ export function Directorios({ token }: { token: string }) {
   }
 
   // Crear y editar comparten formulario: editar solo envía la ruta y el nombre queda de solo lectura.
+  // El schema solo se envía al crear y únicamente si tiene valor.
   const enviar = async () => {
     const r = editando
       ? await llamar<Mensaje>(token, `/directorios/${encodeURIComponent(nombre)}`, { ruta }, 'PUT')
-      : await llamar<Mensaje>(token, '/directorios', { nombre, ruta })
+      : await llamar<Mensaje>(token, '/directorios', { nombre, ruta, ...(schema.trim() && { schema: schema.trim() }) })
     if (!r.ok) return setAviso(r.aviso)
     await cargar()
     setCreando(false)
@@ -93,6 +96,12 @@ export function Directorios({ token }: { token: string }) {
             <input value={ruta} onChange={(e) => setRuta(e.target.value)} />
           </label>
           <p className="ayuda">Por ejemplo {ejemplos.join(' o ')}</p>
+          {!editando && (
+            <label className="campo">
+              Schema (opcional)
+              <input value={schema} onChange={(e) => setSchema(e.target.value)} />
+            </label>
+          )}
         </div>
 
         <button type="button" className="accion" onClick={() => void enviar()}>

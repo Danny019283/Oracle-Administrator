@@ -138,6 +138,43 @@ describe('crear directorio', () => {
     expect(alerta).toContain('chown: sin permiso')
     expect(fetchFalso).toHaveBeenCalledTimes(2)
   })
+
+  it('el formulario de crear ofrece el campo opcional Schema', async () => {
+    respuestas(lista)
+    await abrirFormulario()
+
+    expect(await screen.findByLabelText(/Schema/)).not.toBeNull()
+  })
+
+  it.each(['', '   '])('con el schema %j vacío el POST no lleva schema', async (schema) => {
+    respuestas(lista, ok({ mensaje: 'Directorio NUEVO creado' }), lista)
+    await abrirFormulario()
+    fireEvent.change(await screen.findByLabelText(/Schema/), { target: { value: schema } })
+    await rellenarYEnviar()
+
+    await waitFor(() => expect(fetchFalso).toHaveBeenCalledTimes(3))
+    expect(JSON.parse(fetchFalso.mock.calls[1][1].body)).toEqual({ nombre: 'nuevo', ruta: '/opt/oracle/nuevo' })
+  })
+
+  it('con schema escrito el POST lleva nombre, ruta y schema', async () => {
+    respuestas(lista, ok({ mensaje: 'Directorio NUEVO creado' }), lista)
+    await abrirFormulario()
+    fireEvent.change(await screen.findByLabelText(/Schema/), { target: { value: 'HR' } })
+    await rellenarYEnviar()
+
+    await waitFor(() => expect(fetchFalso).toHaveBeenCalledTimes(3))
+    expect(JSON.parse(fetchFalso.mock.calls[1][1].body)).toEqual({ nombre: 'nuevo', ruta: '/opt/oracle/nuevo', schema: 'HR' })
+  })
+
+  it('ante 422 por schema inválido o inexistente muestra el aviso y no recarga la lista', async () => {
+    respuestas(lista, fallo(422, { errores: ['El schema NOEXISTE no existe'] }))
+    await abrirFormulario()
+    fireEvent.change(await screen.findByLabelText(/Schema/), { target: { value: 'NOEXISTE' } })
+    await rellenarYEnviar()
+
+    expect((await screen.findByRole('alert')).textContent).toContain('El schema NOEXISTE no existe')
+    expect(fetchFalso).toHaveBeenCalledTimes(2)
+  })
 })
 
 describe('editar directorio', () => {
@@ -170,6 +207,14 @@ describe('editar directorio', () => {
     expect(nombre.readOnly || nombre.disabled).toBe(true)
     expect((screen.getByLabelText('Ruta de la carpeta') as HTMLInputElement).value).toBe('/opt/oracle/respaldos')
     expect(screen.getByText(/C:\\respaldos/)).not.toBeNull()
+  })
+
+  it('el formulario de editar no muestra el campo Schema', async () => {
+    respuestas(lista)
+    await abrirFormulario()
+
+    await screen.findByLabelText('Ruta de la carpeta')
+    expect(screen.queryByLabelText(/Schema/)).toBeNull()
   })
 
   it('al confirmar envía PUT /directorios/{nombre} solo con la ruta', async () => {
