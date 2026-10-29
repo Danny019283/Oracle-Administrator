@@ -1,14 +1,16 @@
 import json
 from pathlib import PureWindowsPath
 
+import oracledb
 import pytest
 from fastapi.testclient import TestClient
 
 from main import app
-from src.api.admin_comun import obtener_consulta_admin, responder
-from src.api.dependencias import obtener_entorno
+from src.api.admin_comun import obtener_consulta_admin, obtener_sentencia, responder
+from src.api.dependencias import obtener_conexion, obtener_entorno
 from src.services.directorios import DirectorioInvalido, DirectorioNoEncontrado
 from src.services.entorno_oracle import OperacionEntornoFallida
+from src.services.expdp_runner import Conexion
 from tests.services.entorno_falso import EntornoFalso
 
 CABECERAS = {
@@ -28,9 +30,22 @@ def cliente():
     app.dependency_overrides.clear()
 
 
-def usar(filas, entorno=None):
+class SentenciaFalsa:
+    def __init__(self, error=None):
+        self.sqls = []
+        self.error = error
+
+    def __call__(self, sql, params=None):
+        if self.error:
+            raise oracledb.DatabaseError(self.error)
+        self.sqls.append(sql)
+
+
+def usar(filas, entorno=None, sentencia=None):
     app.dependency_overrides[obtener_consulta_admin] = lambda: lambda sql, params=None: filas
     app.dependency_overrides[obtener_entorno] = lambda: entorno or EntornoFalso()
+    app.dependency_overrides[obtener_sentencia] = lambda: sentencia
+    app.dependency_overrides[obtener_conexion] = lambda: Conexion("SYSTEM", "s3creta!", "XEPDB1")
 
 
 def test_lista_los_directorios_con_nombre_y_ruta_y_los_ejemplos(cliente):
@@ -100,3 +115,71 @@ def test_responder_mapea_fallo_de_permisos_a_500_con_mensaje_explicacion_y_error
     assert cuerpo["mensaje"] == "No se pudieron dar permisos a Oracle sobre la carpeta"
     assert "debe existir en el contenedor" in cuerpo["explicacion"]
     assert cuerpo["error"] == "chown: no such file"
+
+
+def test_crear_directorio_da_permisos_ejecuta_create_y_grant_y_responde_200(cliente):
+    sentencia = SentenciaFalsa()
+    entorno = EntornoFalso()
+    usar([], entorno, sentencia)
+
+    respuesta = cliente.post(
+        "/directorios", json={"nombre": "backup", "ruta": "/opt/oracle/respaldos"}, headers=CABECERAS
+    )
+
+    assert respuesta.status_code == 200
+    assert respuesta.json() == {"mensaje": "Directorio BACKUP creado"}
+    assert [str(r) for r in entorno.permisos] == ["/opt/oracle/respaldos"]
+    assert sentencia.sqls == [
+        "CREATE DIRECTORY BACKUP AS '/opt/oracle/respaldos'",
+        "GRANT READ, WRITE ON DIRECTORY BACKUP TO SYSTEM",
+    ]
+
+
+def test_crear_directorio_invalido_responde_422_con_los_errores_y_no_ejecuta_nada(cliente):
+    sentencia = SentenciaFalsa()
+    entorno = EntornoFalso()
+    usar([], entorno, sentencia)
+
+    respuesta = cliente.post("/directorios", json={"nombre": "", "ruta": "relativa"}, headers=CABECERAS)
+
+    assert respuesta.status_code == 422
+    assert len(respuesta.json()["errores"]) == 2
+    assert sentencia.sqls == []
+    assert entorno.permisos == []
+
+
+def test_crear_directorio_duplicado_responde_422(cliente):
+    sentencia = SentenciaFalsa()
+    usar([("BACKUP", "/u01/otro")], sentencia=sentencia)
+
+    respuesta = cliente.post(
+        "/directorios", json={"nombre": "backup", "ruta": "/opt/oracle/respaldos"}, headers=CABECERAS
+    )
+
+    assert respuesta.status_code == 422
+    assert "BACKUP" in respuesta.json()["errores"][0]
+    assert sentencia.sqls == []
+
+
+def test_crear_directorio_con_fallo_de_permisos_responde_500_sin_ejecutar_sentencias(cliente):
+    sentencia = SentenciaFalsa()
+    usar([], EntornoFalso(fallo_permisos="chown: no such file"), sentencia)
+
+    respuesta = cliente.post(
+        "/directorios", json={"nombre": "backup", "ruta": "/opt/oracle/respaldos"}, headers=CABECERAS
+    )
+
+    assert respuesta.status_code == 500
+    assert respuesta.json()["error"] == "chown: no such file"
+    assert sentencia.sqls == []
+
+
+def test_crear_directorio_si_oracle_rechaza_explica_el_error(cliente):
+    usar([], sentencia=SentenciaFalsa(error="ORA-01031: insufficient privileges"))
+
+    respuesta = cliente.post(
+        "/directorios", json={"nombre": "backup", "ruta": "/opt/oracle/respaldos"}, headers=CABECERAS
+    )
+
+    assert respuesta.status_code == 500
+    assert respuesta.json()["error"].startswith("ORA-01031")
