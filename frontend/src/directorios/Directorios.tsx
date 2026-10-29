@@ -1,20 +1,86 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import '../admin/admin.css'
 import { llamar, type Aviso } from '../admin/api'
 import { MostrarAviso, Tabla } from '../admin/Avisos'
 
 type Directorio = { nombre: string; ruta: string }
 
+type Mensaje = { mensaje: string }
+
 export function Directorios({ token }: { token: string }) {
   const [directorios, setDirectorios] = useState<Directorio[]>([])
+  const [ejemplos, setEjemplos] = useState<string[]>([])
   const [aviso, setAviso] = useState<Aviso | null>(null)
+  const [creando, setCreando] = useState(false)
+  const [nombre, setNombre] = useState('')
+  const [ruta, setRuta] = useState('')
+
+  const cargar = useCallback(
+    () =>
+      llamar<{ directorios: Directorio[]; ejemplos_ruta: string[] }>(token, '/directorios').then((r) => {
+        if (r.ok) {
+          setDirectorios(r.datos.directorios)
+          setEjemplos(r.datos.ejemplos_ruta)
+        } else setAviso(r.aviso)
+      }),
+    [token],
+  )
 
   useEffect(() => {
-    void llamar<{ directorios: Directorio[]; ejemplos_ruta: string[] }>(token, '/directorios').then((r) => {
-      if (r.ok) setDirectorios(r.datos.directorios)
-      else setAviso(r.aviso)
-    })
-  }, [token])
+    void cargar()
+  }, [cargar])
+
+  const abrirCrear = () => {
+    setAviso(null)
+    setNombre('')
+    setRuta('')
+    setCreando(true)
+  }
+
+  const crear = async () => {
+    const r = await llamar<Mensaje>(token, '/directorios', { nombre, ruta })
+    if (!r.ok) return setAviso(r.aviso)
+    await cargar()
+    setCreando(false)
+    setAviso({ tipo: 'ok', textos: [r.datos.mensaje] })
+  }
+
+  if (creando) {
+    return (
+      <section className="vista">
+        <button
+          type="button"
+          className="volver"
+          onClick={() => {
+            setAviso(null)
+            setCreando(false)
+          }}
+        >
+          ← Lista de directorios
+        </button>
+        <h1>Crear directorio</h1>
+        <p className="apoyo">El nombre se guarda en mayúsculas. La carpeta debe existir y Oracle debe poder escribir en ella.</p>
+
+        <MostrarAviso aviso={aviso} />
+
+        <div className="panel">
+          <label className="campo">
+            Nombre del directorio
+            <input value={nombre} onChange={(e) => setNombre(e.target.value)} />
+          </label>
+          <label className="campo">
+            Ruta de la carpeta
+            <input value={ruta} onChange={(e) => setRuta(e.target.value)} />
+          </label>
+          <p className="ayuda">Por ejemplo {ejemplos.join(' o ')}</p>
+        </div>
+
+        <button type="button" className="accion" onClick={() => void crear()}>
+          Crear
+        </button>
+      </section>
+    )
+  }
 
   return (
     <section className="vista">
@@ -23,7 +89,7 @@ export function Directorios({ token }: { token: string }) {
           <h1>Administración de archivos de respaldos y directorios</h1>
           <p className="apoyo">Consulta los directorios de Oracle donde se guardan los respaldos.</p>
         </div>
-        <button type="button" className="boton principal">
+        <button type="button" className="boton principal" onClick={abrirCrear}>
           Crear directorio
         </button>
       </div>
