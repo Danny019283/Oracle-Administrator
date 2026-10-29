@@ -120,7 +120,9 @@ def test_responder_mapea_fallo_de_permisos_a_500_con_mensaje_explicacion_y_error
     cuerpo = json.loads(respuesta.body)
     assert respuesta.status_code == 500
     assert cuerpo["mensaje"] == "No se pudieron dar permisos a Oracle sobre la carpeta"
-    assert "debe existir en el contenedor" in cuerpo["explicacion"]
+    assert cuerpo["explicacion"] == (
+        "La carpeta debe existir y Oracle debe poder escribir en ella; en contenedor, creada o montada"
+    )
     assert cuerpo["error"] == "chown: no such file"
 
 

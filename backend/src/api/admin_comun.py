@@ -55,7 +55,7 @@ def responder(accion: Callable[[], Any]):
             status_code=500,
             content={
                 "mensaje": "No se pudieron dar permisos a Oracle sobre la carpeta",
-                "explicacion": "La carpeta debe existir en el contenedor (creada o montada) y Oracle debe poder escribir en ella",
+                "explicacion": "La carpeta debe existir y Oracle debe poder escribir en ella; en contenedor, creada o montada",
                 "error": texto.splitlines()[0] if texto else "",
             },
         )
