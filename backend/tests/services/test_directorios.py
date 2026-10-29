@@ -1,6 +1,16 @@
+from pathlib import PurePosixPath, PureWindowsPath
+
 import pytest
 
-from src.services.directorios import Directorio, SinDirectorios, listar_directorios
+from src.services.directorios import (
+    Directorio,
+    DirectorioInvalido,
+    DirectorioNoEncontrado,
+    SinDirectorios,
+    ejemplos_ruta,
+    listar_directorios,
+    validar_ruta,
+)
 
 
 class ConsultaFalsa:
@@ -44,3 +54,43 @@ def test_sin_directorios_informa_y_sugiere_crear_uno():
     mensaje = str(error.value)
     assert "No hay directorios disponibles" in mensaje
     assert "crear" in mensaje.lower()
+
+
+@pytest.mark.parametrize(
+    "ruta, tipo",
+    [
+        ("/opt/oracle/respaldos", PurePosixPath),
+        ("C:\\respaldos", PureWindowsPath),
+        ("\\\\servidor\\recurso", PureWindowsPath),
+    ],
+)
+def test_validar_ruta_acepta_rutas_absolutas_del_tipo(ruta, tipo):
+    assert validar_ruta(ruta, tipo) == []
+
+
+@pytest.mark.parametrize(
+    "ruta, tipo",
+    [
+        ("", PurePosixPath),
+        ("C:\\respaldos", PurePosixPath),
+        ("respaldos", PurePosixPath),
+        ("respaldos", PureWindowsPath),
+        ("/" + "a" * 4000, PurePosixPath),
+        ("/opt/o'racle", PurePosixPath),
+        ("/opt/a\nb", PurePosixPath),
+        ("/opt/a\x00b", PurePosixPath),
+    ],
+)
+def test_validar_ruta_rechaza_rutas_invalidas(ruta, tipo):
+    assert validar_ruta(ruta, tipo)
+
+
+def test_ejemplos_ruta_segun_tipo():
+    assert ejemplos_ruta(PurePosixPath) == ["/opt/oracle/respaldos"]
+    assert ejemplos_ruta(PureWindowsPath) == ["C:\\respaldos", "\\\\servidor\\recurso"]
+
+
+def test_excepciones_de_directorio():
+    assert DirectorioInvalido(["a", "b"]).errores == ["a", "b"]
+    assert str(DirectorioInvalido(["a", "b"])) == "a; b"
+    assert issubclass(DirectorioNoEncontrado, Exception)

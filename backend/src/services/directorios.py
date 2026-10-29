@@ -1,5 +1,7 @@
 from collections.abc import Callable, Sequence
+import re
 from dataclasses import dataclass
+from pathlib import PurePath, PureWindowsPath
 from typing import Any
 
 Consulta = Callable[..., Sequence[Sequence[Any]]]
@@ -19,6 +21,16 @@ class SinDirectorios(Exception):
     pass
 
 
+class DirectorioInvalido(Exception):
+    def __init__(self, errores: list[str]):
+        super().__init__("; ".join(errores))
+        self.errores = errores
+
+
+class DirectorioNoEncontrado(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class Directorio:
     nombre: str
@@ -32,3 +44,27 @@ def listar_directorios(consulta: Consulta) -> list[Directorio]:
             "No hay directorios disponibles. Debes crear uno desde esta pantalla para poder respaldar"
         )
     return [Directorio(nombre=nombre, ruta=ruta) for nombre, ruta in filas]
+
+
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def validar_ruta(ruta: str, tipo_ruta: type[PurePath]) -> list[str]:
+    if not ruta:
+        return ["La ruta es obligatoria"]
+    errores = []
+    if not tipo_ruta(ruta).is_absolute():
+        errores.append("La ruta debe ser absoluta")
+    if len(ruta) > 4000:
+        errores.append("La ruta no puede superar los 4000 caracteres")
+    if "'" in ruta:
+        errores.append("La ruta no puede contener comillas simples")
+    if _CONTROL.search(ruta):
+        errores.append("La ruta no puede contener caracteres de control")
+    return errores
+
+
+def ejemplos_ruta(tipo_ruta: type[PurePath]) -> list[str]:
+    if issubclass(tipo_ruta, PureWindowsPath):
+        return ["C:\\respaldos", "\\\\servidor\\recurso"]
+    return ["/opt/oracle/respaldos"]
