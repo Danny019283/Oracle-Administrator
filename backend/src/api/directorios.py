@@ -1,13 +1,17 @@
+from datetime import datetime
+from typing import Literal
+
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from src.api.admin_comun import exigir_sysdba_o_dba, obtener_consulta_admin, obtener_sentencia, responder
-from src.api.dependencias import obtener_entorno
+from src.api.dependencias import obtener_conexion, obtener_entorno
 from src.services import directorios
 from src.services.archivos_respaldo import eliminar_respaldo, listar_respaldos
 from src.services.entorno_oracle import OperacionEntornoFallida
 from src.services.instancia import sid_de_instancia
+from src.services.recuperacion import recuperar_datapump
 
 router = APIRouter(prefix="/directorios")
 
@@ -80,6 +84,32 @@ def delete_respaldo(
         }
 
     return responder(eliminar)
+
+
+class SolicitudDatapump(BaseModel):
+    modo: Literal["datapump"]
+    objeto_modo: str
+    objetos: list[str]
+    existentes: str = "SKIP"
+
+
+@router.post("/{nombre}/respaldos/{base}/recuperar", dependencies=[Depends(exigir_sysdba_o_dba)])
+def post_recuperar(
+    nombre: str,
+    base: str,
+    solicitud: SolicitudDatapump,
+    conexion=Depends(obtener_conexion),
+    consulta=Depends(obtener_consulta_admin),
+    entorno=Depends(obtener_entorno),
+):
+    def recuperar():
+        resultado = recuperar_datapump(
+            consulta, entorno, conexion, nombre, base, solicitud.objeto_modo, solicitud.objetos,
+            solicitud.existentes, datetime.now(),
+        )
+        return {"mensaje": f"Respaldo {base} recuperado", "log": resultado.log, "advertencia": resultado.advertencia}
+
+    return responder(recuperar)
 
 
 @router.post("")
