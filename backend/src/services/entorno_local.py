@@ -1,5 +1,6 @@
 import os
 import re
+import shutil
 import tempfile
 from collections.abc import Callable
 from pathlib import Path, PurePath, PureWindowsPath
@@ -47,6 +48,9 @@ class SistemaLinux:
 
     def borrar(self, ruta: PurePath) -> None:
         Path(ruta).unlink(missing_ok=True)
+
+    def borrar_carpeta(self, ruta: PurePath) -> None:
+        shutil.rmtree(Path(ruta))
 
     def dar_permisos_a_oracle(self, ruta: PurePath, sid: str, ejecutar: Callable[..., Salida]) -> None:
         proceso = f"ora_pmon_{sid}"
@@ -96,6 +100,9 @@ class SistemaWindows:
     def borrar(self, ruta: PurePath) -> None:
         self._a_path(ruta).unlink(missing_ok=True)
 
+    def borrar_carpeta(self, ruta: PurePath) -> None:
+        shutil.rmtree(self._a_path(ruta))
+
     def dar_permisos_a_oracle(self, ruta: PurePath, sid: str, ejecutar: Callable[..., Salida]) -> None:
         clave = f"HKLM\\SYSTEM\\CurrentControlSet\\Services\\OracleService{sid}"
         salida = ejecutar(["reg", "query", clave, "/v", "ObjectName"])
@@ -144,6 +151,12 @@ class EntornoLocal(EntornoOracle):
     def borrar_archivo(self, ruta: PurePath) -> None:
         try:
             self._sistema.borrar(ruta)
+        except OSError as error:
+            raise OperacionEntornoFallida(str(error)) from error
+
+    def borrar_carpeta(self, ruta: PurePath) -> None:
+        try:
+            self._sistema.borrar_carpeta(ruta)
         except OSError as error:
             raise OperacionEntornoFallida(str(error)) from error
 

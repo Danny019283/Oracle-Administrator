@@ -20,6 +20,7 @@ class EntornoFalso(EntornoOracle):
         archivos=(),
         fallo_listado=None,
         fallo_borrado=None,
+        fallo_borrado_carpeta=None,
     ):
         self.codigo = codigo
         self.texto = texto
@@ -37,6 +38,9 @@ class EntornoFalso(EntornoOracle):
         self.fallo_borrado = fallo_borrado
         self.listados = []
         self.borrados = []
+        # fallo_borrado_carpeta: texto con el que borrar_carpeta lanza OperacionEntornoFallida
+        self.fallo_borrado_carpeta = fallo_borrado_carpeta
+        self.carpetas_borradas = []
 
     def crear_carpeta(self, ruta):
         self.carpetas.append(ruta)
@@ -66,6 +70,11 @@ class EntornoFalso(EntornoOracle):
         self.borrados.append(ruta)
         if self.fallo_borrado is not None:
             raise OperacionEntornoFallida(self.fallo_borrado)
+
+    def borrar_carpeta(self, ruta):
+        self.carpetas_borradas.append(ruta)
+        if self.fallo_borrado_carpeta is not None:
+            raise OperacionEntornoFallida(self.fallo_borrado_carpeta)
 
     def ejecutar(self, comando):
         self.herramientas.append(

@@ -74,6 +74,10 @@ class EntornoOracle(ABC):
         """Borra el archivo; lanza OperacionEntornoFallida con la salida si falla."""
 
     @abstractmethod
+    def borrar_carpeta(self, ruta: PurePath) -> None:
+        """Borra la carpeta y su contenido; lanza OperacionEntornoFallida con la salida si falla."""
+
+    @abstractmethod
     def ejecutar(self, comando: ComandoHerramienta) -> Salida:
         """Escribe `comando.script` en un temporal privado (sin que aparezca en los argumentos
         del proceso), ejecuta `comando.nombre` con `comando.args(ruta_del_temporal)` y siempre lo borra."""

@@ -297,3 +297,19 @@ def test_borrar_archivo_con_rm_fallido_lanza_operacion_entorno_fallida_con_la_sa
 
     with pytest.raises(OperacionEntornoFallida, match="Permission denied"):
         EntornoContenedor("c", proceso).borrar_archivo(EntornoContenedor.tipo_ruta("/u01/a.dmp"))
+
+
+def test_borrar_carpeta_ejecuta_rm_rf_dentro_del_contenedor():
+    proceso = ProcesoFalso()
+
+    EntornoContenedor("oracle-test", proceso, cli="podman").borrar_carpeta(EntornoContenedor.tipo_ruta("/u01/aux_a"))
+
+    assert proceso.llamadas == [(["podman", "exec", "oracle-test", "rm", "-rf", "/u01/aux_a"], None)]
+
+
+def test_borrar_carpeta_con_rm_fallido_lanza_operacion_entorno_fallida_con_la_salida():
+    def proceso(args, entrada=None):
+        return Salida(codigo=1, texto="rm: cannot remove: Permission denied")
+
+    with pytest.raises(OperacionEntornoFallida, match="Permission denied"):
+        EntornoContenedor("c", proceso).borrar_carpeta(EntornoContenedor.tipo_ruta("/u01/aux_a"))

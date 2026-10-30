@@ -65,6 +65,11 @@ class EntornoContenedor(EntornoOracle):
         if salida.codigo != 0:
             raise OperacionEntornoFallida(salida.texto)
 
+    def borrar_carpeta(self, ruta: PurePath) -> None:
+        salida = self._ejecutar([self._cli, "exec", self._contenedor, "rm", "-rf", str(ruta)])
+        if salida.codigo != 0:
+            raise OperacionEntornoFallida(salida.texto)
+
     def ejecutar(self, comando: ComandoHerramienta) -> Salida:
         ruta = f"/tmp/{comando.prefijo}_{uuid4().hex}{comando.extension}"
         docker = [self._cli, "exec", self._contenedor]

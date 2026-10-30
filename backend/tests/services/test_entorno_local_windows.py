@@ -258,3 +258,20 @@ def test_borrar_archivo_con_error_de_es_en_windows_lanza_operacion_entorno_falli
 
     with pytest.raises(OperacionEntornoFallida, match="Acceso denegado"):
         entorno(estado).borrar_archivo(PureWindowsPath(r"C:\oracle\dump\a.dmp"))
+
+
+def test_borrar_carpeta_borra_la_carpeta_de_windows_con_su_contenido(tmp_path):
+    carpeta = tmp_path / "aux_a"
+    carpeta.mkdir()
+    (carpeta / "a.dbf").write_text("x")
+
+    EntornoLocal(SistemaWindows(lambda ruta: carpeta)).borrar_carpeta(PureWindowsPath(r"C:\oracle\dump\aux_a"))
+
+    assert not carpeta.exists()
+
+
+def test_borrar_carpeta_con_error_de_es_en_windows_lanza_operacion_entorno_fallida(tmp_path):
+    with pytest.raises(OperacionEntornoFallida):
+        EntornoLocal(SistemaWindows(lambda ruta: tmp_path / "no_existe")).borrar_carpeta(
+            PureWindowsPath(r"C:\oracle\dump\aux_a")
+        )
