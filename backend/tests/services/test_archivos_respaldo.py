@@ -2,7 +2,17 @@ from datetime import datetime
 
 from pathlib import PurePosixPath
 
-from src.services.archivos_respaldo import agrupar_archivos, estado_de, listar_respaldos
+import pytest
+
+from src.services.archivos_respaldo import (
+    RespaldoInvalido,
+    RespaldoNoEncontrado,
+    agrupar_archivos,
+    eliminar_respaldo,
+    estado_de,
+    listar_respaldos,
+)
+from src.services.directorios import DirectorioNoEncontrado
 from src.services.entorno_oracle import ArchivoEntorno, OperacionEntornoFallida
 from tests.services.entorno_falso import EntornoFalso
 
@@ -215,3 +225,134 @@ def test_directorio_ilegible_se_omite_con_aviso_y_los_demas_siguen():
     assert [(r.base, r.directorio) for r in respaldos] == [("a_20240101_000000", "BIEN")]
     assert len(avisos) == 1
     assert "ROTO" in avisos[0]
+
+
+_DIRS = _Consulta([("RESPALDO", "/a"), ("DATA_PUMP_DIR", "/dp")])
+
+
+def _entorno_con(archivos: dict[str, list[ArchivoEntorno]], **kw) -> EntornoFalso:
+    return EntornoFalso(archivos={PurePosixPath(k): v for k, v in archivos.items()}, **kw)
+
+
+def test_borra_el_dump_y_su_log_y_devuelve_el_tipo():
+    entorno = _entorno_con(
+        {"/a": [_a("a_20240101_000000.dmp"), _a("a_20240101_000000.log")]}
+    )
+
+    tipo = eliminar_respaldo(_DIRS, entorno, "respaldo", "a_20240101_000000")
+
+    assert tipo == "Data Pump"
+    assert sorted(entorno.borrados) == [
+        PurePosixPath("/a/a_20240101_000000.dmp"),
+        PurePosixPath("/a/a_20240101_000000.log"),
+    ]
+
+
+def test_borra_las_piezas_del_full_rman_y_su_log():
+    entorno = _entorno_con(
+        {
+            "/a": [
+                _a("f_20240101_000000_ORCL_1_1.dbf"),
+                _a("f_20240101_000000_ORCL_2_1.dbf"),
+                _a("f_20240101_000000.log"),
+            ]
+        }
+    )
+
+    tipo = eliminar_respaldo(_DIRS, entorno, "RESPALDO", "f_20240101_000000")
+
+    assert tipo == "RMAN"
+    assert sorted(entorno.borrados) == [
+        PurePosixPath("/a/f_20240101_000000.log"),
+        PurePosixPath("/a/f_20240101_000000_ORCL_1_1.dbf"),
+        PurePosixPath("/a/f_20240101_000000_ORCL_2_1.dbf"),
+    ]
+
+
+def test_no_toca_otras_bases_ni_archivos_ajenos():
+    entorno = _entorno_con(
+        {
+            "/a": [
+                _a("a_20240101_000000.dmp"),
+                _a("a_20240101_000000.log"),
+                _a("b_20240202_000000.dmp"),
+                _a("a_20240101_000000.txt"),
+                _a("notas.txt"),
+            ]
+        }
+    )
+
+    eliminar_respaldo(_DIRS, entorno, "RESPALDO", "a_20240101_000000")
+
+    assert sorted(entorno.borrados) == [
+        PurePosixPath("/a/a_20240101_000000.dmp"),
+        PurePosixPath("/a/a_20240101_000000.log"),
+    ]
+
+
+@pytest.mark.parametrize(
+    "base",
+    [
+        "../x_20240101_120000",
+        "a/b_20240101_120000",
+        "a_20240101_120000.dmp",
+        "a_20240101",
+        "",
+        "a_20240101_120000\n",
+    ],
+)
+def test_base_invalida_no_borra_nada(base):
+    entorno = _entorno_con({"/a": [_a("a_20240101_000000.dmp")]})
+
+    with pytest.raises(RespaldoInvalido):
+        eliminar_respaldo(_DIRS, entorno, "RESPALDO", base)
+
+    assert entorno.borrados == []
+
+
+@pytest.mark.parametrize("nombre", ["NOEXISTE", "../etc", ""])
+def test_directorio_inexistente(nombre):
+    entorno = _entorno_con({"/a": [_a("a_20240101_000000.dmp")]})
+
+    with pytest.raises(DirectorioNoEncontrado):
+        eliminar_respaldo(_DIRS, entorno, nombre, "a_20240101_000000")
+
+    assert entorno.borrados == []
+
+
+def test_respaldo_inexistente():
+    entorno = _entorno_con({"/a": [_a("a_20240101_000000.dmp")]})
+
+    with pytest.raises(RespaldoNoEncontrado, match="Respaldo no encontrado"):
+        eliminar_respaldo(_DIRS, entorno, "RESPALDO", "z_20240909_000000")
+
+    assert entorno.borrados == []
+
+
+def test_directorio_de_sistema_se_permite():
+    entorno = _entorno_con({"/dp": [_a("a_20240101_000000.dmp")]})
+
+    assert eliminar_respaldo(_DIRS, entorno, "data_pump_dir", "a_20240101_000000") == "Data Pump"
+    assert entorno.borrados == [PurePosixPath("/dp/a_20240101_000000.dmp")]
+
+
+class _EntornoQueFallaAlSegundo(EntornoFalso):
+    def borrar_archivo(self, ruta):
+        super().borrar_archivo(ruta)
+        if len(self.borrados) == 2:
+            raise OperacionEntornoFallida("rm: Permission denied")
+
+
+def test_fallo_de_borrado_se_propaga_y_no_intenta_los_siguientes():
+    entorno = _EntornoQueFallaAlSegundo(
+        archivos=[
+            _a("a_20240101_000000.dmp"),
+            _a("a_20240101_000000.log"),
+            _a("a_20240101_000000_ORCL_1_1.dbf"),
+        ]
+    )
+
+    with pytest.raises(OperacionEntornoFallida, match="Permission denied"):
+        eliminar_respaldo(_Consulta([("RESPALDO", "/a")]), entorno, "RESPALDO", "a_20240101_000000")
+
+    assert len(entorno.borrados) == 2

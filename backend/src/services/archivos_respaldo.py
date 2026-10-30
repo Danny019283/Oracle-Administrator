@@ -2,7 +2,8 @@ import re
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 
-from src.services.directorios import Consulta, listar_todos_directorios
+from src.services.directorios import Consulta, DirectorioNoEncontrado, listar_todos_directorios
+from src.services.identificadores import IdentificadorInvalido, normalizar_identificador
 from src.services.entorno_oracle import (
     ArchivoEntorno,
     ArchivoNoLegible,
@@ -14,6 +15,41 @@ _BASE = r"(?P<base>[A-Za-z0-9_-]{1,50}_(?P<marca>\d{8}_\d{6}))"
 # .dmp/.log son `<base>.<ext>`; la pieza RMAN es `<base>_<DB>_<set>_<pieza>.dbf` con DB sin '_',
 # así `_<DB>_<n>_<n>` solo casa al final y no se confunde con una marca de tiempo dentro del nombre.
 _ARCHIVO = re.compile(rf"{_BASE}(?:\.(?:dmp|log)|_[A-Za-z0-9$#]+_\d+_\d+\.dbf)")
+
+
+class RespaldoInvalido(Exception):
+    pass
+
+
+class RespaldoNoEncontrado(Exception):
+    pass
+
+
+_BASE_VALIDA = re.compile(r"[A-Za-z0-9_-]+_\d{8}_\d{6}")
+
+
+def eliminar_respaldo(consulta: Consulta, entorno: EntornoOracle, directorio: str, base: str) -> str:
+    """Borra los archivos de un respaldo y devuelve su tipo.
+
+    Los nombres a borrar salen del listado del directorio, nunca de la entrada del cliente.
+    """
+    if not _BASE_VALIDA.fullmatch(base):
+        raise RespaldoInvalido("El identificador del respaldo no es válido")
+    try:
+        nombre = normalizar_identificador(directorio, "el directorio")
+    except IdentificadorInvalido:
+        raise DirectorioNoEncontrado(f"No existe el directorio {directorio}")
+    ruta = next((d.ruta for d in listar_todos_directorios(consulta) if d.nombre == nombre), None)
+    if ruta is None:
+        raise DirectorioNoEncontrado(f"No existe el directorio {nombre}")
+
+    carpeta = entorno.tipo_ruta(ruta)
+    respaldo = next((r for r in agrupar_archivos(entorno.listar_archivos(carpeta)) if r.base == base), None)
+    if respaldo is None:
+        raise RespaldoNoEncontrado("Respaldo no encontrado")
+    for archivo in respaldo.archivos:
+        entorno.borrar_archivo(carpeta / archivo.nombre)
+    return respaldo.tipo
 
 
 @dataclass(frozen=True, kw_only=True)
