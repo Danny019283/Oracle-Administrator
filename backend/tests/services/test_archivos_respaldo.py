@@ -2,8 +2,8 @@ from datetime import datetime
 
 from pathlib import PurePosixPath
 
-from src.services.archivos_respaldo import agrupar_archivos, estado_de
-from src.services.entorno_oracle import ArchivoEntorno
+from src.services.archivos_respaldo import agrupar_archivos, estado_de, listar_respaldos
+from src.services.entorno_oracle import ArchivoEntorno, OperacionEntornoFallida
 from tests.services.entorno_falso import EntornoFalso
 
 
@@ -157,3 +157,61 @@ def test_solo_log_es_sin_respaldo():
 
 def test_solo_log_con_errores_prevalece_el_error():
     assert _estado(["hr_20240105_103000.log"], "ORA-00001")[0] == "Con errores"
+
+
+class _Consulta:
+    def __init__(self, filas):
+        self.filas = filas
+
+    def __call__(self, sql, params=None):
+        return self.filas
+
+
+class _EntornoQueNoLee(EntornoFalso):
+    def __init__(self, ilegibles, **kw):
+        super().__init__(**kw)
+        self.ilegibles = ilegibles
+
+    def listar_archivos(self, ruta):
+        if ruta in self.ilegibles:
+            raise OperacionEntornoFallida("Permission denied")
+        return super().listar_archivos(ruta)
+
+
+def test_sin_directorios_devuelve_dos_listas_vacias():
+    assert listar_respaldos(_Consulta([]), EntornoFalso()) == ([], [])
+
+
+def test_respaldos_de_varios_directorios_con_directorio_ruta_estado_y_orden_global():
+    entorno = EntornoFalso(
+        log="successfully completed",
+        archivos={
+            PurePosixPath("/a"): [_a("a_20240101_000000.dmp"), _a("a_20240101_000000.log")],
+            PurePosixPath("/dp"): [_a("z_20240301_000000.dmp"), _a("q_20240201_000000.dmp")],
+        },
+    )
+
+    respaldos, avisos = listar_respaldos(
+        _Consulta([("RESPALDO", "/a"), ("DATA_PUMP_DIR", "/dp")]), entorno
+    )
+
+    assert avisos == []
+    assert [(r.base, r.directorio, r.ruta, r.estado) for r in respaldos] == [
+        ("z_20240301_000000", "DATA_PUMP_DIR", "/dp", "Sin log"),
+        ("q_20240201_000000", "DATA_PUMP_DIR", "/dp", "Sin log"),
+        ("a_20240101_000000", "RESPALDO", "/a", "Completo"),
+    ]
+    assert entorno.listados == [PurePosixPath("/a"), PurePosixPath("/dp")]
+
+
+def test_directorio_ilegible_se_omite_con_aviso_y_los_demas_siguen():
+    entorno = _EntornoQueNoLee(
+        {PurePosixPath("/mal")},
+        archivos=[_a("a_20240101_000000.dmp")],
+    )
+
+    respaldos, avisos = listar_respaldos(_Consulta([("ROTO", "/mal"), ("BIEN", "/ok")]), entorno)
+
+    assert [(r.base, r.directorio) for r in respaldos] == [("a_20240101_000000", "BIEN")]
+    assert len(avisos) == 1
+    assert "ROTO" in avisos[0]
