@@ -15,10 +15,14 @@ class NombresDump:
     log: str
 
 
-def construir_nombres(nombre: str, ahora: datetime) -> NombresDump:
+def construir_base(nombre: str, ahora: datetime) -> str:
     if not _NOMBRE_VALIDO.fullmatch(nombre):
         raise NombreInvalido(
             "El nombre admite letras, números, '_' y '-', de 1 a 50 caracteres"
         )
-    base = f"{nombre}_{ahora:%Y%m%d_%H%M%S}"
+    return f"{nombre}_{ahora:%Y%m%d_%H%M%S}"
+
+
+def construir_nombres(nombre: str, ahora: datetime) -> NombresDump:
+    base = construir_base(nombre, ahora)
     return NombresDump(dmp=f"{base}.dmp", log=f"{base}.log")

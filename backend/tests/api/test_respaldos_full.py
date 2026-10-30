@@ -1,3 +1,5 @@
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -106,6 +108,18 @@ def test_respalda_y_devuelve_el_log_de_rman_sin_advertencia(cliente):
     assert respuesta.json() == {"log": "log del backup", "advertencia": None}
     assert [h["nombre"] for h in entorno.herramientas] == ["rman", "rman"]
     assert "s3creta!" not in respuesta.text
+
+
+def test_el_backup_genera_piezas_dbf_y_un_log_con_la_hora_actual_en_la_base(cliente):
+    entorno = usar()
+
+    cliente.post("/respaldos/full", json=SOLICITUD, headers=SYSDBA)
+
+    script = entorno.herramientas[0]["script"]
+    base = r"semanal_\d{8}_\d{6}"
+    assert re.search(rf"FORMAT '{RUTA}/{base}_%d_%s_%p\.dbf'", script)
+    assert re.search(rf"^SPOOL LOG TO '{RUTA}/{base}\.log';", script)
+    assert script.rstrip().endswith("SPOOL LOG OFF;")
 
 
 def test_rman_usa_el_sid_real_de_la_instancia_aunque_la_sesion_sea_de_un_servicio_de_pdb(cliente):

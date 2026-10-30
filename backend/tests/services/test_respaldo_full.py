@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import pytest
 
 from src.services.directorios import Directorio
@@ -8,6 +10,8 @@ from tests.services.entorno_falso import EntornoFalso
 
 RUTA = "/opt/oracle/Respaldos"
 DIRECTORIOS = [Directorio("RESPALDO", RUTA), Directorio("OTRO", "/tmp/otro")]
+AHORA = datetime(2026, 3, 5, 14, 7, 9)
+BASE = "semanal_20260305_140709"
 
 
 class ConsultaFalsa:
@@ -37,6 +41,7 @@ def respaldo(entorno=None, consulta=None, directorio="RESPALDO", nombre="semanal
         nombre=nombre,
         entorno=entorno or entorno_con(),
         sid=sid,
+        ahora=AHORA,
     )
 
 
@@ -56,8 +61,19 @@ def test_el_backup_es_incremental_nivel_0_de_toda_la_base_en_la_ruta_del_directo
     script = scripts(entorno)[0]
     assert "BACKUP INCREMENTAL LEVEL 0" in script
     assert "DATABASE" in script
-    assert f"FORMAT '{RUTA}/semanal_%d_%T_%s_%p'" in script
+    assert f"FORMAT '{RUTA}/{BASE}_%d_%s_%p.dbf'" in script
     assert "DELETE" not in script
+
+
+def test_el_script_escribe_el_log_junto_a_las_piezas_con_la_misma_base():
+    entorno = entorno_con()
+
+    respaldo(entorno)
+
+    script = scripts(entorno)[0]
+    assert script.startswith(f"SPOOL LOG TO '{RUTA}/{BASE}.log';\n")
+    assert script.rstrip().endswith("SPOOL LOG OFF;")
+    assert "SPOOL" not in scripts(entorno)[1]
 
 
 def test_tras_un_backup_correcto_ejecuta_la_limpieza_con_redundancy_1():

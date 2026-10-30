@@ -1,8 +1,10 @@
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from src.services.directorios import Directorio
+from src.services.dumpfile import construir_base
 from src.services.entorno_oracle import EntornoOracle
 from src.services.errores_oracle import explicar_error
 from src.services.respaldo import RespaldoFallido, SolicitudInvalida, errores_destino
@@ -40,9 +42,12 @@ def en_archivelog(consulta: Consulta) -> bool:
     return bool(filas) and filas[0][0] == "ARCHIVELOG"
 
 
-def _script_respaldo(entorno: EntornoOracle, ruta_directorio: str, nombre: str) -> str:
-    formato = entorno.tipo_ruta(ruta_directorio) / f"{nombre}_%d_%T_%s_%p"
-    return f"""RUN {{
+def _script_respaldo(entorno: EntornoOracle, ruta_directorio: str, base: str) -> str:
+    ruta = entorno.tipo_ruta(ruta_directorio)
+    formato = ruta / f"{base}_%d_%s_%p.dbf"
+    log = ruta / f"{base}.log"
+    return f"""SPOOL LOG TO '{log}';
+RUN {{
   ALLOCATE CHANNEL ch1 DEVICE TYPE DISK;
   BACKUP INCREMENTAL LEVEL 0
   DATABASE
@@ -50,6 +55,7 @@ def _script_respaldo(entorno: EntornoOracle, ruta_directorio: str, nombre: str) 
   FORMAT '{formato}';
   RELEASE CHANNEL ch1;
 }}
+SPOOL LOG OFF;
 """
 
 
@@ -60,6 +66,7 @@ def respaldar_full(
     nombre: str,
     entorno: EntornoOracle,
     sid: str,
+    ahora: datetime,
 ) -> ResultadoFull:
     errores = errores_destino(directorio, nombre, [d.nombre for d in directorios])
     if errores:
@@ -68,7 +75,8 @@ def respaldar_full(
         raise SinArchivelog()
 
     ruta = next(d.ruta for d in directorios if d.nombre == directorio)
-    respaldo = ejecutar_rman(entorno, _script_respaldo(entorno, ruta, nombre), sid)
+    script = _script_respaldo(entorno, ruta, construir_base(nombre, ahora))
+    respaldo = ejecutar_rman(entorno, script, sid)
     if respaldo.codigo != 0:
         raise RespaldoFallido(respaldo.codigo, respaldo.texto, "rman")
 

@@ -206,6 +206,7 @@ def post_full(
             nombre=solicitud.nombre,
             entorno=entorno,
             sid=sid_de_instancia(consulta),
+            ahora=datetime.now(),
         )
     except SolicitudInvalida as error:
         return respuesta_solicitud_invalida(error)
