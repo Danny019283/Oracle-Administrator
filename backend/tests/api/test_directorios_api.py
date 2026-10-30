@@ -3,11 +3,13 @@ from pathlib import PureWindowsPath
 
 import oracledb
 import pytest
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
 from main import app
-from src.api.admin_comun import obtener_consulta_admin, obtener_sentencia, responder
+from src.api.admin_comun import exigir_sysdba_o_dba, obtener_consulta_admin, obtener_sentencia, responder
 from src.api.dependencias import obtener_conexion, obtener_entorno
+from src.services.archivos_respaldo import RespaldoInvalido, RespaldoNoEncontrado
 from src.services.directorios import DirectorioInvalido, DirectorioNoEncontrado
 from src.services.entorno_oracle import OperacionEntornoFallida
 from src.services.expdp_runner import Conexion
@@ -124,6 +126,71 @@ def test_responder_mapea_fallo_de_permisos_a_500_con_mensaje_explicacion_y_error
         "La carpeta debe existir y Oracle debe poder escribir en ella; en contenedor, creada o montada"
     )
     assert cuerpo["error"] == "chown: no such file"
+
+
+def test_responder_mapea_respaldo_invalido_a_422():
+    respuesta = _lanzar(RespaldoInvalido("El respaldo no es válido"))
+
+    assert respuesta.status_code == 422
+    assert json.loads(respuesta.body) == {"errores": ["El respaldo no es válido"]}
+
+
+def test_responder_mapea_respaldo_no_encontrado_a_404():
+    respuesta = _lanzar(RespaldoNoEncontrado("lo que sea"))
+
+    assert respuesta.status_code == 404
+    assert json.loads(respuesta.body) == {"detail": "Respaldo no encontrado"}
+
+
+def _app_de_prueba(conexion, roles):
+    """App mínima con la dependencia; devuelve (cliente, sqls de roles consultados)."""
+    consultas = []
+
+    def consulta(sql, params=None):
+        consultas.append(sql)
+        return roles
+
+    prueba = FastAPI()
+
+    @prueba.get("/prueba")
+    def endpoint(
+        _conexion: Conexion = Depends(exigir_sysdba_o_dba),
+    ):
+        return responder(lambda: {"ok": True})
+
+    prueba.dependency_overrides[obtener_consulta_admin] = lambda: consulta
+    if conexion:
+        prueba.dependency_overrides[obtener_conexion] = lambda: conexion
+    return TestClient(prueba), consultas
+
+
+def test_exigir_sysdba_o_dba_con_sesion_sysdba_pasa_sin_consultar_roles():
+    cliente, consultas = _app_de_prueba(Conexion("SYS", "x", "XE", sysdba=True), [])
+
+    assert cliente.get("/prueba", headers=CABECERAS).status_code == 200
+    assert consultas == []
+
+
+def test_exigir_sysdba_o_dba_con_rol_dba_pasa_con_la_consulta_fija():
+    cliente, consultas = _app_de_prueba(Conexion("SYSTEM", "x", "XE"), [("DBA",)])
+
+    assert cliente.get("/prueba", headers=CABECERAS).status_code == 200
+    assert consultas == ["SELECT role FROM session_roles WHERE role = 'DBA'"]
+
+
+def test_exigir_sysdba_o_dba_sin_rol_responde_403_con_el_mensaje():
+    cliente, _ = _app_de_prueba(Conexion("HR", "x", "XE"), [])
+
+    respuesta = cliente.get("/prueba", headers=CABECERAS)
+
+    assert respuesta.status_code == 403
+    assert respuesta.json() == {"detail": "Se requiere sesión SYSDBA o rol DBA"}
+
+
+def test_exigir_sysdba_o_dba_sin_sesion_responde_401():
+    cliente, _ = _app_de_prueba(None, [])
+
+    assert cliente.get("/prueba").status_code == 401
 
 
 def test_crear_directorio_da_permisos_ejecuta_create_sin_grant_y_responde_200(cliente):

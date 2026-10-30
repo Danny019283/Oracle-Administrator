@@ -4,10 +4,11 @@ from collections.abc import Callable
 from typing import Any
 
 import oracledb
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 from fastapi.responses import JSONResponse
 
 from src.api.respaldos import obtener_conexion
+from src.services.archivos_respaldo import RespaldoInvalido, RespaldoNoEncontrado
 from src.services.auditoria import PoliticaInvalida
 from src.services.directorios import DirectorioInvalido, DirectorioNoEncontrado
 from src.services.entorno_oracle import OperacionEntornoFallida
@@ -34,6 +35,15 @@ def obtener_sesion(conexion: Conexion = Depends(obtener_conexion)):
     return sesion_oracle(conexion)
 
 
+def exigir_sysdba_o_dba(
+    conexion: Conexion = Depends(obtener_conexion),
+    consulta=Depends(obtener_consulta_admin),
+) -> Conexion:
+    if not conexion.sysdba and not consulta("SELECT role FROM session_roles WHERE role = 'DBA'"):
+        raise HTTPException(status_code=403, detail="Se requiere sesión SYSDBA o rol DBA")
+    return conexion
+
+
 def responder(accion: Callable[[], Any]):
     """Ejecuta la acción y traduce los errores a respuestas uniformes.
 
@@ -45,8 +55,10 @@ def responder(accion: Callable[[], Any]):
         return accion()
     except (PoliticaInvalida, SolicitudInvalida, TablespaceInvalido, SolicitudTuningInvalida, DirectorioInvalido) as error:
         return JSONResponse(status_code=422, content={"errores": error.errores})
-    except (IdentificadorInvalido, SesionInvalida) as error:
+    except (IdentificadorInvalido, SesionInvalida, RespaldoInvalido) as error:
         return JSONResponse(status_code=422, content={"errores": [str(error)]})
+    except RespaldoNoEncontrado:
+        return JSONResponse(status_code=404, content={"detail": "Respaldo no encontrado"})
     except (UsuarioNoAdministrable, TablespaceNoEncontrado, ObjetoNoEncontrado, DirectorioNoEncontrado) as error:
         return JSONResponse(status_code=404, content={"detail": str(error)})
     except OperacionEntornoFallida as error:
