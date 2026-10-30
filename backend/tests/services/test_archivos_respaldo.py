@@ -7,14 +7,17 @@ import pytest
 from src.services.archivos_respaldo import (
     RespaldoInvalido,
     RespaldoNoEncontrado,
+    ResultadoEliminacion,
     agrupar_archivos,
     eliminar_respaldo,
     estado_de,
     listar_respaldos,
 )
 from src.services.directorios import DirectorioNoEncontrado
-from src.services.entorno_oracle import ArchivoEntorno, OperacionEntornoFallida
+from src.services.entorno_oracle import ArchivoEntorno, HerramientaNoDisponible, OperacionEntornoFallida
 from tests.services.entorno_falso import EntornoFalso
+
+SID = "XE"
 
 
 def _a(nombre: str, tamano: int = 1) -> ArchivoEntorno:
@@ -239,9 +242,9 @@ def test_borra_el_dump_y_su_log_y_devuelve_el_tipo():
         {"/a": [_a("a_20240101_000000.dmp"), _a("a_20240101_000000.log")]}
     )
 
-    tipo = eliminar_respaldo(_DIRS, entorno, "respaldo", "a_20240101_000000")
+    resultado = eliminar_respaldo(_DIRS, entorno, "respaldo", "a_20240101_000000", SID)
 
-    assert tipo == "Data Pump"
+    assert resultado == ResultadoEliminacion("Data Pump")
     assert sorted(entorno.borrados) == [
         PurePosixPath("/a/a_20240101_000000.dmp"),
         PurePosixPath("/a/a_20240101_000000.log"),
@@ -259,9 +262,9 @@ def test_borra_las_piezas_del_full_rman_y_su_log():
         }
     )
 
-    tipo = eliminar_respaldo(_DIRS, entorno, "RESPALDO", "f_20240101_000000")
+    resultado = eliminar_respaldo(_DIRS, entorno, "RESPALDO", "f_20240101_000000", SID)
 
-    assert tipo == "RMAN"
+    assert resultado.tipo == "RMAN"
     assert sorted(entorno.borrados) == [
         PurePosixPath("/a/f_20240101_000000.log"),
         PurePosixPath("/a/f_20240101_000000_ORCL_1_1.dbf"),
@@ -282,7 +285,7 @@ def test_no_toca_otras_bases_ni_archivos_ajenos():
         }
     )
 
-    eliminar_respaldo(_DIRS, entorno, "RESPALDO", "a_20240101_000000")
+    eliminar_respaldo(_DIRS, entorno, "RESPALDO", "a_20240101_000000", SID)
 
     assert sorted(entorno.borrados) == [
         PurePosixPath("/a/a_20240101_000000.dmp"),
@@ -305,7 +308,7 @@ def test_base_invalida_no_borra_nada(base):
     entorno = _entorno_con({"/a": [_a("a_20240101_000000.dmp")]})
 
     with pytest.raises(RespaldoInvalido):
-        eliminar_respaldo(_DIRS, entorno, "RESPALDO", base)
+        eliminar_respaldo(_DIRS, entorno, "RESPALDO", base, SID)
 
     assert entorno.borrados == []
 
@@ -315,7 +318,7 @@ def test_directorio_inexistente(nombre):
     entorno = _entorno_con({"/a": [_a("a_20240101_000000.dmp")]})
 
     with pytest.raises(DirectorioNoEncontrado):
-        eliminar_respaldo(_DIRS, entorno, nombre, "a_20240101_000000")
+        eliminar_respaldo(_DIRS, entorno, nombre, "a_20240101_000000", SID)
 
     assert entorno.borrados == []
 
@@ -324,7 +327,7 @@ def test_respaldo_inexistente():
     entorno = _entorno_con({"/a": [_a("a_20240101_000000.dmp")]})
 
     with pytest.raises(RespaldoNoEncontrado, match="Respaldo no encontrado"):
-        eliminar_respaldo(_DIRS, entorno, "RESPALDO", "z_20240909_000000")
+        eliminar_respaldo(_DIRS, entorno, "RESPALDO", "z_20240909_000000", SID)
 
     assert entorno.borrados == []
 
@@ -332,7 +335,8 @@ def test_respaldo_inexistente():
 def test_directorio_de_sistema_se_permite():
     entorno = _entorno_con({"/dp": [_a("a_20240101_000000.dmp")]})
 
-    assert eliminar_respaldo(_DIRS, entorno, "data_pump_dir", "a_20240101_000000") == "Data Pump"
+    resultado = eliminar_respaldo(_DIRS, entorno, "data_pump_dir", "a_20240101_000000", SID)
+    assert resultado.tipo == "Data Pump"
     assert entorno.borrados == [PurePosixPath("/dp/a_20240101_000000.dmp")]
 
 
@@ -353,6 +357,63 @@ def test_fallo_de_borrado_se_propaga_y_no_intenta_los_siguientes():
     )
 
     with pytest.raises(OperacionEntornoFallida, match="Permission denied"):
-        eliminar_respaldo(_Consulta([("RESPALDO", "/a")]), entorno, "RESPALDO", "a_20240101_000000")
+        eliminar_respaldo(_Consulta([("RESPALDO", "/a")]), entorno, "RESPALDO", "a_20240101_000000", SID)
 
     assert len(entorno.borrados) == 2
+
+
+_RMAN = [_a("f_20240101_000000_ORCL_1_1.dbf"), _a("f_20240101_000000.log")]
+_LIMPIEZA = "CROSSCHECK BACKUP;\nDELETE NOPROMPT EXPIRED BACKUP;\n"
+
+
+def test_rman_ejecuta_el_script_fijo_de_limpieza_con_el_sid_y_sin_advertencia():
+    entorno = _entorno_con({"/a": _RMAN})
+
+    resultado = eliminar_respaldo(_DIRS, entorno, "RESPALDO", "f_20240101_000000", "ORCL")
+
+    assert resultado == ResultadoEliminacion("RMAN")
+    assert [(h["nombre"], h["script"], h["variables"]) for h in entorno.herramientas] == [
+        ("rman", _LIMPIEZA, {"ORACLE_SID": "ORCL"})
+    ]
+
+
+def test_data_pump_no_ejecuta_rman():
+    entorno = _entorno_con({"/a": [_a("a_20240101_000000.dmp"), _a("a_20240101_000000.log")]})
+
+    eliminar_respaldo(_DIRS, entorno, "RESPALDO", "a_20240101_000000", SID)
+
+    assert entorno.herramientas == []
+
+
+def test_fallo_de_rman_devuelve_advertencia_y_los_archivos_siguen_borrados():
+    entorno = _entorno_con({"/a": _RMAN}, codigo=1, texto="RMAN-06059: falta un archivelog")
+
+    resultado = eliminar_respaldo(_DIRS, entorno, "RESPALDO", "f_20240101_000000", SID)
+
+    assert resultado.tipo == "RMAN"
+    assert resultado.advertencia.log == "RMAN-06059: falta un archivelog"
+    assert "Faltan archivelogs" in resultado.advertencia.explicacion
+    assert len(entorno.borrados) == 2
+
+
+class _EntornoSinRman(EntornoFalso):
+    def ejecutar(self, comando):
+        raise HerramientaNoDisponible(comando.nombre)
+
+
+def test_rman_no_disponible_es_advertencia_y_no_pierde_el_borrado():
+    entorno = _EntornoSinRman(archivos={PurePosixPath("/a"): _RMAN})
+
+    resultado = eliminar_respaldo(_DIRS, entorno, "RESPALDO", "f_20240101_000000", SID)
+
+    assert resultado.advertencia is not None
+    assert len(entorno.borrados) == 2
+
+
+def test_si_falla_el_borrado_de_archivos_no_se_ejecuta_rman():
+    entorno = _entorno_con({"/a": _RMAN}, fallo_borrado="rm: Permission denied")
+
+    with pytest.raises(OperacionEntornoFallida):
+        eliminar_respaldo(_DIRS, entorno, "RESPALDO", "f_20240101_000000", SID)
+
+    assert entorno.herramientas == []

@@ -8,8 +8,12 @@ from src.services.entorno_oracle import (
     ArchivoEntorno,
     ArchivoNoLegible,
     EntornoOracle,
+    HerramientaNoDisponible,
     OperacionEntornoFallida,
 )
+from src.services.errores_oracle import explicar_error
+from src.services.respaldo_full import AdvertenciaLimpieza
+from src.services.rman_runner import ejecutar_rman
 
 _BASE = r"(?P<base>[A-Za-z0-9_-]{1,50}_(?P<marca>\d{8}_\d{6}))"
 # .dmp/.log son `<base>.<ext>`; la pieza RMAN es `<base>_<DB>_<set>_<pieza>.dbf` con DB sin '_',
@@ -28,8 +32,20 @@ class RespaldoNoEncontrado(Exception):
 _BASE_VALIDA = re.compile(r"[A-Za-z0-9_-]+_\d{8}_\d{6}")
 
 
-def eliminar_respaldo(consulta: Consulta, entorno: EntornoOracle, directorio: str, base: str) -> str:
-    """Borra los archivos de un respaldo y devuelve su tipo.
+@dataclass(frozen=True)
+class ResultadoEliminacion:
+    tipo: str
+    advertencia: AdvertenciaLimpieza | None = None
+
+
+# Sin entrada del cliente: solo descarta del catálogo de RMAN las piezas que acabamos de borrar.
+_SCRIPT_LIMPIEZA = "CROSSCHECK BACKUP;\nDELETE NOPROMPT EXPIRED BACKUP;\n"
+
+
+def eliminar_respaldo(
+    consulta: Consulta, entorno: EntornoOracle, directorio: str, base: str, sid: str
+) -> ResultadoEliminacion:
+    """Borra los archivos de un respaldo y devuelve su tipo, con advertencia si falla la limpieza RMAN.
 
     Los nombres a borrar salen del listado del directorio, nunca de la entrada del cliente.
     """
@@ -49,7 +65,16 @@ def eliminar_respaldo(consulta: Consulta, entorno: EntornoOracle, directorio: st
         raise RespaldoNoEncontrado("Respaldo no encontrado")
     for archivo in respaldo.archivos:
         entorno.borrar_archivo(carpeta / archivo.nombre)
-    return respaldo.tipo
+    if respaldo.tipo != "RMAN":
+        return ResultadoEliminacion(respaldo.tipo)
+    # Los archivos ya están borrados: si RMAN falla o no está, es advertencia, no error.
+    try:
+        limpieza = ejecutar_rman(entorno, _SCRIPT_LIMPIEZA, sid)
+    except HerramientaNoDisponible as error:
+        return ResultadoEliminacion("RMAN", AdvertenciaLimpieza(explicar_error(str(error)), str(error)))
+    if limpieza.codigo != 0:
+        return ResultadoEliminacion("RMAN", AdvertenciaLimpieza(explicar_error(limpieza.texto), limpieza.texto))
+    return ResultadoEliminacion("RMAN")
 
 
 @dataclass(frozen=True, kw_only=True)
