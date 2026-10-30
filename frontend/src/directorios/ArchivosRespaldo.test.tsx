@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ArchivosRespaldo } from './ArchivosRespaldo'
 
 const TOKEN = 'tok-123'
@@ -99,5 +99,115 @@ describe('sección Respaldos', () => {
     render(<ArchivosRespaldo token={TOKEN} />)
 
     expect((await screen.findByRole('alert')).textContent).toContain('Se requiere sesión SYSDBA o rol DBA')
+  })
+})
+
+describe('eliminar un respaldo', () => {
+  const URL_BORRAR = '/directorios/RESPALDOS/respaldos/hr_20250102_030405'
+  const listados = () => fetchFalso.mock.calls.filter(([, o]) => o.method === undefined)
+  const borrados = () => fetchFalso.mock.calls.filter(([, o]) => o.method === 'DELETE')
+
+  // La primera lista trae ambos respaldos; las recargas, solo el antiguo.
+  const simularBorrado = (respuestaDelete: unknown) => {
+    let lecturas = 0
+    fetchFalso = vi.fn(async (_url: string, opciones: { method?: string }) => {
+      if (opciones.method === 'DELETE') return respuestaDelete
+      lecturas++
+      return ok({ respaldos: lecturas === 1 ? [RECIENTE, ANTIGUO] : [ANTIGUO], avisos: [] })
+    })
+    vi.stubGlobal('fetch', fetchFalso)
+  }
+
+  const pedirEliminar = async () => {
+    render(<ArchivosRespaldo token={TOKEN} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Eliminar hr_20250102_030405' }))
+  }
+  const confirmar = () => fireEvent.click(screen.getByRole('button', { name: 'Sí, confirmar' }))
+
+  it('pide confirmación nombrando el respaldo y avisando de que se borran sus archivos y su log', async () => {
+    simularBorrado(ok({ mensaje: 'Respaldo hr_20250102_030405 eliminado', advertencia: null }))
+    await pedirEliminar()
+
+    const pregunta = screen.getByRole('group').getAttribute('aria-label') ?? ''
+    expect(pregunta).toContain('hr_20250102_030405')
+    expect(pregunta).toMatch(/archivos/)
+    expect(pregunta).toMatch(/log/)
+    expect(borrados()).toHaveLength(0)
+  })
+
+  it('al confirmar envía DELETE con el directorio y la base codificados, muestra el éxito y recarga la lista', async () => {
+    simularBorrado(ok({ mensaje: 'Respaldo hr_20250102_030405 eliminado', advertencia: null }))
+    await pedirEliminar()
+    confirmar()
+
+    expect(await screen.findByText('Respaldo hr_20250102_030405 eliminado')).not.toBeNull()
+    expect(borrados()).toHaveLength(1)
+    expect(borrados()[0][0]).toBe(URL_BORRAR)
+    expect(borrados()[0][1].headers.Authorization).toBe(`Bearer ${TOKEN}`)
+    expect(listados()).toHaveLength(2)
+    expect(screen.queryByText('hr_20250102_030405')).toBeNull()
+    expect(screen.getByText('full_20240101_000000')).not.toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('codifica con encodeURIComponent el directorio y la base', async () => {
+    const raro = { ...RECIENTE, directorio: 'DIR/ESP ECIAL', base: 'a b_20250102_030405' }
+    fetchFalso = vi.fn(async () => ok({ respaldos: [raro], avisos: [] }))
+    vi.stubGlobal('fetch', fetchFalso)
+    render(<ArchivosRespaldo token={TOKEN} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Eliminar a b_20250102_030405' }))
+    confirmar()
+
+    await waitFor(() => expect(borrados()).toHaveLength(1))
+    expect(borrados()[0][0]).toBe('/directorios/DIR%2FESP%20ECIAL/respaldos/a%20b_20250102_030405')
+  })
+
+  it('al cancelar no envía ninguna petición ni cambia la lista', async () => {
+    simularBorrado(ok({ mensaje: 'Respaldo hr_20250102_030405 eliminado', advertencia: null }))
+    await pedirEliminar()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+
+    expect(borrados()).toHaveLength(0)
+    expect(fetchFalso).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('hr_20250102_030405')).not.toBeNull()
+    expect(screen.getByText('full_20240101_000000')).not.toBeNull()
+  })
+
+  it('muestra la advertencia de RMAN con su explicación y su log junto al éxito', async () => {
+    simularBorrado(
+      ok({
+        mensaje: 'Respaldo hr_20250102_030405 eliminado',
+        advertencia: { explicacion: 'No se pudo limpiar el catálogo de RMAN', log: 'RMAN-06004: fallo' },
+      }),
+    )
+    await pedirEliminar()
+    confirmar()
+
+    expect(await screen.findByText('Respaldo hr_20250102_030405 eliminado')).not.toBeNull()
+    expect(screen.getByText('No se pudo limpiar el catálogo de RMAN')).not.toBeNull()
+    expect(screen.getByText('RMAN-06004: fallo')).not.toBeNull()
+    expect(listados()).toHaveLength(2)
+  })
+
+  it.each([
+    [404, { detail: 'Respaldo no encontrado' }, 'Respaldo no encontrado', undefined],
+    [422, { errores: ['Nombre de respaldo no válido'] }, 'Nombre de respaldo no válido', undefined],
+    [
+      500,
+      { mensaje: 'No se pudo eliminar el respaldo', explicacion: 'El archivo está en uso', error: 'rm: sin permiso' },
+      'No se pudo eliminar el respaldo',
+      'rm: sin permiso',
+    ],
+  ])('ante %i muestra el aviso devuelto y recarga la lista', async (status, cuerpo, texto, detalle) => {
+    simularBorrado({ ok: false, status, json: async () => cuerpo })
+    await pedirEliminar()
+    confirmar()
+
+    expect((await screen.findByRole('alert')).textContent).toContain(texto)
+    if (detalle) expect(screen.getByText(detalle)).not.toBeNull()
+    if (status === 500) expect(screen.getByText('El archivo está en uso')).not.toBeNull()
+    await waitFor(() => expect(listados()).toHaveLength(2))
+    expect(screen.queryByText('hr_20250102_030405')).toBeNull()
+    expect(screen.queryByText(/eliminado/)).toBeNull()
   })
 })

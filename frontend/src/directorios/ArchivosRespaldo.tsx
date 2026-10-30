@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { llamar, type Aviso } from '../admin/api'
-import { MostrarAviso, Tabla } from '../admin/Avisos'
+import { BotonConfirmar, MostrarAviso, Tabla } from '../admin/Avisos'
 
 type Respaldo = {
   directorio: string
@@ -28,20 +28,41 @@ function formatearTamano(bytes: number) {
 export function ArchivosRespaldo({ token }: { token: string }) {
   const [respaldos, setRespaldos] = useState<Respaldo[]>([])
   const [aviso, setAviso] = useState<Aviso | null>(null)
+  const [advertencia, setAdvertencia] = useState<Aviso | null>(null)
+
+  const cargar = useCallback(async () => {
+    const r = await llamar<{ respaldos: Respaldo[]; avisos: string[] }>(token, '/directorios/respaldos')
+    if (!r.ok) return setAviso(r.aviso)
+    const { respaldos = [], avisos = [] } = r.datos
+    setRespaldos(respaldos)
+    setAviso(avisos.length > 0 ? { tipo: 'error', textos: avisos } : null)
+  }, [token])
 
   useEffect(() => {
-    void llamar<{ respaldos: Respaldo[]; avisos: string[] }>(token, '/directorios/respaldos').then((r) => {
-      if (!r.ok) return setAviso(r.aviso)
-      const { respaldos = [], avisos = [] } = r.datos
-      setRespaldos(respaldos)
-      setAviso(avisos.length > 0 ? { tipo: 'error', textos: avisos } : null)
-    })
-  }, [token])
+    void cargar()
+  }, [cargar])
+
+  const eliminar = async (r: Respaldo) => {
+    const url = `/directorios/${encodeURIComponent(r.directorio)}/respaldos/${encodeURIComponent(r.base)}`
+    const res = await llamar<{ mensaje: string; advertencia: { explicacion: string; log: string } | null }>(
+      token,
+      url,
+      undefined,
+      'DELETE',
+    )
+    await cargar()
+    setAdvertencia(null)
+    if (!res.ok) return setAviso(res.aviso)
+    setAviso({ tipo: 'ok', textos: [res.datos.mensaje] })
+    const { advertencia } = res.datos
+    if (advertencia) setAdvertencia({ tipo: 'error', textos: [advertencia.explicacion], detalle: advertencia.log })
+  }
 
   return (
     <div className="panel">
       <h2>Respaldos</h2>
       <MostrarAviso aviso={aviso} />
+      <MostrarAviso aviso={advertencia} />
       <Tabla
         titulo="Respaldos"
         columnas={[
@@ -53,6 +74,16 @@ export function ArchivosRespaldo({ token }: { token: string }) {
           { titulo: 'Archivos', valor: (r: Respaldo) => r.archivos.map((a) => a.nombre).join(', ') },
           { titulo: 'Tamaño', valor: (r: Respaldo) => formatearTamano(r.tamano) },
           { titulo: 'Fecha', valor: (r: Respaldo) => new Date(r.fecha).toLocaleString('es') },
+          {
+            titulo: 'Acciones',
+            valor: (r: Respaldo) => (
+              <BotonConfirmar
+                etiqueta={`Eliminar ${r.base}`}
+                pregunta={`¿Eliminar el respaldo ${r.base}? Se borrarán sus archivos y su log.`}
+                onConfirmar={() => void eliminar(r)}
+              />
+            ),
+          },
         ]}
         filas={respaldos}
         clave={(r) => `${r.directorio}/${r.base}`}
