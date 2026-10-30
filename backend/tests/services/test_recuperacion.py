@@ -3,7 +3,11 @@ from pathlib import PurePosixPath
 
 from src.services.archivos_respaldo import agrupar_archivos, listar_respaldos
 from src.services.entorno_oracle import ArchivoEntorno
-from src.services.recuperacion import nombre_log_recuperacion
+import pytest
+
+from src.services.archivos_respaldo import RespaldoInvalido
+from src.services.identificadores import IdentificadorInvalido
+from src.services.recuperacion import nombre_log_recuperacion, validar_solicitud_datapump
 from tests.services.entorno_falso import EntornoFalso
 
 BASE = "hr_20240105_103000"
@@ -40,3 +44,51 @@ def test_listar_respaldos_ignora_el_log_de_recuperacion_y_no_cambia_el_estado():
 
     assert [(r.base, r.estado) for r in respaldos] == [(BASE, "Completo")]
     assert avisos == []
+
+
+# --- Validación de la solicitud Data Pump (FA-4b, RN-4, RN-5) ---
+
+
+def test_tablas_se_normalizan_a_owner_tabla_en_mayusculas():
+    assert validar_solicitud_datapump("tablas", ["hr.employees", " Scott.Emp "], "SKIP") == (
+        ["HR.EMPLOYEES", "SCOTT.EMP"],
+        "SKIP",
+    )
+
+
+def test_schemas_se_normalizan_y_existentes_es_skip_por_defecto():
+    assert validar_solicitud_datapump("schemas", ["hr", "scott"]) == (["HR", "SCOTT"], "SKIP")
+
+
+@pytest.mark.parametrize("accion", ["SKIP", "APPEND", "TRUNCATE", "REPLACE"])
+def test_acepta_las_cuatro_acciones_sobre_tablas_existentes(accion):
+    assert validar_solicitud_datapump("schemas", ["hr"], accion)[1] == accion
+
+
+def test_modo_distinto_de_tablas_o_schemas_es_invalido():
+    with pytest.raises(RespaldoInvalido, match="El modo debe ser Tablas o Schemas"):
+        validar_solicitud_datapump("full", ["hr"])
+
+
+@pytest.mark.parametrize("objetos", [[], None])
+def test_objetos_vacios_son_invalidos(objetos):
+    with pytest.raises(RespaldoInvalido, match="Debes indicar al menos un objeto"):
+        validar_solicitud_datapump("schemas", objetos)
+
+
+@pytest.mark.parametrize("accion", ["DROP", "skip", "", None])
+def test_accion_sobre_existentes_desconocida_es_invalida(accion):
+    with pytest.raises(RespaldoInvalido, match="La acción sobre tablas existentes debe ser"):
+        validar_solicitud_datapump("schemas", ["hr"], accion)
+
+
+@pytest.mark.parametrize("tabla", ["EMPLOYEES", "HR.", ".EMP", "HR.EMP.X", "HR.EMP;DROP", "1HR.EMP"])
+def test_tabla_que_no_es_owner_tabla_valido_es_invalida(tabla):
+    with pytest.raises((RespaldoInvalido, IdentificadorInvalido)):
+        validar_solicitud_datapump("tablas", [tabla])
+
+
+@pytest.mark.parametrize("schema", ["", "HR.EMP", "HR;DROP", "1HR", 'HR"'])
+def test_schema_invalido_lanza_identificador_invalido(schema):
+    with pytest.raises(IdentificadorInvalido):
+        validar_solicitud_datapump("schemas", [schema])
