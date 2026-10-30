@@ -2,7 +2,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from src.services.entorno_oracle import ArchivoEntorno
+from src.services.entorno_oracle import ArchivoEntorno, ArchivoNoLegible, EntornoOracle
 
 _BASE = r"(?P<base>[A-Za-z0-9_-]{1,50}_(?P<marca>\d{8}_\d{6}))"
 # .dmp/.log son `<base>.<ext>`; la pieza RMAN es `<base>_<DB>_<set>_<pieza>.dbf` con DB sin '_',
@@ -20,6 +20,24 @@ class Respaldo:
     archivos: list[ArchivoEntorno] = field(default_factory=list)
     tamano: int
     fecha: datetime
+
+
+_EXITO = {"Data Pump": "successfully completed", "RMAN": "Finished backup"}
+
+
+def estado_de(respaldo: Respaldo, entorno: EntornoOracle, ruta: str) -> str:
+    nombre_log = f"{respaldo.base}.log"
+    if not any(a.nombre == nombre_log for a in respaldo.archivos):
+        return "Sin log"
+    try:
+        log = entorno.leer_archivo(entorno.tipo_ruta(ruta) / nombre_log)
+    except ArchivoNoLegible:
+        return "Sin log"
+    if "ORA-" in log or "RMAN-" in log:
+        return "Con errores"
+    if respaldo.tipo == "Desconocido":
+        return "Sin respaldo"
+    return "Completo" if _EXITO[respaldo.tipo] in log else "Sin log"
 
 
 def agrupar_archivos(archivos: list[ArchivoEntorno]) -> list[Respaldo]:
