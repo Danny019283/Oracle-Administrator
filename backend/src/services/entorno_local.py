@@ -6,6 +6,7 @@ from pathlib import Path, PurePath, PureWindowsPath
 from uuid import uuid4
 
 from src.services.entorno_oracle import (
+    ArchivoEntorno,
     ArchivoNoLegible,
     ComandoHerramienta,
     EntornoOracle,
@@ -16,6 +17,14 @@ from src.services.entorno_oracle import (
 from src.services.procesos import ejecutar_proceso
 
 
+def _listar(carpeta: Path) -> list[ArchivoEntorno]:
+    return [
+        ArchivoEntorno(entrada.name, (datos := entrada.stat()).st_size, datos.st_mtime)
+        for entrada in carpeta.iterdir()
+        if entrada.is_file()
+    ]
+
+
 class SistemaLinux:
     """Implementador del Bridge: lo que depende del SO donde corre Oracle (Linux)."""
 
@@ -23,6 +32,9 @@ class SistemaLinux:
 
     def leer_archivo(self, ruta: PurePath) -> str:
         return Path(ruta).read_text(errors="replace")
+
+    def listar_archivos(self, ruta: PurePath) -> list[ArchivoEntorno]:
+        return _listar(Path(ruta))
 
     def crear_carpeta(self, ruta: PurePath) -> None:
         Path(ruta).mkdir(parents=True, exist_ok=True)
@@ -70,6 +82,9 @@ class SistemaWindows:
 
     def leer_archivo(self, ruta: PurePath) -> str:
         return self._a_path(ruta).read_text(errors="replace")
+
+    def listar_archivos(self, ruta: PurePath) -> list[ArchivoEntorno]:
+        return _listar(self._a_path(ruta))
 
     def crear_carpeta(self, ruta: PurePath) -> None:
         self._a_path(ruta).mkdir(parents=True, exist_ok=True)
@@ -119,6 +134,18 @@ class EntornoLocal(EntornoOracle):
             return self._sistema.leer_archivo(ruta)
         except OSError as error:
             raise ArchivoNoLegible(str(error)) from error
+
+    def listar_archivos(self, ruta: PurePath) -> list[ArchivoEntorno]:
+        try:
+            return self._sistema.listar_archivos(ruta)
+        except OSError as error:
+            raise OperacionEntornoFallida(str(error)) from error
+
+    def borrar_archivo(self, ruta: PurePath) -> None:
+        try:
+            self._sistema.borrar(ruta)
+        except OSError as error:
+            raise OperacionEntornoFallida(str(error)) from error
 
     def ejecutar(self, comando: ComandoHerramienta) -> Salida:
         ruta = self.tipo_ruta(tempfile.gettempdir()) / f"{comando.prefijo}_{uuid4().hex}{comando.extension}"

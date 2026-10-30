@@ -4,7 +4,7 @@ from pathlib import PureWindowsPath
 import pytest
 
 from src.services.entorno_local import EntornoLocal, SistemaWindows
-from src.services.entorno_oracle import ComandoHerramienta, OperacionEntornoFallida, Salida
+from src.services.entorno_oracle import ArchivoEntorno, ComandoHerramienta, OperacionEntornoFallida, Salida
 
 TEMPORAL = r"C:\Users\ana\AppData\Local\Temp"
 
@@ -26,7 +26,14 @@ class ArchivoFalso:
         self.estado["carpetas"].append((self.ruta, parents, exist_ok))
 
     def unlink(self, missing_ok=False):
+        if self.estado.get("fallo_borrado"):
+            raise PermissionError("Acceso denegado")
         self.estado["archivos"].pop(self.ruta, None)
+
+    def iterdir(self):
+        if self.ruta not in self.estado.get("listados", {}):
+            raise FileNotFoundError(str(self.ruta))
+        return iter(self.estado["listados"][self.ruta])
 
 
 class ProcesoFalso:
@@ -208,3 +215,46 @@ def test_dar_permisos_con_icacls_fallido_lanza_error_con_su_salida():
 
     with pytest.raises(OperacionEntornoFallida, match="icacls.*Acceso denegado"):
         SistemaWindows().dar_permisos_a_oracle(RUTA, "ORCL", ejecutor)
+
+
+class EntradaFalsa:
+    def __init__(self, nombre, tamano, modificado, archivo=True):
+        self.name = nombre
+        self.archivo = archivo
+        self._stat = type("Stat", (), {"st_size": tamano, "st_mtime": modificado})()
+
+    def is_file(self):
+        return self.archivo
+
+    def stat(self):
+        return self._stat
+
+
+def test_listar_archivos_lista_solo_los_archivos_de_la_ruta_de_windows(estado):
+    ruta = PureWindowsPath(r"C:\oracle\dump")
+    estado["listados"] = {
+        ruta: [EntradaFalsa("a_20240101_101010.dmp", 7, 1704103810.0), EntradaFalsa("sub", 0, 1.0, archivo=False)]
+    }
+
+    assert entorno(estado).listar_archivos(ruta) == [ArchivoEntorno("a_20240101_101010.dmp", 7, 1704103810.0)]
+
+
+def test_listar_archivos_de_una_carpeta_ilegible_en_windows_lanza_operacion_entorno_fallida(estado):
+    with pytest.raises(OperacionEntornoFallida):
+        entorno(estado).listar_archivos(PureWindowsPath(r"C:\no\existe"))
+
+
+def test_borrar_archivo_borra_la_ruta_de_windows(estado):
+    ruta = PureWindowsPath(r"C:\oracle\dump\a.dmp")
+    estado["archivos"][ruta] = "x"
+
+    entorno(estado).borrar_archivo(ruta)
+
+    assert ruta not in estado["archivos"]
+
+
+def test_borrar_archivo_con_error_de_es_en_windows_lanza_operacion_entorno_fallida(estado):
+    estado["fallo_borrado"] = True
+
+    with pytest.raises(OperacionEntornoFallida, match="Acceso denegado"):
+        entorno(estado).borrar_archivo(PureWindowsPath(r"C:\oracle\dump\a.dmp"))

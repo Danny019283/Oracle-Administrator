@@ -3,6 +3,7 @@ from pathlib import PurePath, PurePosixPath
 from uuid import uuid4
 
 from src.services.entorno_oracle import (
+    ArchivoEntorno,
     ArchivoNoLegible,
     ComandoHerramienta,
     EntornoOracle,
@@ -44,6 +45,25 @@ class EntornoContenedor(EntornoOracle):
         if salida.codigo != 0:
             raise ArchivoNoLegible(salida.texto)
         return salida.texto
+
+    def listar_archivos(self, ruta: PurePath) -> list[ArchivoEntorno]:
+        formato = "%f\\t%s\\t%T@\\n"
+        salida = self._ejecutar(
+            [self._cli, "exec", self._contenedor, "find", str(ruta), "-maxdepth", "1", "-type", "f", "-printf", formato]
+        )
+        if salida.codigo != 0:
+            raise OperacionEntornoFallida(salida.texto)
+        archivos = []
+        for linea in salida.texto.splitlines():
+            if linea:
+                nombre, tamano, modificado = linea.rsplit("\t", 2)
+                archivos.append(ArchivoEntorno(nombre, int(tamano), float(modificado)))
+        return archivos
+
+    def borrar_archivo(self, ruta: PurePath) -> None:
+        salida = self._ejecutar([self._cli, "exec", self._contenedor, "rm", "-f", str(ruta)])
+        if salida.codigo != 0:
+            raise OperacionEntornoFallida(salida.texto)
 
     def ejecutar(self, comando: ComandoHerramienta) -> Salida:
         ruta = f"/tmp/{comando.prefijo}_{uuid4().hex}{comando.extension}"

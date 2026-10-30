@@ -22,6 +22,15 @@ class ComandoHerramienta:
     variables: Mapping[str, str] | None = None
 
 
+@dataclass(frozen=True)
+class ArchivoEntorno:
+    """Archivo regular de una carpeta del entorno; `modificado` es epoch en segundos (float)."""
+
+    nombre: str
+    tamano: int
+    modificado: float
+
+
 class OperacionEntornoFallida(Exception):
     """Una operación del entorno terminó con error; el mensaje es la salida del comando."""
 
@@ -55,6 +64,14 @@ class EntornoOracle(ABC):
 
     @abstractmethod
     def leer_archivo(self, ruta: PurePath) -> str: ...
+
+    @abstractmethod
+    def listar_archivos(self, ruta: PurePath) -> list[ArchivoEntorno]:
+        """Archivos regulares de la carpeta, sin entrar en subcarpetas; lanza OperacionEntornoFallida si no se puede leer."""
+
+    @abstractmethod
+    def borrar_archivo(self, ruta: PurePath) -> None:
+        """Borra el archivo; lanza OperacionEntornoFallida con la salida si falla."""
 
     @abstractmethod
     def ejecutar(self, comando: ComandoHerramienta) -> Salida:

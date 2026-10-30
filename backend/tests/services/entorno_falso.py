@@ -10,7 +10,17 @@ class EntornoFalso(EntornoOracle):
 
     tipo_ruta = PurePosixPath
 
-    def __init__(self, codigo=0, texto="", log="", salidas=None, fallo_permisos=None):
+    def __init__(
+        self,
+        codigo=0,
+        texto="",
+        log="",
+        salidas=None,
+        fallo_permisos=None,
+        archivos=(),
+        fallo_listado=None,
+        fallo_borrado=None,
+    ):
         self.codigo = codigo
         self.texto = texto
         self.log = log
@@ -22,6 +32,11 @@ class EntornoFalso(EntornoOracle):
         self.permisos = []
         # fallo_permisos: texto con el que dar_permisos_a_oracle lanza OperacionEntornoFallida
         self.fallo_permisos = fallo_permisos
+        self.archivos = archivos
+        self.fallo_listado = fallo_listado
+        self.fallo_borrado = fallo_borrado
+        self.listados = []
+        self.borrados = []
 
     def crear_carpeta(self, ruta):
         self.carpetas.append(ruta)
@@ -37,6 +52,20 @@ class EntornoFalso(EntornoOracle):
         if self.log is None:
             raise ArchivoNoLegible(str(ruta))
         return self.log
+
+    def listar_archivos(self, ruta):
+        self.listados.append(ruta)
+        if self.fallo_listado is not None:
+            raise OperacionEntornoFallida(self.fallo_listado)
+        # archivos: lista de ArchivoEntorno, o dict ruta -> lista para configurar cada carpeta
+        if isinstance(self.archivos, dict):
+            return list(self.archivos.get(ruta, []))
+        return list(self.archivos)
+
+    def borrar_archivo(self, ruta):
+        self.borrados.append(ruta)
+        if self.fallo_borrado is not None:
+            raise OperacionEntornoFallida(self.fallo_borrado)
 
     def ejecutar(self, comando):
         self.herramientas.append(

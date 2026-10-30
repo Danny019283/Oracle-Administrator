@@ -4,6 +4,7 @@ import pytest
 
 from src.services.entorno_contenedor import EntornoContenedor
 from src.services.entorno_oracle import (
+    ArchivoEntorno,
     ArchivoNoLegible,
     ComandoHerramienta,
     HerramientaNoDisponible,
@@ -245,3 +246,54 @@ def test_dar_permisos_a_oracle_si_chmod_falla_lanza_con_la_salida():
 
     with pytest.raises(OperacionEntornoFallida, match="Operation not permitted"):
         EntornoContenedor("oracle-test", proceso).dar_permisos_a_oracle(EntornoContenedor.tipo_ruta("/u01/r"), "XE")
+
+
+def test_listar_archivos_ejecuta_find_y_devuelve_los_archivos_del_directorio():
+    llamadas = []
+
+    def proceso(args, entrada=None):
+        llamadas.append(args)
+        return Salida(codigo=0, texto="a_20240101_101010.dmp\t1024\t1704103810.5\nb.log\t10\t1704103811.0\n")
+
+    archivos = EntornoContenedor("oracle-test", proceso).listar_archivos(EntornoContenedor.tipo_ruta("/u01/dump"))
+
+    assert llamadas == [
+        [
+            "docker", "exec", "oracle-test", "find", "/u01/dump", "-maxdepth", "1", "-type", "f",
+            "-printf", r"%f\t%s\t%T@\n",  # find interpreta las secuencias de escape
+        ]
+    ]  # fmt: skip
+    assert archivos == [
+        ArchivoEntorno("a_20240101_101010.dmp", 1024, 1704103810.5),
+        ArchivoEntorno("b.log", 10, 1704103811.0),
+    ]
+
+
+def test_listar_archivos_de_una_carpeta_vacia_devuelve_lista_vacia():
+    entorno = EntornoContenedor("c", lambda args, entrada=None: Salida(0, ""))
+
+    assert entorno.listar_archivos(EntornoContenedor.tipo_ruta("/u01")) == []
+
+
+def test_listar_archivos_con_find_fallido_lanza_operacion_entorno_fallida_con_la_salida():
+    def proceso(args, entrada=None):
+        return Salida(codigo=1, texto="find: '/u01/x': No such file or directory")
+
+    with pytest.raises(OperacionEntornoFallida, match="No such file"):
+        EntornoContenedor("c", proceso).listar_archivos(EntornoContenedor.tipo_ruta("/u01/x"))
+
+
+def test_borrar_archivo_ejecuta_rm_f_dentro_del_contenedor():
+    proceso = ProcesoFalso()
+
+    EntornoContenedor("oracle-test", proceso, cli="podman").borrar_archivo(EntornoContenedor.tipo_ruta("/u01/a.dmp"))
+
+    assert proceso.llamadas == [(["podman", "exec", "oracle-test", "rm", "-f", "/u01/a.dmp"], None)]
+
+
+def test_borrar_archivo_con_rm_fallido_lanza_operacion_entorno_fallida_con_la_salida():
+    def proceso(args, entrada=None):
+        return Salida(codigo=1, texto="rm: cannot remove: Permission denied")
+
+    with pytest.raises(OperacionEntornoFallida, match="Permission denied"):
+        EntornoContenedor("c", proceso).borrar_archivo(EntornoContenedor.tipo_ruta("/u01/a.dmp"))

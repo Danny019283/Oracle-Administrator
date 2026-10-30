@@ -3,7 +3,13 @@ from pathlib import Path
 import pytest
 
 from src.services.entorno_local import EntornoLocal, SistemaLinux
-from src.services.entorno_oracle import ArchivoNoLegible, HerramientaNoDisponible, OperacionEntornoFallida, Salida
+from src.services.entorno_oracle import (
+    ArchivoEntorno,
+    ArchivoNoLegible,
+    HerramientaNoDisponible,
+    OperacionEntornoFallida,
+    Salida,
+)
 
 
 def entorno():
@@ -132,3 +138,34 @@ def test_dar_permisos_a_oracle_delega_en_el_sistema_con_ruta_sid_y_su_ejecutor(t
     EntornoLocal(SistemaEspia(), ejecutor).dar_permisos_a_oracle(tmp_path, "XE")
 
     assert llamadas == [(tmp_path, "XE", ejecutor)]
+
+
+def test_listar_archivos_devuelve_solo_los_archivos_regulares_sin_entrar_en_subcarpetas(tmp_path):
+    archivo = tmp_path / "a_20240101_101010.dmp"
+    archivo.write_bytes(b"x" * 5)
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "dentro.log").write_text("no")
+
+    assert entorno().listar_archivos(tmp_path) == [ArchivoEntorno(archivo.name, 5, archivo.stat().st_mtime)]
+
+
+def test_listar_archivos_de_una_carpeta_que_no_existe_lanza_operacion_entorno_fallida(tmp_path):
+    with pytest.raises(OperacionEntornoFallida):
+        entorno().listar_archivos(tmp_path / "no_existe")
+
+
+def test_borrar_archivo_borra_el_archivo_local(tmp_path):
+    archivo = tmp_path / "a.dmp"
+    archivo.write_text("x")
+
+    entorno().borrar_archivo(archivo)
+
+    assert not archivo.exists()
+
+
+def test_borrar_archivo_con_error_de_es_lanza_operacion_entorno_fallida(tmp_path):
+    carpeta = tmp_path / "carpeta"
+    carpeta.mkdir()
+
+    with pytest.raises(OperacionEntornoFallida):
+        entorno().borrar_archivo(carpeta)
