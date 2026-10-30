@@ -139,10 +139,15 @@ def agrupar_archivos(archivos: list[ArchivoEntorno]) -> list[Respaldo]:
     return sorted(respaldos, key=lambda r: r.fecha, reverse=True)
 
 
+DIRECTORIOS_IGNORADOS = {"ORACLE_OCM_CONFIG_DIR", "ORACLE_OCM_CONFIG_DIR2"}
+
+
 def listar_respaldos(consulta: Consulta, entorno: EntornoOracle) -> tuple[list[Respaldo], list[str]]:
     respaldos: list[Respaldo] = []
     avisos: list[str] = []
     for d in listar_todos_directorios(consulta):
+        if d.nombre in DIRECTORIOS_IGNORADOS:
+            continue
         try:
             archivos = entorno.listar_archivos(entorno.tipo_ruta(d.ruta))
         except OperacionEntornoFallida:

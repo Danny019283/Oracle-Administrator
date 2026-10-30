@@ -230,6 +230,40 @@ def test_directorio_ilegible_se_omite_con_aviso_y_los_demas_siguen():
     assert "ROTO" in avisos[0]
 
 
+def test_directorios_internos_de_oracle_ocm_se_ignoran_sin_listar_ni_avisar():
+    entorno = _EntornoQueNoLee({PurePosixPath("/ocm"), PurePosixPath("/ocm2")})
+
+    respaldos, avisos = listar_respaldos(
+        _Consulta([("ORACLE_OCM_CONFIG_DIR", "/ocm"), ("ORACLE_OCM_CONFIG_DIR2", "/ocm2")]), entorno
+    )
+
+    assert (respaldos, avisos) == ([], [])
+    assert entorno.listados == []
+
+
+def test_directorio_de_sistema_ilegible_distinto_de_ocm_sigue_con_aviso_y_los_legibles_se_listan():
+    entorno = _EntornoQueNoLee(
+        {PurePosixPath("/dp"), PurePosixPath("/ocm")}, archivos=[_a("a_20240101_000000.dmp")]
+    )
+
+    respaldos, avisos = listar_respaldos(
+        _Consulta([("DATA_PUMP_DIR", "/dp"), ("ORACLE_OCM_CONFIG_DIR", "/ocm"), ("OTRO", "/otro")]), entorno
+    )
+
+    assert len(avisos) == 1 and "DATA_PUMP_DIR" in avisos[0]
+    assert [r.directorio for r in respaldos] == ["OTRO"]
+    assert entorno.listados == [PurePosixPath("/otro")]
+
+
+def test_data_pump_dir_legible_sigue_en_la_lista():
+    entorno = EntornoFalso(archivos={PurePosixPath("/dp"): [_a("a_20240101_000000.dmp")]})
+
+    respaldos, avisos = listar_respaldos(_Consulta([("DATA_PUMP_DIR", "/dp")]), entorno)
+
+    assert avisos == []
+    assert [r.directorio for r in respaldos] == ["DATA_PUMP_DIR"]
+
+
 _DIRS = _Consulta([("RESPALDO", "/a"), ("DATA_PUMP_DIR", "/dp")])
 
 
