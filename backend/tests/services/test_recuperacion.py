@@ -5,10 +5,18 @@ from src.services.archivos_respaldo import agrupar_archivos, listar_respaldos
 from src.services.entorno_oracle import ArchivoEntorno
 import pytest
 
-from src.services.archivos_respaldo import RespaldoInvalido
+from src.services.archivos_respaldo import RespaldoInvalido, RespaldoNoEncontrado
+from src.services.directorios import DirectorioNoEncontrado
+from src.services.entorno_oracle import HerramientaNoDisponible
+from src.services.errores_oracle import explicar_error
 from src.services.identificadores import IdentificadorInvalido
 from src.services.expdp_runner import Conexion
-from src.services.recuperacion import nombre_log_recuperacion, recuperar_datapump, validar_solicitud_datapump
+from src.services.recuperacion import (
+    RecuperacionFallida,
+    nombre_log_recuperacion,
+    recuperar_datapump,
+    validar_solicitud_datapump,
+)
 from tests.services.entorno_falso import EntornoFalso
 
 BASE = "hr_20240105_103000"
@@ -168,3 +176,98 @@ def test_respaldo_no_completo_se_recupera_igual_con_advertencia_del_estado():
 
     assert entorno.herramientas[0]["nombre"] == "impdp"
     assert "Sin log" in resultado.advertencia
+
+
+# --- fallos de recuperar_datapump (FA-4a, FA-4c, FA-4d, FA-5a, FA-5b, RN-11) ---
+
+
+def test_respaldo_rman_no_se_recupera_con_datapump_y_no_lanza_impdp():
+    entorno = EntornoFalso(archivos={PurePosixPath("/a"): [_a(f"{BASE}_USERS_1_1.dbf")]})
+
+    with pytest.raises(RespaldoInvalido, match="Data Pump"):
+        _recuperar(entorno)
+
+    assert entorno.herramientas == []
+
+
+def test_respaldo_sin_dmp_no_lanza_impdp():
+    entorno = EntornoFalso(archivos={PurePosixPath("/a"): [_a(f"{BASE}.log")]})
+
+    with pytest.raises(RespaldoInvalido):
+        _recuperar(entorno)
+
+    assert entorno.herramientas == []
+
+
+def test_base_invalida_es_respaldo_invalido():
+    entorno = _entorno_datapump()
+
+    with pytest.raises(RespaldoInvalido):
+        recuperar_datapump(_Consulta(), entorno, CONEXION, "respaldo", "../x", "tablas", ["hr.e"], "SKIP", AHORA)
+
+    assert entorno.herramientas == []
+
+
+def test_directorio_inexistente_lanza_directorio_no_encontrado():
+    entorno = _entorno_datapump()
+
+    with pytest.raises(DirectorioNoEncontrado):
+        recuperar_datapump(_Consulta(), entorno, CONEXION, "otro", BASE, "tablas", ["hr.e"], "SKIP", AHORA)
+
+    assert entorno.herramientas == []
+
+
+def test_respaldo_inexistente_lanza_respaldo_no_encontrado():
+    entorno = _entorno_datapump()
+
+    with pytest.raises(RespaldoNoEncontrado):
+        recuperar_datapump(
+            _Consulta(), entorno, CONEXION, "respaldo", "x_20240101_000000", "tablas", ["hr.e"], "SKIP", AHORA
+        )
+
+    assert entorno.herramientas == []
+
+
+def test_impdp_con_codigo_distinto_de_cero_lanza_recuperacion_fallida_con_log_y_explicacion():
+    entorno = _entorno_datapump(log="ORA-39151: Table exists")
+    entorno.codigo = 5
+
+    with pytest.raises(RecuperacionFallida) as error:
+        _recuperar(entorno)
+
+    assert error.value.codigo == 5
+    assert error.value.log == "ORA-39151: Table exists"
+    assert error.value.explicacion == explicar_error("ORA-39151: Table exists")
+    assert "impdp" in str(error.value)
+
+
+def test_recuperacion_fallida_usa_la_salida_si_el_log_no_se_puede_leer():
+    entorno = _entorno_datapump(log=None)
+    entorno.codigo = 1
+    entorno.texto = "ORA-31655: sin objetos"
+
+    with pytest.raises(RecuperacionFallida) as error:
+        _recuperar(entorno)
+
+    assert error.value.log == "ORA-31655: sin objetos"
+
+
+def test_impdp_no_disponible_deja_pasar_herramienta_no_disponible():
+    class _SinImpdp(EntornoFalso):
+        def ejecutar(self, comando):
+            raise HerramientaNoDisponible("impdp")
+
+    entorno = _SinImpdp(archivos={PurePosixPath("/a"): [_a(f"{BASE}.dmp")]})
+
+    with pytest.raises(HerramientaNoDisponible):
+        _recuperar(entorno)
+
+
+def test_un_fallo_no_borra_ni_modifica_los_archivos_del_respaldo():
+    entorno = _entorno_datapump()
+    entorno.codigo = 1
+
+    with pytest.raises(RecuperacionFallida):
+        _recuperar(entorno)
+
+    assert entorno.borrados == []

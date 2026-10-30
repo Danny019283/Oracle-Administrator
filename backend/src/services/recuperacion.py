@@ -4,6 +4,7 @@ from datetime import datetime
 from src.services.archivos_respaldo import RespaldoInvalido, resolver_respaldo
 from src.services.directorios import Consulta
 from src.services.entorno_oracle import ArchivoNoLegible, EntornoOracle
+from src.services.errores_oracle import explicar_error
 from src.services.expdp_runner import Conexion, ejecutar_impdp
 from src.services.identificadores import normalizar_identificador
 
@@ -35,6 +36,14 @@ def nombre_log_recuperacion(base: str, ahora: datetime) -> str:
     return f"{base}_recuperacion_{ahora:%Y%m%d-%H%M%S}.log"
 
 
+class RecuperacionFallida(Exception):
+    def __init__(self, codigo: int, log: str, herramienta: str = "impdp"):
+        super().__init__(f"La recuperación falló: {herramienta} terminó con código {codigo}")
+        self.codigo = codigo
+        self.log = log
+        self.explicacion = explicar_error(log)
+
+
 @dataclass(frozen=True)
 class ResultadoRecuperacion:
     log: str
@@ -53,6 +62,8 @@ def recuperar_datapump(
     ahora: datetime,
 ) -> ResultadoRecuperacion:
     carpeta, respaldo = resolver_respaldo(consulta, entorno, directorio, base)
+    if respaldo.tipo != "Data Pump":
+        raise RespaldoInvalido("Solo se puede recuperar con Data Pump un respaldo de tipo Data Pump")
     objetos, existentes = validar_solicitud_datapump(objeto_modo, objetos, existentes)
     nombre_log = nombre_log_recuperacion(base, ahora)
     salida = ejecutar_impdp(
@@ -70,5 +81,7 @@ def recuperar_datapump(
         log = entorno.leer_archivo(carpeta / nombre_log)
     except ArchivoNoLegible:
         log = salida.texto
+    if salida.codigo != 0:
+        raise RecuperacionFallida(salida.codigo, log)
     advertencia = None if respaldo.estado == "Completo" else f"El respaldo tiene estado «{respaldo.estado}»"
     return ResultadoRecuperacion(log, advertencia)
