@@ -10,9 +10,15 @@ const DATA_PUMP = { nombre: 'DATA_PUMP_DIR', ruta: '/opt/oracle/admin/dpdump' }
 
 let fetchFalso: ReturnType<typeof vi.fn>
 
+// /directorios/respaldos (sección Respaldos) se responde aparte para que fetchFalso solo cuente las llamadas de directorios.
+const stubear = (falso: ReturnType<typeof vi.fn>) =>
+  vi.stubGlobal('fetch', (url: string, opciones?: unknown) =>
+    url === '/directorios/respaldos' ? Promise.resolve(ok({ respaldos: [], avisos: [] })) : falso(url, opciones),
+  )
+
 const simular = (respuesta: unknown) => {
   fetchFalso = vi.fn(async () => respuesta)
-  vi.stubGlobal('fetch', fetchFalso)
+  stubear(fetchFalso)
 }
 
 beforeEach(() => {
@@ -81,7 +87,11 @@ describe('crear directorio', () => {
     fetchFalso = vi.fn(async () => cola.shift())
     usuariosFalso = vi.fn(async () => usuarios)
     vi.stubGlobal('fetch', (url: string, opciones?: unknown) =>
-      url === '/seguridad/usuarios' ? usuariosFalso(url, opciones) : fetchFalso(url, opciones),
+      url === '/seguridad/usuarios'
+        ? usuariosFalso(url, opciones)
+        : url === '/directorios/respaldos'
+          ? Promise.resolve(ok({ respaldos: [], avisos: [] }))
+          : fetchFalso(url, opciones),
     )
   }
 
@@ -212,7 +222,7 @@ describe('editar directorio', () => {
   const respuestas = (...siguientes: unknown[]) => {
     const cola = [...siguientes]
     fetchFalso = vi.fn(async () => cola.shift())
-    vi.stubGlobal('fetch', fetchFalso)
+    stubear(fetchFalso)
   }
 
   const lista = ok({ directorios: [DATA_PUMP, RESPALDOS], ejemplos_ruta: ['/opt/oracle/respaldos', 'C:\\respaldos'] })
@@ -294,7 +304,7 @@ describe('eliminar directorio', () => {
   const respuestas = (...siguientes: unknown[]) => {
     const cola = [...siguientes]
     fetchFalso = vi.fn(async () => cola.shift())
-    vi.stubGlobal('fetch', fetchFalso)
+    stubear(fetchFalso)
   }
 
   const lista = ok({ directorios: [DATA_PUMP, RESPALDOS], ejemplos_ruta: ['/opt/oracle/respaldos'] })

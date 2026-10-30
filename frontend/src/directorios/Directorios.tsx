@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import '../admin/admin.css'
 import { llamar, type Aviso } from '../admin/api'
 import { BotonConfirmar, MostrarAviso, Tabla } from '../admin/Avisos'
+import { ArchivosRespaldo } from './ArchivosRespaldo'
 
 type Directorio = { nombre: string; ruta: string }
 
@@ -168,6 +169,8 @@ export function Directorios({ token }: { token: string }) {
           vacio="No hay directorios para mostrar"
         />
       </div>
+
+      <ArchivosRespaldo token={token} />
     </section>
   )
 }
