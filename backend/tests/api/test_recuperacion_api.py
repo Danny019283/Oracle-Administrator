@@ -1,4 +1,5 @@
 import re
+from datetime import datetime, timedelta
 from pathlib import PurePosixPath
 
 import pytest
@@ -35,8 +36,10 @@ def cliente():
     app.dependency_overrides.clear()
 
 
-def usar(entorno, roles=(("DBA",),), sysdba=False, modo_log="ARCHIVELOG"):
+def usar(entorno, roles=(("DBA",),), sysdba=False, modo_log="ARCHIVELOG", desfase=timedelta(0)):
     def consulta(sql, params=None):
+        if "sysdate" in sql.lower():
+            return [((datetime.now() + desfase).strftime("%Y-%m-%d %H:%M:%S"),)]
         if "session_roles" in sql.lower():
             return list(roles)
         if "instance_name" in sql.lower():
@@ -414,3 +417,23 @@ def test_fallo_de_la_carpeta_auxiliar_responde_500_con_mensaje_propio_de_la_recu
         "explicacion": "Oracle necesita escribir en la carpeta aux_<base> junto al respaldo y poder borrarla; revisa los permisos de la carpeta del DIRECTORY.",
         "error": next(iter(fallo.values())),
     }
+
+
+def test_full_con_hasta_lleva_al_script_la_hora_de_la_base(cliente, almacen):
+    entorno = EntornoFalso(log=LOG_RMAN, archivos=ARCHIVOS_RMAN)
+    usar(entorno, sysdba=True, desfase=timedelta(hours=6))
+
+    respuesta = recuperar(cliente, {**FULL, "hasta": "2024-06-01 09:00:00"}, base=RMAN)
+
+    assert respuesta.status_code == 200
+    assert "TO_DATE('01/06/2024 15:00:00','DD/MM/YYYY HH24:MI:SS')" in entorno.herramientas[0]["script"]
+
+
+def test_tabla_lleva_al_script_la_hora_de_la_base(cliente, almacen):
+    entorno = EntornoFalso(log=LOG_RMAN, archivos=ARCHIVOS_RMAN)
+    usar(entorno, sysdba=True, desfase=timedelta(hours=6))
+
+    respuesta = recuperar(cliente, TABLA, base=RMAN)
+
+    assert respuesta.status_code == 200
+    assert "TO_DATE('01/06/2024 15:00:00','DD/MM/YYYY HH24:MI:SS')" in entorno.herramientas[0]["script"]

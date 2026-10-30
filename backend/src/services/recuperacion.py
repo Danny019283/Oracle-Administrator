@@ -1,7 +1,7 @@
 import re
 import sys
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from src.services.archivos_respaldo import RespaldoInvalido, resolver_respaldo
 from src.services.directorios import Consulta
@@ -51,6 +51,14 @@ def validar_hasta(texto: str, fecha_respaldo: datetime, ahora: datetime) -> str:
     if fecha < fecha_respaldo:
         raise RespaldoInvalido("La fecha límite no puede ser anterior a la fecha del respaldo")
     return fecha.strftime("%d/%m/%Y %H:%M:%S")
+
+
+def a_hora_de_la_base(consulta: Consulta, fecha: str, ahora: datetime) -> str:
+    """Convierte `fecha` (DD/MM/YYYY HH24:MI:SS, hora del host) a la hora de la base para el TO_DATE de RMAN."""
+    base = datetime.strptime(consulta("SELECT TO_CHAR(SYSDATE,'YYYY-MM-DD HH24:MI:SS') FROM dual")[0][0], "%Y-%m-%d %H:%M:%S")
+    # los husos horarios son múltiplos de 15 minutos: redondear absorbe lo que tardan las dos lecturas
+    desfase = timedelta(seconds=round((base - ahora).total_seconds() / 900) * 900)
+    return (datetime.strptime(fecha, "%d/%m/%Y %H:%M:%S") + desfase).strftime("%d/%m/%Y %H:%M:%S")
 
 
 def validar_remap(tabla: str, nuevo_nombre: str) -> tuple[str, str]:
@@ -145,7 +153,7 @@ def recuperar_full(
         raise RespaldoInvalido("Solo se puede recuperar con RMAN un respaldo de tipo RMAN")
     if not en_archivelog(consulta):
         raise SinArchivelog()
-    fecha = validar_hasta(hasta, respaldo.fecha, ahora) if hasta else None
+    fecha = a_hora_de_la_base(consulta, validar_hasta(hasta, respaldo.fecha, ahora), ahora) if hasta else None
     ruta_log = carpeta / nombre_log_recuperacion(base, ahora)
     salida = ejecutar_rman(entorno, _script_full(carpeta, base, fecha), sid, log=ruta_log)
     # con `log=` RMAN deja su salida en el archivo, no en stdout
@@ -178,6 +186,7 @@ def recuperar_tabla(
         raise SinArchivelog()
     fecha = validar_hasta(hasta, respaldo.fecha, ahora)
     tabla, nuevo = validar_remap(tabla, nuevo_nombre)
+    fecha = a_hora_de_la_base(consulta, fecha, ahora)
     owner, nombre = tabla.split(".")
     # borrar_carpeta es rm -rf: solo recibe esta carpeta, nunca la del DIRECTORY ni un padre
     aux = carpeta / f"aux_{base}"

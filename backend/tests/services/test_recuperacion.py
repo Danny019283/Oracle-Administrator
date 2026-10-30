@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import PurePosixPath
 
 from src.services.archivos_respaldo import agrupar_archivos, listar_respaldos
@@ -339,10 +339,15 @@ AHORA_FULL = datetime(2024, 6, 1, 9, 45, 7)
 
 
 class _ConsultaFull:
-    def __init__(self, modo="ARCHIVELOG"):
+    def __init__(self, modo="ARCHIVELOG", desfase=timedelta(0)):
         self.modo = modo
+        self.desfase = desfase  # hora de la base menos hora del host
+        self.sqls = []
 
     def __call__(self, sql, params=None):
+        self.sqls.append(sql)
+        if "sysdate" in sql.lower():
+            return [((AHORA_FULL + self.desfase).strftime("%Y-%m-%d %H:%M:%S"),)]
         return [(self.modo,)] if "log_mode" in sql else [("RESPALDO", "/a")]
 
 
@@ -652,3 +657,70 @@ def test_tabla_con_datos_invalidos_no_crea_carpeta_ni_lanza_rman(kwargs):
         _recuperar_tabla(entorno, **kwargs)
 
     assert entorno.herramientas == [] and entorno.carpetas == [] and entorno.carpetas_borradas == []
+
+
+# --- UNTIL TIME en la hora de la base (FA-4e, RN-6, RN-7, RN-10) ---
+
+SYSDATE = "SELECT TO_CHAR(SYSDATE,'YYYY-MM-DD HH24:MI:SS') FROM dual"
+
+
+@pytest.mark.parametrize(
+    "desfase, fecha",
+    [
+        (timedelta(hours=6), "02/03/2024 10:05:06"),
+        (timedelta(hours=-3), "02/03/2024 01:05:06"),
+        (timedelta(0), "02/03/2024 04:05:06"),
+        (timedelta(hours=6, seconds=-40), "02/03/2024 10:05:06"),
+        (timedelta(hours=6, seconds=50), "02/03/2024 10:05:06"),
+        (timedelta(hours=5, minutes=30), "02/03/2024 09:35:06"),
+    ],
+)
+def test_full_y_tabla_llevan_el_hasta_convertido_a_la_hora_de_la_base(desfase, fecha):
+    consulta = _ConsultaFull(desfase=desfase)
+    para_full, para_tabla = _entorno_full(), _entorno_full()
+
+    _recuperar_full(para_full, hasta="2024-03-02 04:05:06", consulta=consulta)
+    _recuperar_tabla(para_tabla, consulta=consulta)
+
+    assert SYSDATE in consulta.sqls
+    esperado = f"""TO_DATE('{fecha}','DD/MM/YYYY HH24:MI:SS')"""
+    assert esperado in para_full.herramientas[0]["script"]
+    assert esperado in para_tabla.herramientas[0]["script"]
+
+
+def test_full_con_desfase_cero_deja_el_script_identico_al_de_hoy():
+    entorno = _entorno_full()
+
+    _recuperar_full(entorno, hasta="2024-03-02 04:05:06")
+
+    assert entorno.herramientas[0]["script"] == SCRIPT_CON_HASTA
+
+
+def test_full_sin_hasta_no_consulta_la_hora_de_la_base():
+    consulta = _ConsultaFull(desfase=timedelta(hours=6))
+
+    _recuperar_full(_entorno_full(), consulta=consulta)
+
+    assert SYSDATE not in consulta.sqls
+
+
+@pytest.mark.parametrize("hasta", ["2024-13-01 00:00:00", "2099-01-01 00:00:00", "2023-01-01 00:00:00"])
+def test_hasta_invalido_no_consulta_la_hora_de_la_base_ni_lanza_rman(hasta):
+    consulta = _ConsultaFull(desfase=timedelta(hours=6))
+    para_full, para_tabla = _entorno_full(), _entorno_full()
+
+    with pytest.raises(RespaldoInvalido):
+        _recuperar_full(para_full, hasta=hasta, consulta=consulta)
+    with pytest.raises(RespaldoInvalido):
+        _recuperar_tabla(para_tabla, hasta=hasta, consulta=consulta)
+
+    assert SYSDATE not in consulta.sqls
+    assert para_full.herramientas == [] and para_tabla.herramientas == []
+
+
+def test_la_validacion_sigue_en_hora_del_host_con_la_base_adelantada():
+    # 2024-06-01 10:00:00 es futuro para el host (09:45:07) aunque en la base ya haya pasado
+    consulta = _ConsultaFull(desfase=timedelta(hours=6))
+
+    with pytest.raises(RespaldoInvalido, match="futura"):
+        _recuperar_full(_entorno_full(), hasta="2024-06-01 10:00:00", consulta=consulta)
