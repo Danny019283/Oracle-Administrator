@@ -157,3 +157,45 @@ def recuperar_full(
         raise RecuperacionFallida(salida.codigo, log, "rman")
     advertencia = None if respaldo.estado == "Completo" else f"El respaldo tiene estado «{respaldo.estado}»"
     return ResultadoRecuperacion(log, advertencia)
+
+
+def recuperar_tabla(
+    consulta: Consulta,
+    entorno: EntornoOracle,
+    directorio: str,
+    base: str,
+    tabla: str,
+    hasta: str,
+    nuevo_nombre: str,
+    sid: str,
+    ahora: datetime,
+) -> ResultadoRecuperacion:
+    carpeta, respaldo = resolver_respaldo(consulta, entorno, directorio, base)
+    if respaldo.tipo != "RMAN":
+        raise RespaldoInvalido("Solo se puede recuperar con RMAN un respaldo de tipo RMAN")
+    if not en_archivelog(consulta):
+        raise SinArchivelog()
+    fecha = validar_hasta(hasta, respaldo.fecha, ahora)
+    tabla, nuevo = validar_remap(tabla, nuevo_nombre)
+    owner, nombre = tabla.split(".")
+    # borrar_carpeta es rm -rf: solo recibe esta carpeta, nunca la del DIRECTORY ni un padre
+    aux = carpeta / f"aux_{base}"
+    ruta_log = carpeta / nombre_log_recuperacion(base, ahora)
+    script = (
+        f"""RECOVER TABLE "{owner}"."{nombre}" UNTIL TIME "TO_DATE('{fecha}','DD/MM/YYYY HH24:MI:SS')" """
+        f"""AUXILIARY DESTINATION '{aux}' REMAP TABLE "{owner}"."{nombre}":"{nuevo}";\n"""
+    )
+    try:
+        entorno.crear_carpeta(aux)
+        entorno.dar_permisos_a_oracle(aux, sid)
+        salida = ejecutar_rman(entorno, script, sid, log=ruta_log)
+    finally:
+        entorno.borrar_carpeta(aux)
+    try:
+        log = entorno.leer_archivo(ruta_log)
+    except ArchivoNoLegible:
+        log = salida.texto
+    if salida.codigo != 0:
+        raise RecuperacionFallida(salida.codigo, log, "rman")
+    advertencia = None if respaldo.estado == "Completo" else f"El respaldo tiene estado «{respaldo.estado}»"
+    return ResultadoRecuperacion(log, advertencia)

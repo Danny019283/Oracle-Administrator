@@ -17,6 +17,7 @@ from src.services.recuperacion import (
     nombre_log_recuperacion,
     recuperar_datapump,
     recuperar_full,
+    recuperar_tabla,
     validar_hasta,
     validar_remap,
     validar_solicitud_datapump,
@@ -501,3 +502,131 @@ def test_full_relanzado_con_la_base_montada_o_con_until_time_anterior_genera_el_
     assert scripts[1] == SCRIPT_SIN_HASTA
     assert scripts[1].startswith("SHUTDOWN IMMEDIATE;")
     assert scripts[2] == SCRIPT_CON_HASTA.replace("02/03/2024 04:05:06", "01/03/2024 04:05:06")
+
+
+# --- recuperar_tabla (FP-4..FP-7, FA-4d, FA-4e, FA-5a..FA-5c, RN-2, RN-6, RN-10, RN-11, RNF-2, RNF-3) ---
+
+AUX = PurePosixPath("/a/aux_" + BASE)
+
+SCRIPT_TABLA = f"""RECOVER TABLE "HR"."EMPLOYEES" UNTIL TIME "TO_DATE('02/03/2024 04:05:06','DD/MM/YYYY HH24:MI:SS')" AUXILIARY DESTINATION '/a/aux_{BASE}' REMAP TABLE "HR"."EMPLOYEES":"EMPLOYEES_REC";
+"""
+
+
+def _recuperar_tabla(entorno, consulta=None, hasta="2024-03-02 04:05:06", tabla="hr.employees", nuevo="employees_rec"):
+    return recuperar_tabla(consulta or _ConsultaFull(), entorno, "respaldo", BASE, tabla, hasta, nuevo, "XE", AHORA_FULL)
+
+
+def test_tabla_lanza_el_script_fijo_con_carpeta_auxiliar_y_log_de_recuperacion():
+    entorno = _entorno_full(log="Finished backup\nrecuperada")
+
+    resultado = _recuperar_tabla(entorno)
+
+    assert len(entorno.herramientas) == 1
+    herramienta = entorno.herramientas[0]
+    assert herramienta["nombre"] == "rman"
+    assert herramienta["script"] == SCRIPT_TABLA
+    assert herramienta["args"] == ["target", "/", "cmdfile=/tmp/herramienta.tmp", f"log=/a/{LOG}"]
+    assert herramienta["variables"] == {"ORACLE_SID": "XE"}
+    assert entorno.carpetas == [AUX]
+    assert entorno.permisos == [(AUX, "XE")]
+    assert resultado.log == "Finished backup\nrecuperada"
+    assert resultado.advertencia is None
+    assert entorno.lecturas[-1] == PurePosixPath("/a") / LOG
+
+
+def test_tabla_borra_exactamente_la_carpeta_auxiliar_con_exito():
+    entorno = _entorno_full()
+
+    _recuperar_tabla(entorno)
+
+    # borrar_carpeta es rm -rf: nunca la carpeta del DIRECTORY ni un padre
+    assert entorno.carpetas_borradas == [PurePosixPath("/a/aux_" + BASE)]
+
+
+def test_tabla_borra_exactamente_la_carpeta_auxiliar_si_rman_falla():
+    entorno = _entorno_full(log="RMAN-05063: Cannot recover specified tables")
+    entorno.codigo = 1
+
+    with pytest.raises(RecuperacionFallida) as error:
+        _recuperar_tabla(entorno)
+
+    assert error.value.codigo == 1
+    assert error.value.log == "RMAN-05063: Cannot recover specified tables"
+    assert error.value.explicacion == explicar_error(error.value.log)
+    assert "rman" in str(error.value)
+    assert entorno.carpetas_borradas == [PurePosixPath("/a/aux_" + BASE)]
+
+
+def test_tabla_borra_la_carpeta_auxiliar_si_rman_no_esta_disponible():
+    class _SinRman(EntornoFalso):
+        def ejecutar(self, comando):
+            raise HerramientaNoDisponible("rman")
+
+    entorno = _SinRman(archivos={PurePosixPath("/a"): [_a(f"{BASE}_USERS_1_1.dbf"), _a(f"{BASE}.log")]})
+
+    with pytest.raises(HerramientaNoDisponible):
+        _recuperar_tabla(entorno)
+
+    assert entorno.carpetas_borradas == [AUX]
+
+
+def test_tabla_fallida_usa_la_salida_si_el_log_no_se_puede_leer():
+    entorno = _entorno_full(log=None)
+    entorno.codigo = 1
+    entorno.texto = "RMAN-05063: no"
+
+    with pytest.raises(RecuperacionFallida) as error:
+        _recuperar_tabla(entorno)
+
+    assert error.value.log == "RMAN-05063: no"
+
+
+def test_tabla_si_el_log_no_se_puede_leer_devuelve_la_salida_de_rman():
+    assert _recuperar_tabla(_entorno_full(log=None)).log == "salida de rman"
+
+
+def test_tabla_respaldo_no_completo_se_recupera_igual_con_advertencia_del_estado():
+    entorno = EntornoFalso(log="ok", archivos={PurePosixPath("/a"): [_a(f"{BASE}_USERS_1_1.dbf")]})
+
+    resultado = _recuperar_tabla(entorno)
+
+    assert len(entorno.herramientas) == 1
+    assert "Sin log" in resultado.advertencia
+
+
+def test_tabla_respaldo_datapump_es_invalido_sin_rman_ni_carpeta_auxiliar():
+    entorno = EntornoFalso(archivos={PurePosixPath("/a"): [_a(f"{BASE}.dmp")]})
+
+    with pytest.raises(RespaldoInvalido, match="RMAN"):
+        _recuperar_tabla(entorno)
+
+    assert entorno.herramientas == [] and entorno.carpetas == [] and entorno.carpetas_borradas == []
+
+
+def test_tabla_sin_archivelog_lanza_sin_archivelog_sin_rman_ni_carpeta_auxiliar():
+    entorno = _entorno_full()
+
+    with pytest.raises(SinArchivelog):
+        _recuperar_tabla(entorno, consulta=_ConsultaFull("NOARCHIVELOG"))
+
+    assert entorno.herramientas == [] and entorno.carpetas == [] and entorno.carpetas_borradas == []
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"hasta": "2024-13-01 00:00:00"},
+        {"hasta": "2099-01-01 00:00:00"},
+        {"hasta": "2023-01-01 00:00:00"},
+        {"tabla": "employees"},
+        {"nuevo": "employees"},
+        {"nuevo": "1x"},
+    ],
+)
+def test_tabla_con_datos_invalidos_no_crea_carpeta_ni_lanza_rman(kwargs):
+    entorno = _entorno_full()
+
+    with pytest.raises((RespaldoInvalido, IdentificadorInvalido)):
+        _recuperar_tabla(entorno, **kwargs)
+
+    assert entorno.herramientas == [] and entorno.carpetas == [] and entorno.carpetas_borradas == []
