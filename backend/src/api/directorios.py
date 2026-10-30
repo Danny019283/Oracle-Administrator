@@ -1,17 +1,18 @@
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.api.admin_comun import exigir_sysdba_o_dba, obtener_consulta_admin, obtener_sentencia, responder
 from src.api.dependencias import obtener_conexion, obtener_entorno
+from src.api.sesion import obtener_almacen
 from src.services import directorios
 from src.services.archivos_respaldo import eliminar_respaldo, listar_respaldos
 from src.services.entorno_oracle import OperacionEntornoFallida
 from src.services.instancia import sid_de_instancia
-from src.services.recuperacion import recuperar_datapump
+from src.services.recuperacion import RecuperacionFallida, recuperar_datapump, recuperar_full, recuperar_tabla
 
 router = APIRouter(prefix="/directorios")
 
@@ -93,21 +94,61 @@ class SolicitudDatapump(BaseModel):
     existentes: str = "SKIP"
 
 
-@router.post("/{nombre}/respaldos/{base}/recuperar", dependencies=[Depends(exigir_sysdba_o_dba)])
+class SolicitudFull(BaseModel):
+    modo: Literal["full"]
+    hasta: str | None = None
+
+
+class SolicitudTabla(BaseModel):
+    modo: Literal["tabla"]
+    tabla: str
+    hasta: str
+    nuevo_nombre: str
+
+
+SolicitudRecuperar = Annotated[SolicitudDatapump | SolicitudFull | SolicitudTabla, Field(discriminator="modo")]
+
+
+@router.post("/{nombre}/respaldos/{base}/recuperar")
 def post_recuperar(
     nombre: str,
     base: str,
-    solicitud: SolicitudDatapump,
+    solicitud: SolicitudRecuperar,
     conexion=Depends(obtener_conexion),
     consulta=Depends(obtener_consulta_admin),
     entorno=Depends(obtener_entorno),
+    almacen=Depends(obtener_almacen),
 ):
+    # el permiso depende del modo del cuerpo, por eso se decide aquí y no como dependencia de la ruta
+    if solicitud.modo == "datapump":
+        exigir_sysdba_o_dba(conexion, consulta)
+    elif not conexion.sysdba:
+        raise HTTPException(status_code=403, detail="Se requiere sesión SYSDBA")
+
     def recuperar():
-        resultado = recuperar_datapump(
-            consulta, entorno, conexion, nombre, base, solicitud.objeto_modo, solicitud.objetos,
-            solicitud.existentes, datetime.now(),
-        )
-        return {"mensaje": f"Respaldo {base} recuperado", "log": resultado.log, "advertencia": resultado.advertencia}
+        ahora = datetime.now()
+        respuesta = {"mensaje": f"Respaldo {base} recuperado"}
+        if solicitud.modo == "datapump":
+            resultado = recuperar_datapump(
+                consulta, entorno, conexion, nombre, base, solicitud.objeto_modo, solicitud.objetos,
+                solicitud.existentes, ahora,
+            )
+        elif solicitud.modo == "tabla":
+            resultado = recuperar_tabla(
+                consulta, entorno, nombre, base, solicitud.tabla, solicitud.hasta, solicitud.nuevo_nombre,
+                sid_de_instancia(consulta), ahora,
+            )
+        else:
+            try:
+                resultado = recuperar_full(
+                    consulta, entorno, nombre, base, solicitud.hasta, sid_de_instancia(consulta), ahora
+                )
+            except RecuperacionFallida:
+                almacen.cerrar_todas()  # RMAN llegó a apagar la base: las sesiones ya no valen
+                raise
+            almacen.cerrar_todas()
+            respuesta["sesion_cerrada"] = True
+        return {**respuesta, "log": resultado.log, "advertencia": resultado.advertencia}
 
     return responder(recuperar)
 
