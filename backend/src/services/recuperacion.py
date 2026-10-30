@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -29,6 +30,33 @@ def validar_solicitud_datapump(objeto_modo: str, objetos: list[str], existentes:
     if objeto_modo == "tablas":
         return [_tabla_con_owner(o) for o in objetos], existentes
     return [normalizar_identificador(o, "el schema") for o in objetos], existentes
+
+
+_HASTA = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}")
+
+
+def validar_hasta(texto: str, fecha_respaldo: datetime, ahora: datetime) -> str:
+    """Devuelve la fecha como DD/MM/YYYY HH24:MI:SS (la que va en TO_DATE) o lanza RespaldoInvalido."""
+    try:
+        if not _HASTA.fullmatch(texto or ""):
+            raise ValueError
+        fecha = datetime.strptime(texto, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        raise RespaldoInvalido("La fecha límite debe tener el formato AAAA-MM-DD HH:MM:SS") from None
+    if fecha > ahora:
+        raise RespaldoInvalido("La fecha límite no puede ser futura")
+    if fecha < fecha_respaldo:
+        raise RespaldoInvalido("La fecha límite no puede ser anterior a la fecha del respaldo")
+    return fecha.strftime("%d/%m/%Y %H:%M:%S")
+
+
+def validar_remap(tabla: str, nuevo_nombre: str) -> tuple[str, str]:
+    """Devuelve (OWNER.TABLA, NUEVO) normalizados o lanza RespaldoInvalido/IdentificadorInvalido."""
+    tabla = _tabla_con_owner(tabla)
+    nuevo = normalizar_identificador(nuevo_nombre, "la tabla nueva")
+    if nuevo == tabla.split(".")[1]:
+        raise RespaldoInvalido("El nombre nuevo debe ser distinto del de la tabla original")
+    return tabla, nuevo
 
 
 def nombre_log_recuperacion(base: str, ahora: datetime) -> str:

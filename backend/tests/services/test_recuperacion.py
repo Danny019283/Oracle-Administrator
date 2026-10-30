@@ -15,6 +15,8 @@ from src.services.recuperacion import (
     RecuperacionFallida,
     nombre_log_recuperacion,
     recuperar_datapump,
+    validar_hasta,
+    validar_remap,
     validar_solicitud_datapump,
 )
 from tests.services.entorno_falso import EntornoFalso
@@ -271,3 +273,58 @@ def test_un_fallo_no_borra_ni_modifica_los_archivos_del_respaldo():
         _recuperar(entorno)
 
     assert entorno.borrados == []
+
+
+# --- validaciones puras de RMAN (FA-4e, RN-6, RN-7, RN-10) ---
+
+RESPALDO = datetime(2024, 1, 5, 10, 30, 0)
+AHORA_RMAN = datetime(2024, 6, 1, 9, 45, 7)
+
+
+def test_validar_hasta_devuelve_el_formato_de_to_date():
+    assert validar_hasta("2024-03-15 14:05:09", RESPALDO, AHORA_RMAN) == "15/03/2024 14:05:09"
+
+
+def test_validar_hasta_acepta_los_limites_inclusivos():
+    assert validar_hasta("2024-01-05 10:30:00", RESPALDO, AHORA_RMAN) == "05/01/2024 10:30:00"
+    assert validar_hasta("2024-06-01 09:45:07", RESPALDO, AHORA_RMAN) == "01/06/2024 09:45:07"
+
+
+@pytest.mark.parametrize(
+    "texto",
+    ["", None, "15/03/2024 14:05:09", "2024-03-15", "2024-3-15 4:05:09", "2024-03-15T14:05:09", "2024-13-45 10:00:00", "x' OR 1=1", " 2024-03-15 14:05:09"],
+)
+def test_validar_hasta_rechaza_formatos_distintos(texto):
+    with pytest.raises(RespaldoInvalido, match="AAAA-MM-DD HH:MM:SS"):
+        validar_hasta(texto, RESPALDO, AHORA_RMAN)
+
+
+def test_validar_hasta_rechaza_una_fecha_futura():
+    with pytest.raises(RespaldoInvalido, match="futura"):
+        validar_hasta("2024-06-01 09:45:08", RESPALDO, AHORA_RMAN)
+
+
+def test_validar_hasta_rechaza_una_fecha_anterior_al_respaldo():
+    with pytest.raises(RespaldoInvalido, match="anterior"):
+        validar_hasta("2024-01-05 10:29:59", RESPALDO, AHORA_RMAN)
+
+
+def test_validar_remap_devuelve_tabla_y_nombre_normalizados():
+    assert validar_remap("hr.empleados", "empleados_rec") == ("HR.EMPLEADOS", "EMPLEADOS_REC")
+
+
+@pytest.mark.parametrize("tabla", ["", "empleados", "hr.empleados.x", "hr.", "1hr.emp", 'hr."emp"', "hr.emp;DROP"])
+def test_validar_remap_exige_tabla_con_owner_valida(tabla):
+    with pytest.raises((RespaldoInvalido, IdentificadorInvalido)):
+        validar_remap(tabla, "nueva")
+
+
+@pytest.mark.parametrize("nuevo", ["", "1nueva", 'a"b', "a b", "x;y"])
+def test_validar_remap_exige_un_nombre_nuevo_valido(nuevo):
+    with pytest.raises(IdentificadorInvalido):
+        validar_remap("hr.empleados", nuevo)
+
+
+def test_validar_remap_rechaza_el_nombre_igual_al_original_sin_importar_mayusculas():
+    with pytest.raises(RespaldoInvalido, match="distinto"):
+        validar_remap("hr.empleados", "Empleados")
