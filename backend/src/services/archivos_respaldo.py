@@ -1,6 +1,7 @@
 import re
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from pathlib import PurePath
 
 from src.services.directorios import Consulta, DirectorioNoEncontrado, listar_todos_directorios
 from src.services.identificadores import IdentificadorInvalido, normalizar_identificador
@@ -42,13 +43,10 @@ class ResultadoEliminacion:
 _SCRIPT_LIMPIEZA = "CROSSCHECK BACKUP;\nDELETE NOPROMPT EXPIRED BACKUP;\n"
 
 
-def eliminar_respaldo(
-    consulta: Consulta, entorno: EntornoOracle, directorio: str, base: str, sid: str
-) -> ResultadoEliminacion:
-    """Borra los archivos de un respaldo y devuelve su tipo, con advertencia si falla la limpieza RMAN.
-
-    Los nombres a borrar salen del listado del directorio, nunca de la entrada del cliente.
-    """
+def resolver_respaldo(
+    consulta: Consulta, entorno: EntornoOracle, directorio: str, base: str
+) -> tuple[PurePath, "Respaldo"]:
+    """Localiza un respaldo por DIRECTORY y base: devuelve su carpeta y el Respaldo con ruta y estado."""
     if not _BASE_VALIDA.fullmatch(base):
         raise RespaldoInvalido("El identificador del respaldo no es válido")
     try:
@@ -63,6 +61,17 @@ def eliminar_respaldo(
     respaldo = next((r for r in agrupar_archivos(entorno.listar_archivos(carpeta)) if r.base == base), None)
     if respaldo is None:
         raise RespaldoNoEncontrado("Respaldo no encontrado")
+    return carpeta, replace(respaldo, directorio=nombre, ruta=ruta, estado=estado_de(respaldo, entorno, ruta))
+
+
+def eliminar_respaldo(
+    consulta: Consulta, entorno: EntornoOracle, directorio: str, base: str, sid: str
+) -> ResultadoEliminacion:
+    """Borra los archivos de un respaldo y devuelve su tipo, con advertencia si falla la limpieza RMAN.
+
+    Los nombres a borrar salen del listado del directorio, nunca de la entrada del cliente.
+    """
+    carpeta, respaldo = resolver_respaldo(consulta, entorno, directorio, base)
     for archivo in respaldo.archivos:
         entorno.borrar_archivo(carpeta / archivo.nombre)
     if respaldo.tipo != "RMAN":
