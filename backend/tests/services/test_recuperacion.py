@@ -7,7 +7,8 @@ import pytest
 
 from src.services.archivos_respaldo import RespaldoInvalido
 from src.services.identificadores import IdentificadorInvalido
-from src.services.recuperacion import nombre_log_recuperacion, validar_solicitud_datapump
+from src.services.expdp_runner import Conexion
+from src.services.recuperacion import nombre_log_recuperacion, recuperar_datapump, validar_solicitud_datapump
 from tests.services.entorno_falso import EntornoFalso
 
 BASE = "hr_20240105_103000"
@@ -92,3 +93,78 @@ def test_tabla_que_no_es_owner_tabla_valido_es_invalida(tabla):
 def test_schema_invalido_lanza_identificador_invalido(schema):
     with pytest.raises(IdentificadorInvalido):
         validar_solicitud_datapump("schemas", [schema])
+
+
+# --- recuperar_datapump con éxito (FP-4..FP-7, FA-2a, RN-4, RN-5, RN-8) ---
+
+AHORA = datetime(2024, 6, 1, 9, 45, 7)
+CONEXION = Conexion(usuario="SYS", password="clave", servicio="XEPDB1", sysdba=True)
+
+
+def _entorno_datapump(log="successfully completed", extra=()):
+    return EntornoFalso(
+        log=log,
+        texto="salida de impdp",
+        archivos={PurePosixPath("/a"): [_a(f"{BASE}.dmp"), _a(f"{BASE}.log"), *extra]},
+    )
+
+
+def _recuperar(entorno, modo="tablas", objetos=("hr.employees",), existentes="SKIP"):
+    return recuperar_datapump(
+        _Consulta(), entorno, CONEXION, "respaldo", BASE, modo, list(objetos), existentes, AHORA
+    )
+
+
+@pytest.mark.parametrize("accion", ["SKIP", "APPEND", "TRUNCATE", "REPLACE"])
+def test_modo_tablas_lanza_impdp_con_los_parametros_del_respaldo(accion):
+    entorno = _entorno_datapump()
+
+    _recuperar(entorno, "tablas", ["hr.employees", "scott.emp"], accion)
+
+    herramienta = entorno.herramientas[0]
+    assert herramienta["nombre"] == "impdp"
+    assert herramienta["script"].splitlines()[1:] == [
+        "DIRECTORY=RESPALDO",
+        f"DUMPFILE={BASE}.dmp",
+        f"LOGFILE={LOG}",
+        "TABLES=HR.EMPLOYEES,SCOTT.EMP",
+        f"TABLE_EXISTS_ACTION={accion}",
+    ]
+
+
+@pytest.mark.parametrize("accion", ["SKIP", "APPEND", "TRUNCATE", "REPLACE"])
+def test_modo_schemas_usa_schemas_y_nunca_borra_usuarios(accion):
+    entorno = _entorno_datapump()
+
+    _recuperar(entorno, "schemas", ["hr", "scott"], accion)
+
+    lineas = entorno.herramientas[0]["script"].splitlines()
+    assert "SCHEMAS=HR,SCOTT" in lineas
+    assert f"TABLE_EXISTS_ACTION={accion}" in lineas
+    assert not any(l.startswith("TABLES=") for l in lineas)
+    assert "DROP" not in entorno.herramientas[0]["script"]
+
+
+def test_con_exito_devuelve_el_log_de_recuperacion_sin_advertencia_si_esta_completo():
+    entorno = _entorno_datapump(log="Job successfully completed")
+
+    resultado = _recuperar(entorno)
+
+    assert resultado.log == "Job successfully completed"
+    assert resultado.advertencia is None
+    assert PurePosixPath("/a") / LOG in entorno.lecturas
+
+
+def test_si_el_log_no_se_puede_leer_devuelve_la_salida_de_impdp():
+    entorno = _entorno_datapump(log=None)
+
+    assert _recuperar(entorno).log == "salida de impdp"
+
+
+def test_respaldo_no_completo_se_recupera_igual_con_advertencia_del_estado():
+    entorno = EntornoFalso(texto="ok", archivos={PurePosixPath("/a"): [_a(f"{BASE}.dmp")]})
+
+    resultado = _recuperar(entorno)
+
+    assert entorno.herramientas[0]["nombre"] == "impdp"
+    assert "Sin log" in resultado.advertencia
