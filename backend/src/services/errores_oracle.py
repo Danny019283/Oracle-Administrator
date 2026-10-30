@@ -22,6 +22,16 @@ _EXPLICACIONES = {
     "RMAN-06059": "Faltan archivelogs necesarios para el respaldo; ejecuta un CROSSCHECK",
     "ORA-19809": "Se superó el límite de la zona de recuperación (FRA)",
     "ORA-19504": "No se pudo crear el archivo de respaldo; revisa el DIRECTORY y sus permisos",
+    "ORA-39151": "La tabla ya existe y se omitió; elige Agregar, Vaciar o Reemplazar si quieres cargar sus datos",
+    "ORA-39083": "Falló la creación de un objeto durante la importación; revisa el log",
+    "ORA-31684": "El objeto ya existe en la base de destino",
+    "ORA-31655": "No se seleccionó ningún objeto para importar; revisa los nombres de tablas o schemas",
+    "ORA-39111": "Se omitió un objeto dependiente porque su objeto base ya existe",
+    "ORA-31626": "El trabajo de Data Pump no existe o ya terminó",
+    "RMAN-06023": "No hay una copia del datafile para restaurar en este respaldo",
+    "RMAN-06026": "Algunos destinos no se encontraron en el respaldo; no se pudo restaurar",
+    "RMAN-06054": "La recuperación pide un archive log que no se encuentra; ejecuta un CROSSCHECK o usa un UNTIL TIME anterior",
+    "RMAN-05063": "No se pudo recuperar la tabla indicada; revisa la fecha UNTIL TIME y el log",
     "DPY-6005": "No se pudo alcanzar el servidor de Oracle en ese host y puerto",
 }
 
