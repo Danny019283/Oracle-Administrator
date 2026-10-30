@@ -152,5 +152,8 @@ def recuperar_full(
         log = entorno.leer_archivo(ruta_log)
     except ArchivoNoLegible:
         log = salida.texto
+    if salida.codigo != 0:
+        # sin OPEN automático: la base puede quedar montada y se relanza con el mismo script
+        raise RecuperacionFallida(salida.codigo, log, "rman")
     advertencia = None if respaldo.estado == "Completo" else f"El respaldo tiene estado «{respaldo.estado}»"
     return ResultadoRecuperacion(log, advertencia)

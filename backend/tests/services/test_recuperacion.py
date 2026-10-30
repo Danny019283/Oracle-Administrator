@@ -2,7 +2,7 @@ from datetime import datetime
 from pathlib import PurePosixPath
 
 from src.services.archivos_respaldo import agrupar_archivos, listar_respaldos
-from src.services.entorno_oracle import ArchivoEntorno
+from src.services.entorno_oracle import ArchivoEntorno, Salida
 import pytest
 
 from src.services.archivos_respaldo import RespaldoInvalido, RespaldoNoEncontrado
@@ -450,3 +450,54 @@ def test_full_con_hasta_invalido_no_lanza_rman(hasta):
         _recuperar_full(entorno, hasta=hasta)
 
     assert entorno.herramientas == []
+
+
+def test_full_con_codigo_distinto_de_cero_lanza_recuperacion_fallida_sin_lanzar_otro_script():
+    entorno = _entorno_full(log="RMAN-06054: media recovery requesting unknown archived log")
+    entorno.codigo = 1
+
+    with pytest.raises(RecuperacionFallida) as error:
+        _recuperar_full(entorno)
+
+    assert error.value.codigo == 1
+    assert error.value.log == "RMAN-06054: media recovery requesting unknown archived log"
+    assert error.value.explicacion == explicar_error(error.value.log)
+    assert "rman" in str(error.value)
+    assert len(entorno.herramientas) == 1
+
+
+def test_full_fallida_usa_la_salida_si_el_log_no_se_puede_leer():
+    entorno = _entorno_full(log=None)
+    entorno.codigo = 1
+    entorno.texto = "RMAN-06023: no backup"
+
+    with pytest.raises(RecuperacionFallida) as error:
+        _recuperar_full(entorno)
+
+    assert error.value.log == "RMAN-06023: no backup"
+
+
+def test_full_rman_no_disponible_deja_pasar_herramienta_no_disponible():
+    class _SinRman(EntornoFalso):
+        def ejecutar(self, comando):
+            raise HerramientaNoDisponible("rman")
+
+    entorno = _SinRman(archivos={PurePosixPath("/a"): [_a(f"{BASE}_USERS_1_1.dbf"), _a(f"{BASE}.log")]})
+
+    with pytest.raises(HerramientaNoDisponible):
+        _recuperar_full(entorno)
+
+
+def test_full_relanzado_con_la_base_montada_o_con_until_time_anterior_genera_el_script_completo():
+    entorno = _entorno_full()
+    entorno.salidas = [Salida(codigo=1, texto="x"), Salida(codigo=0, texto=""), Salida(codigo=0, texto="")]
+
+    with pytest.raises(RecuperacionFallida):
+        _recuperar_full(entorno, hasta="2024-03-02 04:05:06")
+    _recuperar_full(entorno)
+    _recuperar_full(entorno, hasta="2024-03-01 04:05:06")
+
+    scripts = [h["script"] for h in entorno.herramientas]
+    assert scripts[1] == SCRIPT_SIN_HASTA
+    assert scripts[1].startswith("SHUTDOWN IMMEDIATE;")
+    assert scripts[2] == SCRIPT_CON_HASTA.replace("02/03/2024 04:05:06", "01/03/2024 04:05:06")
