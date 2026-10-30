@@ -11,10 +11,12 @@ from src.services.entorno_oracle import HerramientaNoDisponible
 from src.services.errores_oracle import explicar_error
 from src.services.identificadores import IdentificadorInvalido
 from src.services.expdp_runner import Conexion
+from src.services.respaldo_full import SinArchivelog
 from src.services.recuperacion import (
     RecuperacionFallida,
     nombre_log_recuperacion,
     recuperar_datapump,
+    recuperar_full,
     validar_hasta,
     validar_remap,
     validar_solicitud_datapump,
@@ -328,3 +330,123 @@ def test_validar_remap_exige_un_nombre_nuevo_valido(nuevo):
 def test_validar_remap_rechaza_el_nombre_igual_al_original_sin_importar_mayusculas():
     with pytest.raises(RespaldoInvalido, match="distinto"):
         validar_remap("hr.empleados", "Empleados")
+
+
+# --- recuperar_full con éxito (FP-4..FP-7, FA-2a, FA-4d, FA-4e, FA-5c, RN-7, RN-8, RN-10, RN-11, RNF-2, RNF-3) ---
+
+AHORA_FULL = datetime(2024, 6, 1, 9, 45, 7)
+
+
+class _ConsultaFull:
+    def __init__(self, modo="ARCHIVELOG"):
+        self.modo = modo
+
+    def __call__(self, sql, params=None):
+        return [(self.modo,)] if "log_mode" in sql else [("RESPALDO", "/a")]
+
+
+def _entorno_full(log="Finished backup", **kwargs):
+    return EntornoFalso(
+        log=log,
+        texto="salida de rman",
+        archivos={PurePosixPath("/a"): [_a(f"{BASE}_USERS_1_1.dbf"), _a(f"{BASE}.log")]},
+        **kwargs,
+    )
+
+
+def _recuperar_full(entorno, hasta=None, consulta=None):
+    return recuperar_full(consulta or _ConsultaFull(), entorno, "respaldo", BASE, hasta, "XE", AHORA_FULL)
+
+
+SCRIPT_SIN_HASTA = f"""SHUTDOWN IMMEDIATE;
+STARTUP MOUNT;
+CATALOG START WITH '/a/{BASE}_' NOPROMPT;
+RUN {{
+  RESTORE DATABASE;
+  RECOVER DATABASE;
+}}
+ALTER DATABASE OPEN RESETLOGS;
+"""
+
+SCRIPT_CON_HASTA = f"""SHUTDOWN IMMEDIATE;
+STARTUP MOUNT;
+CATALOG START WITH '/a/{BASE}_' NOPROMPT;
+RUN {{
+  SET UNTIL TIME "TO_DATE('02/03/2024 04:05:06','DD/MM/YYYY HH24:MI:SS')";
+  RESTORE DATABASE;
+  RECOVER DATABASE;
+}}
+ALTER DATABASE OPEN RESETLOGS;
+"""
+
+
+def test_full_sin_hasta_lanza_el_script_fijo_con_log_de_recuperacion():
+    entorno = _entorno_full(log="Finished backup\nrecuperado")
+
+    resultado = _recuperar_full(entorno)
+
+    assert len(entorno.herramientas) == 1
+    herramienta = entorno.herramientas[0]
+    assert herramienta["nombre"] == "rman"
+    assert herramienta["script"] == SCRIPT_SIN_HASTA
+    assert herramienta["args"] == ["target", "/", "cmdfile=/tmp/herramienta.tmp", f"log=/a/{LOG}"]
+    assert herramienta["variables"] == {"ORACLE_SID": "XE"}
+    assert resultado.log == "Finished backup\nrecuperado"
+    assert resultado.advertencia is None
+    assert entorno.lecturas[-1] == PurePosixPath("/a") / LOG
+
+
+def test_full_con_hasta_incluye_set_until_time():
+    entorno = _entorno_full()
+
+    _recuperar_full(entorno, hasta="2024-03-02 04:05:06")
+
+    assert entorno.herramientas[0]["script"] == SCRIPT_CON_HASTA
+
+
+def test_full_si_el_log_no_se_puede_leer_devuelve_la_salida_de_rman():
+    entorno = EntornoFalso(
+        log=None, texto="salida de rman", archivos={PurePosixPath("/a"): [_a(f"{BASE}_USERS_1_1.dbf")]}
+    )
+
+    assert _recuperar_full(entorno).log == "salida de rman"
+
+
+def test_full_respaldo_no_completo_se_recupera_igual_con_advertencia_del_estado():
+    entorno = EntornoFalso(
+        log="Finished backup",
+        archivos={PurePosixPath("/a"): [_a(f"{BASE}_USERS_1_1.dbf")]},
+    )
+
+    resultado = _recuperar_full(entorno)
+
+    assert len(entorno.herramientas) == 1
+    assert "Sin log" in resultado.advertencia
+
+
+def test_full_respaldo_datapump_es_invalido_y_no_lanza_rman():
+    entorno = EntornoFalso(archivos={PurePosixPath("/a"): [_a(f"{BASE}.dmp")]})
+
+    with pytest.raises(RespaldoInvalido, match="RMAN"):
+        _recuperar_full(entorno)
+
+    assert entorno.herramientas == []
+
+
+def test_full_sin_archivelog_lanza_sin_archivelog_y_no_lanza_rman():
+    entorno = _entorno_full()
+
+    with pytest.raises(SinArchivelog):
+        _recuperar_full(entorno, consulta=_ConsultaFull("NOARCHIVELOG"))
+
+    assert entorno.herramientas == []
+
+
+@pytest.mark.parametrize("hasta", ["2024-13-01 00:00:00", "2099-01-01 00:00:00", "2023-01-01 00:00:00"])
+def test_full_con_hasta_invalido_no_lanza_rman(hasta):
+    entorno = _entorno_full()
+
+    with pytest.raises(RespaldoInvalido):
+        _recuperar_full(entorno, hasta=hasta)
+
+    assert entorno.herramientas == []

@@ -8,6 +8,8 @@ from src.services.entorno_oracle import ArchivoNoLegible, EntornoOracle
 from src.services.errores_oracle import explicar_error
 from src.services.expdp_runner import Conexion, ejecutar_impdp
 from src.services.identificadores import normalizar_identificador
+from src.services.respaldo_full import SinArchivelog, en_archivelog
+from src.services.rman_runner import ejecutar_rman
 
 _EXISTENTES = ("SKIP", "APPEND", "TRUNCATE", "REPLACE")
 
@@ -111,5 +113,44 @@ def recuperar_datapump(
         log = salida.texto
     if salida.codigo != 0:
         raise RecuperacionFallida(salida.codigo, log)
+    advertencia = None if respaldo.estado == "Completo" else f"El respaldo tiene estado «{respaldo.estado}»"
+    return ResultadoRecuperacion(log, advertencia)
+
+
+def _script_full(ruta: str, base: str, fecha: str | None) -> str:
+    until = f"""  SET UNTIL TIME "TO_DATE('{fecha}','DD/MM/YYYY HH24:MI:SS')";\n""" if fecha else ""
+    return f"""SHUTDOWN IMMEDIATE;
+STARTUP MOUNT;
+CATALOG START WITH '{ruta}/{base}_' NOPROMPT;
+RUN {{
+{until}  RESTORE DATABASE;
+  RECOVER DATABASE;
+}}
+ALTER DATABASE OPEN RESETLOGS;
+"""
+
+
+def recuperar_full(
+    consulta: Consulta,
+    entorno: EntornoOracle,
+    directorio: str,
+    base: str,
+    hasta: str | None,
+    sid: str,
+    ahora: datetime,
+) -> ResultadoRecuperacion:
+    carpeta, respaldo = resolver_respaldo(consulta, entorno, directorio, base)
+    if respaldo.tipo != "RMAN":
+        raise RespaldoInvalido("Solo se puede recuperar con RMAN un respaldo de tipo RMAN")
+    if not en_archivelog(consulta):
+        raise SinArchivelog()
+    fecha = validar_hasta(hasta, respaldo.fecha, ahora) if hasta else None
+    ruta_log = carpeta / nombre_log_recuperacion(base, ahora)
+    salida = ejecutar_rman(entorno, _script_full(carpeta, base, fecha), sid, log=ruta_log)
+    # con `log=` RMAN deja su salida en el archivo, no en stdout
+    try:
+        log = entorno.leer_archivo(ruta_log)
+    except ArchivoNoLegible:
+        log = salida.texto
     advertencia = None if respaldo.estado == "Completo" else f"El respaldo tiene estado «{respaldo.estado}»"
     return ResultadoRecuperacion(log, advertencia)
