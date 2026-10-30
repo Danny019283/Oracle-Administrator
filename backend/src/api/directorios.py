@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from src.api.admin_comun import obtener_consulta_admin, obtener_sentencia, responder
+from src.api.admin_comun import exigir_sysdba_o_dba, obtener_consulta_admin, obtener_sentencia, responder
 from src.api.dependencias import obtener_entorno
 from src.services import directorios
+from src.services.archivos_respaldo import listar_respaldos
 
 router = APIRouter(prefix="/directorios")
 
@@ -22,6 +23,30 @@ def get_directorios(consulta=Depends(obtener_consulta_admin), entorno=Depends(ob
             "ejemplos_ruta": directorios.ejemplos_ruta(entorno.tipo_ruta),
         }
     )
+
+
+@router.get("/respaldos", dependencies=[Depends(exigir_sysdba_o_dba)])
+def get_respaldos(consulta=Depends(obtener_consulta_admin), entorno=Depends(obtener_entorno)):
+    def listar():
+        respaldos, avisos = listar_respaldos(consulta, entorno)
+        return {
+            "respaldos": [
+                {
+                    "directorio": r.directorio,
+                    "ruta": r.ruta,
+                    "base": r.base,
+                    "tipo": r.tipo,
+                    "estado": r.estado,
+                    "archivos": [{"nombre": a.nombre, "tamano": a.tamano} for a in r.archivos],
+                    "tamano": r.tamano,
+                    "fecha": r.fecha.isoformat(),
+                }
+                for r in respaldos
+            ],
+            "avisos": avisos,
+        }
+
+    return responder(listar)
 
 
 @router.post("")
