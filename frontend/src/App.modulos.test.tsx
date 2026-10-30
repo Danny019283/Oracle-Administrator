@@ -38,6 +38,7 @@ const MODULOS = [
   ['Performance de la base de datos', 'Performance de la base de datos', '/performance/resumen'],
   ['Auditoría de la BD', 'Auditoría de la BD', '/auditoria/estado'],
   ['Seguridad de usuarios', 'Seguridad de usuarios', '/seguridad/usuarios'],
+  ['Recuperación de respaldos', 'Recuperación de respaldos', '/directorios/respaldos'],
 ]
 
 const llamadasA = (url: string) => fetchFalso.mock.calls.filter(([u]) => u === url)
