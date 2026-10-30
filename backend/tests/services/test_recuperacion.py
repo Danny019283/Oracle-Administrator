@@ -7,7 +7,7 @@ import pytest
 
 from src.services.archivos_respaldo import RespaldoInvalido, RespaldoNoEncontrado
 from src.services.directorios import DirectorioNoEncontrado
-from src.services.entorno_oracle import HerramientaNoDisponible
+from src.services.entorno_oracle import HerramientaNoDisponible, OperacionEntornoFallida
 from src.services.errores_oracle import explicar_error
 from src.services.identificadores import IdentificadorInvalido
 from src.services.expdp_runner import Conexion
@@ -555,6 +555,28 @@ def test_tabla_borra_exactamente_la_carpeta_auxiliar_si_rman_falla():
     assert error.value.explicacion == explicar_error(error.value.log)
     assert "rman" in str(error.value)
     assert entorno.carpetas_borradas == [PurePosixPath("/a/aux_" + BASE)]
+
+
+def test_tabla_si_rman_falla_y_el_borrado_tambien_conserva_la_recuperacion_fallida_con_el_log():
+    entorno = _entorno_full(log="RMAN-05063: Cannot recover specified tables", fallo_borrado_carpeta="rm: no permitido")
+    entorno.codigo = 1
+
+    with pytest.raises(RecuperacionFallida) as error:
+        _recuperar_tabla(entorno)
+
+    assert error.value.codigo == 1
+    assert error.value.log == "RMAN-05063: Cannot recover specified tables"
+    assert error.value.explicacion == explicar_error(error.value.log)
+    assert entorno.carpetas_borradas == [AUX]
+
+
+def test_tabla_si_rman_va_bien_y_el_borrado_falla_lanza_operacion_entorno_fallida():
+    entorno = _entorno_full(fallo_borrado_carpeta="rm: no permitido")
+
+    with pytest.raises(OperacionEntornoFallida, match="rm: no permitido"):
+        _recuperar_tabla(entorno)
+
+    assert entorno.carpetas_borradas == [AUX]
 
 
 def test_tabla_borra_la_carpeta_auxiliar_si_rman_no_esta_disponible():

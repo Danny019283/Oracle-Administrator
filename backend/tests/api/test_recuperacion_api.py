@@ -9,6 +9,7 @@ from src.api.admin_comun import obtener_consulta_admin
 from src.api.dependencias import obtener_conexion, obtener_entorno
 from src.api.sesion import obtener_almacen
 from src.services.entorno_oracle import ArchivoEntorno, HerramientaNoDisponible
+from src.services.errores_oracle import explicar_error
 from src.services.expdp_runner import Conexion
 from src.services.sesiones import AlmacenSesiones
 from tests.services.entorno_falso import EntornoFalso
@@ -385,6 +386,20 @@ def test_herramienta_no_disponible_responde_500_con_el_mensaje_de_respaldos(clie
 
     assert respuesta.status_code == 500
     assert respuesta.json() == {"mensaje": "No se pudo ejecutar «impdp»: no está disponible en el entorno."}
+
+
+def test_tabla_con_rman_fallido_y_borrado_fallido_responde_el_error_de_rman_y_no_el_de_la_carpeta(cliente):
+    log = "RMAN-05063: Cannot recover specified tables"
+    usar(EntornoFalso(codigo=1, log=log, archivos=ARCHIVOS_RMAN, fallo_borrado_carpeta="rm: no permitido"), sysdba=True)
+
+    respuesta = recuperar(cliente, TABLA, base=RMAN)
+
+    assert respuesta.status_code == 500
+    assert respuesta.json() == {
+        "mensaje": "No se pudo recuperar el respaldo",
+        "explicacion": explicar_error(log),
+        "log": log,
+    }
 
 
 @pytest.mark.parametrize("fallo", [{"fallo_permisos": "chown: no permitido"}, {"fallo_borrado_carpeta": "rm: no permitido"}])

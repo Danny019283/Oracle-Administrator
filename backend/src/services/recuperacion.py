@@ -1,10 +1,11 @@
 import re
+import sys
 from dataclasses import dataclass
 from datetime import datetime
 
 from src.services.archivos_respaldo import RespaldoInvalido, resolver_respaldo
 from src.services.directorios import Consulta
-from src.services.entorno_oracle import ArchivoNoLegible, EntornoOracle
+from src.services.entorno_oracle import ArchivoNoLegible, EntornoOracle, OperacionEntornoFallida
 from src.services.errores_oracle import explicar_error
 from src.services.expdp_runner import Conexion, ejecutar_impdp
 from src.services.identificadores import normalizar_identificador
@@ -189,13 +190,19 @@ def recuperar_tabla(
         entorno.crear_carpeta(aux)
         entorno.dar_permisos_a_oracle(aux, sid)
         salida = ejecutar_rman(entorno, script, sid, log=ruta_log)
+        try:
+            log = entorno.leer_archivo(ruta_log)
+        except ArchivoNoLegible:
+            log = salida.texto
+        if salida.codigo != 0:
+            raise RecuperacionFallida(salida.codigo, log, "rman")
     finally:
-        entorno.borrar_carpeta(aux)
-    try:
-        log = entorno.leer_archivo(ruta_log)
-    except ArchivoNoLegible:
-        log = salida.texto
-    if salida.codigo != 0:
-        raise RecuperacionFallida(salida.codigo, log, "rman")
+        en_vuelo = sys.exception()
+        try:
+            entorno.borrar_carpeta(aux)
+        except OperacionEntornoFallida:
+            # un fallo del borrado no tapa el error de RMAN (ni otro que ya viaje); solo se propaga si todo fue bien
+            if en_vuelo is None:
+                raise
     advertencia = None if respaldo.estado == "Completo" else f"El respaldo tiene estado «{respaldo.estado}»"
     return ResultadoRecuperacion(log, advertencia)
