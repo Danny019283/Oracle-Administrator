@@ -28,6 +28,8 @@ def usar(directorios, entorno, roles=(("DBA",),), sysdba=False):
     def consulta(sql, params=None):
         if "session_roles" in sql.lower():
             return list(roles)
+        if "instance_name" in sql.lower():
+            return [("XE",)]
         return directorios
 
     app.dependency_overrides[obtener_consulta_admin] = lambda: consulta
@@ -141,3 +143,98 @@ def test_la_ruta_respaldos_no_pisa_put_ni_delete_de_directorios(cliente):
 
     assert editado.json() == {"mensaje": "Directorio BACKUP actualizado"}
     assert eliminado.json() == {"mensaje": "Directorio BACKUP eliminado"}
+
+
+DUMP = "hr_20240101_100000"
+RMAN = "full_20240101_100000"
+ARCHIVOS_ELIMINAR = {
+    PurePosixPath("/respaldos"): [
+        ArchivoEntorno(f"{DUMP}.dmp", 100, 0),
+        ArchivoEntorno(f"{DUMP}.log", 5, 0),
+        ArchivoEntorno(f"{RMAN}_XE_1_1.dbf", 100, 0),
+        ArchivoEntorno(f"{RMAN}.log", 5, 0),
+    ]
+}
+
+
+def eliminar(cliente, base, directorio="backup"):
+    return cliente.delete(f"/directorios/{directorio}/respaldos/{base}", headers=CABECERAS)
+
+
+def test_elimina_un_dump_sin_advertencia_y_sin_rman(cliente):
+    entorno = EntornoFalso(archivos=ARCHIVOS_ELIMINAR)
+    usar([("BACKUP", "/respaldos")], entorno)
+
+    respuesta = eliminar(cliente, DUMP)
+
+    assert respuesta.status_code == 200
+    assert respuesta.json() == {"mensaje": f"Respaldo {DUMP} eliminado", "advertencia": None}
+    assert entorno.borrados == [PurePosixPath("/respaldos") / f"{DUMP}.dmp", PurePosixPath("/respaldos") / f"{DUMP}.log"]
+    assert entorno.herramientas == []
+
+
+def test_elimina_un_respaldo_rman_y_ejecuta_la_limpieza_con_el_sid_real(cliente):
+    entorno = EntornoFalso(archivos=ARCHIVOS_ELIMINAR)
+    usar([("BACKUP", "/respaldos")], entorno)
+
+    respuesta = eliminar(cliente, RMAN)
+
+    assert respuesta.status_code == 200
+    assert respuesta.json() == {"mensaje": f"Respaldo {RMAN} eliminado", "advertencia": None}
+    assert len(entorno.borrados) == 2
+    assert [(h["nombre"], h["variables"]) for h in entorno.herramientas] == [("rman", {"ORACLE_SID": "XE"})]
+
+
+def test_si_falla_la_limpieza_rman_responde_200_con_advertencia(cliente):
+    entorno = EntornoFalso(archivos=ARCHIVOS_ELIMINAR, codigo=1, texto="RMAN-06059: falta un archivelog")
+    usar([("BACKUP", "/respaldos")], entorno)
+
+    respuesta = eliminar(cliente, RMAN)
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["mensaje"] == f"Respaldo {RMAN} eliminado"
+    assert cuerpo["advertencia"]["log"] == "RMAN-06059: falta un archivelog"
+    assert cuerpo["advertencia"]["explicacion"]
+
+
+def test_si_falla_el_borrado_responde_500_con_mensaje_explicacion_y_salida(cliente):
+    usar([("BACKUP", "/respaldos")], EntornoFalso(archivos=ARCHIVOS_ELIMINAR, fallo_borrado="rm: Permission denied"))
+
+    respuesta = eliminar(cliente, DUMP)
+
+    assert respuesta.status_code == 500
+    cuerpo = respuesta.json()
+    assert cuerpo["mensaje"] and cuerpo["explicacion"]
+    assert cuerpo["error"] == "rm: Permission denied"
+
+
+def test_base_invalida_responde_422_sin_borrar(cliente):
+    entorno = EntornoFalso(archivos=ARCHIVOS_ELIMINAR)
+    usar([("BACKUP", "/respaldos")], entorno)
+
+    respuesta = eliminar(cliente, "x..y")
+
+    assert respuesta.status_code == 422
+    assert entorno.borrados == []
+
+
+def test_directorio_o_respaldo_inexistente_responde_404(cliente):
+    usar([("BACKUP", "/respaldos")], EntornoFalso(archivos=ARCHIVOS_ELIMINAR))
+
+    assert eliminar(cliente, DUMP, directorio="otro").status_code == 404
+    assert eliminar(cliente, "zz_20240101_100000").status_code == 404
+
+
+def test_eliminar_respaldo_sin_sysdba_ni_dba_responde_403(cliente):
+    entorno = EntornoFalso(archivos=ARCHIVOS_ELIMINAR)
+    usar([("BACKUP", "/respaldos")], entorno, roles=())
+
+    respuesta = eliminar(cliente, DUMP)
+
+    assert respuesta.status_code == 403
+    assert entorno.borrados == []
+
+
+def test_eliminar_respaldo_sin_sesion_responde_401(cliente):
+    assert cliente.delete("/directorios/backup/respaldos/" + DUMP).status_code == 401

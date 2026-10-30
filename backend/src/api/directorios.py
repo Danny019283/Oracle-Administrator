@@ -4,7 +4,8 @@ from pydantic import BaseModel
 from src.api.admin_comun import exigir_sysdba_o_dba, obtener_consulta_admin, obtener_sentencia, responder
 from src.api.dependencias import obtener_entorno
 from src.services import directorios
-from src.services.archivos_respaldo import listar_respaldos
+from src.services.archivos_respaldo import eliminar_respaldo, listar_respaldos
+from src.services.instancia import sid_de_instancia
 
 router = APIRouter(prefix="/directorios")
 
@@ -47,6 +48,26 @@ def get_respaldos(consulta=Depends(obtener_consulta_admin), entorno=Depends(obte
         }
 
     return responder(listar)
+
+
+@router.delete("/{nombre}/respaldos/{base}", dependencies=[Depends(exigir_sysdba_o_dba)])
+def delete_respaldo(
+    nombre: str,
+    base: str,
+    consulta=Depends(obtener_consulta_admin),
+    entorno=Depends(obtener_entorno),
+):
+    def eliminar():
+        resultado = eliminar_respaldo(consulta, entorno, nombre, base, sid_de_instancia(consulta))
+        advertencia = resultado.advertencia
+        return {
+            "mensaje": f"Respaldo {base} eliminado",
+            "advertencia": None
+            if advertencia is None
+            else {"explicacion": advertencia.explicacion, "log": advertencia.log},
+        }
+
+    return responder(eliminar)
 
 
 @router.post("")
