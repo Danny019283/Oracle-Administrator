@@ -5,7 +5,7 @@ from typing import Any
 
 from src.services.directorios import Directorio
 from src.services.dumpfile import construir_base
-from src.services.entorno_oracle import EntornoOracle
+from src.services.entorno_oracle import ArchivoNoLegible, EntornoOracle
 from src.services.errores_oracle import explicar_error
 from src.services.respaldo import RespaldoFallido, SolicitudInvalida, errores_destino
 from src.services.rman_runner import ejecutar_rman
@@ -43,11 +43,8 @@ def en_archivelog(consulta: Consulta) -> bool:
 
 
 def _script_respaldo(entorno: EntornoOracle, ruta_directorio: str, base: str) -> str:
-    ruta = entorno.tipo_ruta(ruta_directorio)
-    formato = ruta / f"{base}_%d_%s_%p.dbf"
-    log = ruta / f"{base}.log"
-    return f"""SPOOL LOG TO '{log}';
-RUN {{
+    formato = entorno.tipo_ruta(ruta_directorio) / f"{base}_%d_%s_%p.dbf"
+    return f"""RUN {{
   ALLOCATE CHANNEL ch1 DEVICE TYPE DISK;
   BACKUP INCREMENTAL LEVEL 0
   DATABASE
@@ -55,7 +52,6 @@ RUN {{
   FORMAT '{formato}';
   RELEASE CHANNEL ch1;
 }}
-SPOOL LOG OFF;
 """
 
 
@@ -75,13 +71,19 @@ def respaldar_full(
         raise SinArchivelog()
 
     ruta = next(d.ruta for d in directorios if d.nombre == directorio)
-    script = _script_respaldo(entorno, ruta, construir_base(nombre, ahora))
-    respaldo = ejecutar_rman(entorno, script, sid)
+    base = construir_base(nombre, ahora)
+    ruta_log = entorno.tipo_ruta(ruta) / f"{base}.log"
+    respaldo = ejecutar_rman(entorno, _script_respaldo(entorno, ruta, base), sid, log=ruta_log)
+    # con `log=` RMAN deja su salida en el archivo, no en stdout
+    try:
+        log = entorno.leer_archivo(ruta_log)
+    except ArchivoNoLegible:
+        log = respaldo.texto
     if respaldo.codigo != 0:
-        raise RespaldoFallido(respaldo.codigo, respaldo.texto, "rman")
+        raise RespaldoFallido(respaldo.codigo, log, "rman")
 
     limpieza = ejecutar_rman(entorno, _SCRIPT_LIMPIEZA, sid)
     advertencia = None
     if limpieza.codigo != 0:
         advertencia = AdvertenciaLimpieza(explicar_error(limpieza.texto), limpieza.texto)
-    return ResultadoFull(log=respaldo.texto, advertencia=advertencia)
+    return ResultadoFull(log=log, advertencia=advertencia)

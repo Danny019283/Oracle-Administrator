@@ -43,9 +43,14 @@ class ConsultaFalsa:
         return self.directorios
 
 
-def entorno_rman(*salidas):
-    """Entorno falso con la Salida de cada ejecución de RMAN, en orden (backup, limpieza)."""
-    return EntornoFalso(salidas=salidas or [Salida(0, "log del backup"), Salida(0, "log de la limpieza")])
+def entorno_rman(*salidas, log="log del backup"):
+    """Entorno falso con la Salida de cada ejecución de RMAN, en orden (backup, limpieza).
+
+    El log del backup lo escribe RMAN con `log=`: sale del archivo, no de la salida.
+    """
+    return EntornoFalso(
+        salidas=salidas or [Salida(0, "RMAN> 2>"), Salida(0, "log de la limpieza")], log=log
+    )
 
 
 @pytest.fixture
@@ -118,8 +123,8 @@ def test_el_backup_genera_piezas_dbf_y_un_log_con_la_hora_actual_en_la_base(clie
     script = entorno.herramientas[0]["script"]
     base = r"semanal_\d{8}_\d{6}"
     assert re.search(rf"FORMAT '{RUTA}/{base}_%d_%s_%p\.dbf'", script)
-    assert re.search(rf"^SPOOL LOG TO '{RUTA}/{base}\.log';", script)
-    assert script.rstrip().endswith("SPOOL LOG OFF;")
+    assert "SPOOL" not in script
+    assert re.fullmatch(rf"log={RUTA}/{base}\.log", entorno.herramientas[0]["args"][-1])
 
 
 def test_rman_usa_el_sid_real_de_la_instancia_aunque_la_sesion_sea_de_un_servicio_de_pdb(cliente):
@@ -134,7 +139,7 @@ def test_rman_usa_el_sid_real_de_la_instancia_aunque_la_sesion_sea_de_un_servici
 def test_si_la_limpieza_falla_responde_200_con_la_advertencia_y_su_log(cliente):
     usar(
         entorno=entorno_rman(
-            Salida(0, "log del backup"), Salida(1, "RMAN-06059: falta un archivelog")
+            Salida(0, "RMAN> 2>"), Salida(1, "RMAN-06059: falta un archivelog")
         )
     )
 
@@ -149,7 +154,9 @@ def test_si_la_limpieza_falla_responde_200_con_la_advertencia_y_su_log(cliente):
 
 def test_si_el_backup_falla_responde_500_con_mensaje_explicacion_y_log_sin_limpieza(cliente):
     entorno = usar(
-        entorno=entorno_rman(Salida(1, "RMAN-03002: fallo\nRMAN-06059: falta un archivelog"))
+        entorno=entorno_rman(
+            Salida(1, "RMAN> 2>"), log="RMAN-03002: fallo\nRMAN-06059: falta un archivelog"
+        )
     )
 
     respuesta = cliente.post("/respaldos/full", json=SOLICITUD, headers=SYSDBA)

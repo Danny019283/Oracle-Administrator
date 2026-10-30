@@ -22,6 +22,16 @@ def test_pide_al_entorno_rman_con_autenticacion_del_so_y_cmdfile_temporal():
     ]
 
 
+def test_con_log_añade_el_argumento_log_de_rman_tras_el_cmdfile():
+    entorno = EntornoFalso()
+
+    ejecutar_rman(entorno, SCRIPT, "XE", log="/opt/oracle/Respaldos/b_20260305_140709.log")
+
+    assert entorno.herramientas[0]["args"] == [
+        "target", "/", f"cmdfile={RUTA_TEMPORAL}", "log=/opt/oracle/Respaldos/b_20260305_140709.log",
+    ]
+
+
 def test_pone_el_sid_recibido_en_oracle_sid():
     entorno = EntornoFalso()
 

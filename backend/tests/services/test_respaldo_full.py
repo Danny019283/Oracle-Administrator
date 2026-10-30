@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import PurePosixPath
 
 import pytest
 
@@ -24,9 +25,14 @@ class ConsultaFalsa:
         return [(self.modo,)]
 
 
-def entorno_con(codigos=(0, 0), textos=("log del backup", "log de la limpieza")):
-    """Entorno falso con la salida de cada ejecución de RMAN, en orden (backup, limpieza)."""
-    return EntornoFalso(salidas=[Salida(c, t) for c, t in zip(codigos, textos)])
+def entorno_con(
+    codigos=(0, 0), textos=("RMAN> 2> 3>", "log de la limpieza"), log="log del backup"
+):
+    """Entorno falso con la salida de cada ejecución de RMAN, en orden (backup, limpieza).
+
+    Con `log=` RMAN solo deja el eco de prompts en la salida: el log real está en el archivo.
+    """
+    return EntornoFalso(salidas=[Salida(c, t) for c, t in zip(codigos, textos)], log=log)
 
 
 def scripts(entorno):
@@ -65,15 +71,14 @@ def test_el_backup_es_incremental_nivel_0_de_toda_la_base_en_la_ruta_del_directo
     assert "DELETE" not in script
 
 
-def test_el_script_escribe_el_log_junto_a_las_piezas_con_la_misma_base():
+def test_rman_escribe_el_log_junto_a_las_piezas_con_el_argumento_log_y_sin_spool():
     entorno = entorno_con()
 
     respaldo(entorno)
 
-    script = scripts(entorno)[0]
-    assert script.startswith(f"SPOOL LOG TO '{RUTA}/{BASE}.log';\n")
-    assert script.rstrip().endswith("SPOOL LOG OFF;")
-    assert "SPOOL" not in scripts(entorno)[1]
+    assert f"log={RUTA}/{BASE}.log" in entorno.herramientas[0]["args"]
+    assert not any(a.startswith("log=") for a in entorno.herramientas[1]["args"])
+    assert all("SPOOL" not in s for s in scripts(entorno))
 
 
 def test_tras_un_backup_correcto_ejecuta_la_limpieza_con_redundancy_1():
@@ -97,16 +102,19 @@ def test_las_dos_ejecuciones_de_rman_usan_el_sid_recibido_en_oracle_sid():
     assert [h["variables"] for h in entorno.herramientas] == [{"ORACLE_SID": "ORCL"}] * 2
 
 
-def test_el_exito_devuelve_el_log_del_backup_sin_advertencia():
-    resultado = respaldo()
+def test_el_exito_devuelve_el_log_leido_del_archivo_sin_advertencia():
+    entorno = entorno_con()
+
+    resultado = respaldo(entorno)
 
     assert resultado.log == "log del backup"
     assert resultado.advertencia is None
+    assert entorno.lecturas == [PurePosixPath(f"{RUTA}/{BASE}.log")]
 
 
-def test_si_el_backup_falla_informa_el_error_con_su_log_y_no_ejecuta_la_limpieza():
+def test_si_el_backup_falla_informa_el_error_con_el_log_del_archivo_y_no_ejecuta_la_limpieza():
     entorno = entorno_con(
-        codigos=(1,), textos=("RMAN-03002: fallo\nRMAN-06059: falta un archivelog",)
+        codigos=(1,), textos=("RMAN> 2>",), log="RMAN-03002: fallo\nRMAN-06059: falta un archivelog"
     )
 
     with pytest.raises(RespaldoFallido) as error:
@@ -118,8 +126,19 @@ def test_si_el_backup_falla_informa_el_error_con_su_log_y_no_ejecuta_la_limpieza
     assert len(scripts(entorno)) == 1
 
 
+def test_si_no_se_puede_leer_el_log_usa_la_salida_de_rman():
+    exito = respaldo(entorno_con(textos=("salida de rman", "limpieza"), log=None))
+    entorno = entorno_con(codigos=(1,), textos=("RMAN-06059: falta",), log=None)
+
+    with pytest.raises(RespaldoFallido) as error:
+        respaldo(entorno)
+
+    assert exito.log == "salida de rman"
+    assert error.value.log == "RMAN-06059: falta"
+
+
 def test_si_la_limpieza_falla_el_respaldo_es_exitoso_con_advertencia():
-    entorno = entorno_con(codigos=(0, 1), textos=("log del backup", "RMAN-06059: falta"))
+    entorno = entorno_con(codigos=(0, 1), textos=("RMAN> 2>", "RMAN-06059: falta"))
 
     resultado = respaldo(entorno)
 
