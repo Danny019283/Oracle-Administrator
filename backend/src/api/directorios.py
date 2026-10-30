@@ -10,9 +10,12 @@ from src.api.dependencias import obtener_conexion, obtener_entorno
 from src.api.sesion import obtener_almacen
 from src.services import directorios
 from src.services.archivos_respaldo import eliminar_respaldo, listar_respaldos
-from src.services.entorno_oracle import OperacionEntornoFallida
+from src.api.respaldos import respuesta_herramienta_no_disponible
+from src.services.entorno_oracle import HerramientaNoDisponible, OperacionEntornoFallida
+from src.services.errores_oracle import explicacion_de
 from src.services.instancia import sid_de_instancia
 from src.services.recuperacion import RecuperacionFallida, recuperar_datapump, recuperar_full, recuperar_tabla
+from src.services.respaldo_full import SinArchivelog
 
 router = APIRouter(prefix="/directorios")
 
@@ -150,7 +153,32 @@ def post_recuperar(
             respuesta["sesion_cerrada"] = True
         return {**respuesta, "log": resultado.log, "advertencia": resultado.advertencia}
 
-    return responder(recuperar)
+    def con_errores_de_recuperacion():
+        try:
+            return recuperar()
+        except RecuperacionFallida as error:
+            return JSONResponse(
+                status_code=500,
+                content={"mensaje": "No se pudo recuperar el respaldo", "explicacion": error.explicacion, "log": error.log},
+            )
+        except SinArchivelog as error:
+            return JSONResponse(
+                status_code=409,
+                content={"mensaje": str(error), "explicacion": explicacion_de("RMAN-06149")},
+            )
+        except HerramientaNoDisponible as error:
+            return respuesta_herramienta_no_disponible(error)
+        except OperacionEntornoFallida as error:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "mensaje": "No se pudo preparar o limpiar la carpeta auxiliar de la recuperación",
+                    "explicacion": "Oracle necesita escribir en la carpeta aux_<base> junto al respaldo y poder borrarla; revisa los permisos de la carpeta del DIRECTORY.",
+                    "error": str(error).strip(),
+                },
+            )
+
+    return responder(con_errores_de_recuperacion)
 
 
 @router.post("")
