@@ -199,14 +199,18 @@ def test_si_falla_la_limpieza_rman_responde_200_con_advertencia(cliente):
 
 
 def test_si_falla_el_borrado_responde_500_con_mensaje_explicacion_y_salida(cliente):
-    usar([("BACKUP", "/respaldos")], EntornoFalso(archivos=ARCHIVOS_ELIMINAR, fallo_borrado="rm: Permission denied"))
+    salida = "rm: Permission denied\nrm: Read-only file system"
+    usar([("BACKUP", "/respaldos")], EntornoFalso(archivos=ARCHIVOS_ELIMINAR, fallo_borrado=salida))
 
     respuesta = eliminar(cliente, DUMP)
 
     assert respuesta.status_code == 500
     cuerpo = respuesta.json()
-    assert cuerpo["mensaje"] and cuerpo["explicacion"]
-    assert cuerpo["error"] == "rm: Permission denied"
+    assert cuerpo["mensaje"] == "No se pudo eliminar el respaldo"
+    assert cuerpo["explicacion"] == (
+        "El archivo puede estar en uso, ser de solo lectura o el usuario no tiene permiso para borrarlo."
+    )
+    assert cuerpo["error"] == salida
 
 
 def test_base_invalida_responde_422_sin_borrar(cliente):

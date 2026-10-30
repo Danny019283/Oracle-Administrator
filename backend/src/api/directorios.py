@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from src.api.admin_comun import exigir_sysdba_o_dba, obtener_consulta_admin, obtener_sentencia, responder
 from src.api.dependencias import obtener_entorno
 from src.services import directorios
 from src.services.archivos_respaldo import eliminar_respaldo, listar_respaldos
+from src.services.entorno_oracle import OperacionEntornoFallida
 from src.services.instancia import sid_de_instancia
 
 router = APIRouter(prefix="/directorios")
@@ -58,7 +60,17 @@ def delete_respaldo(
     entorno=Depends(obtener_entorno),
 ):
     def eliminar():
-        resultado = eliminar_respaldo(consulta, entorno, nombre, base, sid_de_instancia(consulta))
+        try:
+            resultado = eliminar_respaldo(consulta, entorno, nombre, base, sid_de_instancia(consulta))
+        except OperacionEntornoFallida as error:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "mensaje": "No se pudo eliminar el respaldo",
+                    "explicacion": "El archivo puede estar en uso, ser de solo lectura o el usuario no tiene permiso para borrarlo.",
+                    "error": str(error).strip(),
+                },
+            )
         advertencia = resultado.advertencia
         return {
             "mensaje": f"Respaldo {base} eliminado",
