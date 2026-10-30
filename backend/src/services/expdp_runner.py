@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 
 from src.services.entorno_oracle import ComandoHerramienta, EntornoOracle, Salida
 
-__all__ = ["Conexion", "Salida", "ejecutar_expdp"]
+__all__ = ["Conexion", "Salida", "ejecutar_expdp", "ejecutar_impdp"]
 
 
 @dataclass(frozen=True)
@@ -28,3 +28,7 @@ def _ejecutar_data_pump(herramienta: str, entorno: EntornoOracle, conexion: Cone
 
 def ejecutar_expdp(entorno: EntornoOracle, conexion: Conexion, parametros: list[str]) -> Salida:
     return _ejecutar_data_pump("expdp", entorno, conexion, parametros)
+
+
+def ejecutar_impdp(entorno: EntornoOracle, conexion: Conexion, parametros: list[str]) -> Salida:
+    return _ejecutar_data_pump("impdp", entorno, conexion, parametros)
