@@ -42,6 +42,24 @@ def test_un_token_desconocido_no_resuelve():
     assert almacen.resolver("inexistente") is None
 
 
+def test_cerrar_todas_invalida_todas_las_sesiones():
+    almacen = AlmacenSesiones()
+    tokens = [almacen.crear(CONEXION) for _ in range(3)]
+
+    almacen.cerrar_todas()
+
+    assert all(almacen.resolver(token) is None for token in tokens)
+
+
+def test_cerrar_todas_sin_sesiones_no_falla_y_se_pueden_crear_nuevas():
+    almacen = AlmacenSesiones()
+
+    almacen.cerrar_todas()
+    token = almacen.crear(CONEXION)
+
+    assert almacen.resolver(token) == CONEXION
+
+
 def test_cerrar_una_sesion_no_afecta_a_las_demas():
     almacen = AlmacenSesiones()
     primero = almacen.crear(CONEXION)
