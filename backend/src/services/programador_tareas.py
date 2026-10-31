@@ -70,9 +70,15 @@ class ProgramadorTareas(ABC):
 
 
 class ProgramadorCron(ProgramadorTareas):
-    def __init__(self, ejecutar: Callable[..., Salida] = ejecutar_proceso, comando: Sequence[str] = ("crontab",)):
+    def __init__(
+        self,
+        ejecutar: Callable[..., Salida] = ejecutar_proceso,
+        comando: Sequence[str] = ("crontab",),
+        comando_escritura: Sequence[str] | None = None,
+    ):
         self._ejecutar = ejecutar
         self._comando = list(comando)
+        self._comando_escritura = list(comando_escritura or comando)
 
     def _leer(self) -> list[str]:
         salida = self._ejecutar([*self._comando, "-l"], variables={"LC_ALL": "C"})
@@ -83,7 +89,7 @@ class ProgramadorCron(ProgramadorTareas):
         return salida.texto.splitlines()
 
     def _escribir(self, lineas: list[str]) -> None:
-        salida = self._ejecutar([*self._comando, "-"], entrada="\n".join(lineas) + "\n")
+        salida = self._ejecutar([*self._comando_escritura, "-"], entrada="\n".join(lineas) + "\n")
         if salida.codigo != 0:
             raise OperacionEntornoFallida(salida.texto)
 
@@ -91,11 +97,12 @@ class ProgramadorCron(ProgramadorTareas):
     def _sin(lineas: list[str], marca: str) -> list[str]:
         resto, saltar = [], False
         for linea in lineas:
-            if saltar:
-                saltar = False
-            elif linea == marca:
+            if saltar and linea.strip() and not linea.lstrip().startswith("#"):
+                saltar = False  # la línea de trabajo que acompaña a la marca propia
+            elif linea.rstrip() == marca:
                 saltar = True
             else:
+                saltar = False
                 resto.append(linea)
         return resto
 
@@ -109,3 +116,30 @@ class ProgramadorCron(ProgramadorTareas):
         resto = self._sin(actual, marca_cron(id_programacion))
         if resto != actual:
             self._escribir(resto)
+
+
+class ProgramadorCronContenedor(ProgramadorCron):
+    """Cron del usuario Oracle dentro de un contenedor; `-i` solo en la escritura (en la lectura colgaría el stdin)."""
+
+    def __init__(self, contenedor: str, ejecutar: Callable[..., Salida], cli: str, usuario: str = "oracle"):
+        base = [cli, "exec"]
+        destino = ["-u", "root", contenedor]
+        super().__init__(
+            ejecutar,
+            [*base, *destino, "crontab", "-u", usuario],
+            [*base, "-i", *destino, "crontab", "-u", usuario],
+        )
+        self._asegurar = [*base, *destino, "sh", "-c", "pgrep -x crond >/dev/null 2>&1 || crond"]
+
+    def _asegurar_crond(self) -> None:
+        salida = self._ejecutar(self._asegurar)
+        if salida.codigo != 0:
+            raise OperacionEntornoFallida(salida.texto)
+
+    def instalar(self, id_programacion: int, prog: Programacion, ruta_script: str) -> None:
+        self._asegurar_crond()
+        super().instalar(id_programacion, prog, ruta_script)
+
+    def eliminar(self, id_programacion: int) -> None:
+        self._asegurar_crond()
+        super().eliminar(id_programacion)
