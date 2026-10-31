@@ -349,3 +349,55 @@ def eliminar(
     # la fila va al final: si algo falló antes, "Eliminar" se puede reintentar
     eliminar_fila(sentencia, id_programacion)
     return fila.nombre
+
+
+@dataclass(frozen=True)
+class FalloReinstalacion:
+    nombre: str
+    mensaje: str
+
+
+@dataclass(frozen=True)
+class ResultadoReinstalacion:
+    reinstaladas: int
+    fallidas: tuple[FalloReinstalacion, ...]
+
+
+def _reinstalar_una(fila: RespaldoProgramado, entorno: EntornoOracle, programador: ProgramadorTareas, sid: str) -> None:
+    prog = Programacion(
+        fila.nombre, fila.directorio, fila.politica, fila.frecuencia, fila.hora, fila.dia,
+        *(() if fila.intervalo_horas is None else (fila.intervalo_horas,)),  # None: conserva el valor por defecto
+    )
+    ruta_script = entorno.tipo_ruta(fila.ruta_script)
+    ruta_rman = entorno.tipo_ruta(fila.ruta_rman)
+    destino = ruta_script.parent.parent
+    try:
+        presentes = {a.nombre for a in entorno.listar_archivos(ruta_script.parent)}
+    except OperacionEntornoFallida:  # carpeta perdida (p. ej. contenedor recreado): se regenera todo
+        presentes = set()
+    # se preparan los textos antes de escribir nada, para no dejar la fila a medias
+    pendientes: list[tuple[Any, str, bool]] = []
+    if ruta_rman.name not in presentes:
+        pendientes.append((ruta_rman, script_rman(prog.politica, destino), False))
+    if ruta_script.name not in presentes:
+        oracle_home = entorno.variable_de_entorno("ORACLE_HOME")
+        if not oracle_home:
+            raise OperacionEntornoFallida("No se pudo determinar ORACLE_HOME del servidor de Oracle")
+        pendientes.append((ruta_script, envoltorio(prog.nombre, sid, oracle_home, ruta_rman, destino), True))
+    for ruta, texto, ejecutable in pendientes:
+        entorno.escribir_archivo(ruta, texto, ejecutable)
+    programador.instalar(fila.id, prog, str(ruta_script))  # idempotente (RN-13, RNF-4)
+
+
+def reinstalar(
+    consulta: Consulta, entorno: EntornoOracle, programador: ProgramadorTareas, sid: str
+) -> ResultadoReinstalacion:
+    reinstaladas = 0
+    fallidas: list[FalloReinstalacion] = []
+    for fila in listar(consulta):
+        try:
+            _reinstalar_una(fila, entorno, programador, sid)
+            reinstaladas += 1
+        except Exception as error:  # una fila rota no aborta las demás (FA-14a)
+            fallidas.append(FalloReinstalacion(fila.nombre, str(error)))
+    return ResultadoReinstalacion(reinstaladas, tuple(fallidas))
