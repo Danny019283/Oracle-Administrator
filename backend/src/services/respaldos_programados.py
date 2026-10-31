@@ -5,13 +5,21 @@ from typing import Any
 
 import oracledb
 
+from src.services.entorno_oracle import EntornoOracle
 from src.services.errores_admin import codigo_error
+from src.services.respaldo import RespaldoFallido
+from src.services.rman_runner import ejecutar_rman
 
 TABLA = "SYSTEM.RESPALDOS_PROGRAMADOS"
 _COLUMNAS = (
     "ID, NOMBRE, POLITICA, FRECUENCIA, HORA, DIA, INTERVALO_HORAS, DIRECTORIO, "
     "RUTA_SCRIPT, RUTA_RMAN, ENTORNO, TAREA, CREADO, ULTIMA_EJECUCION, ULTIMO_RESULTADO"
 )
+
+_SCRIPT_POLITICA = """CONFIGURE RETENTION POLICY TO RECOVERY WINDOW OF 7 DAYS;
+CONFIGURE BACKUP OPTIMIZATION ON;
+CONFIGURE CONTROLFILE AUTOBACKUP ON;
+"""
 
 Sentencia = Callable[..., None]
 Consulta = Callable[..., Sequence[Sequence[Any]]]
@@ -127,3 +135,10 @@ def actualizar_resultado(sentencia: Sentencia, id: int, resultado: str) -> None:
 
 def eliminar_fila(sentencia: Sentencia, id: int) -> None:
     sentencia(f"DELETE FROM {TABLA} WHERE ID = :id", {"id": id})
+
+
+def aplicar_politica_global(entorno: EntornoOracle, sid: str) -> None:
+    # CONFIGURE es idempotente: repetirlo deja la misma configuración (RNF-4)
+    salida = ejecutar_rman(entorno, _SCRIPT_POLITICA, sid)
+    if salida.codigo != 0:
+        raise RespaldoFallido(salida.codigo, salida.texto, "rman")
