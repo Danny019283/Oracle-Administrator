@@ -4,11 +4,13 @@ from pathlib import PurePosixPath, PureWindowsPath
 import pytest
 
 from src.services import respaldos_programados as rp
-from src.services.entorno_oracle import ArchivoEntorno, ArchivoNoLegible, Salida
+from src.services.entorno_oracle import ArchivoEntorno, ArchivoNoLegible, OperacionEntornoFallida, Salida
 from tests.services.entorno_falso import EntornoFalso
 
 CARPETA = "/resp/scripts_programados"
 SCRIPT = f"{CARPETA}/diario.sh"
+# el listado previo de la carpeta del script (FA-9b) debe encontrar el script
+scripts_programados = [ArchivoEntorno("diario.sh", 1, 1.0)]
 
 
 class EntornoConLogs(EntornoFalso):
@@ -23,6 +25,16 @@ class EntornoConLogs(EntornoFalso):
         if ruta not in self.contenidos:
             raise ArchivoNoLegible(str(ruta))
         return self.contenidos[ruta]
+
+
+class EntornoListadoFallaEnDirectory(EntornoConLogs):
+    """El listado de la carpeta de scripts funciona; el del DIRECTORY (donde están los logs) falla."""
+
+    def listar_archivos(self, ruta):
+        if ruta == PurePosixPath("/resp"):
+            self.listados.append(ruta)
+            raise OperacionEntornoFallida("sin acceso")
+        return super().listar_archivos(ruta)
 
 
 class EntornoWindows(EntornoConLogs):
@@ -63,7 +75,10 @@ def consulta_con(f):
 
 
 def test_ejecutar_corre_el_script_guardado_y_registra_completo():
-    entorno = EntornoConLogs(salidas_archivo={PurePosixPath(SCRIPT): Salida(0, "stdout")})
+    entorno = EntornoConLogs(
+        archivos={PurePosixPath(CARPETA): scripts_programados},
+        salidas_archivo={PurePosixPath(SCRIPT): Salida(0, "stdout")},
+    )
     consulta, sentencia = consulta_con(fila()), Sentencia()
 
     resultado = rp.ejecutar(consulta, sentencia, entorno, 7)
@@ -90,11 +105,11 @@ def test_ejecutar_devuelve_el_log_mas_reciente_de_esta_programacion():
         ArchivoEntorno("diario.rman", 10, 700.0),
     ]
     contenidos = {P(f"/resp/{a.nombre}"): a.nombre for a in archivos}
-    entorno = EntornoConLogs(contenidos, archivos={P("/resp"): archivos}, texto="stdout")
+    entorno = EntornoConLogs(contenidos, archivos={P("/resp"): archivos, P(CARPETA): scripts_programados}, texto="stdout")
 
     resultado = rp.ejecutar(consulta_con(fila()), Sentencia(), entorno, 7)
 
-    assert entorno.listados == [P("/resp")]
+    assert entorno.listados == [P(CARPETA), P("/resp")]
     assert entorno.lecturas == [P("/resp/diario_20260103_020000.log")]
     assert resultado.log == "diario_20260103_020000.log"
 
@@ -106,30 +121,30 @@ def test_ejecutar_desempata_por_modificado_y_no_distingue_mayusculas():
         ArchivoEntorno("DIARIO_20260101_020000.LOG", 1, 200.0),
     ]
     contenidos = {P(f"/resp/{a.nombre}"): a.nombre for a in archivos}
-    entorno = EntornoConLogs(contenidos, archivos=archivos)
+    entorno = EntornoConLogs(contenidos, archivos=archivos + scripts_programados)
 
     assert rp.ejecutar(consulta_con(fila()), Sentencia(), entorno, 7).log == "DIARIO_20260101_020000.LOG"
 
 
 def test_ejecutar_el_nombre_se_escapa_en_la_busqueda_del_log():
-    archivos = [ArchivoEntorno("dxario_20260101_020000.log", 1, 100.0)]
+    archivos = [ArchivoEntorno("dxario_20260101_020000.log", 1, 100.0), ArchivoEntorno("d.x.sh", 1, 1.0)]
     entorno = EntornoConLogs({PurePosixPath("/resp/dxario_20260101_020000.log"): "ajeno"}, archivos=archivos, texto="stdout")
 
     assert rp.ejecutar(consulta_con(fila(f"{CARPETA}/d.x.sh", "d.x")), Sentencia(), entorno, 7).log == "stdout"
 
 
 def test_ejecutar_sin_log_usa_la_salida_del_script():
-    entorno = EntornoConLogs(archivos=[ArchivoEntorno("otro.log", 1, 1.0)], texto="stdout")
+    entorno = EntornoConLogs(archivos=[ArchivoEntorno("otro.log", 1, 1.0)] + scripts_programados, texto="stdout")
     assert rp.ejecutar(consulta_con(fila()), Sentencia(), entorno, 7).log == "stdout"
 
 
 def test_ejecutar_log_ilegible_usa_la_salida_del_script():
-    entorno = EntornoConLogs(archivos=[ArchivoEntorno("diario_20260101_020000.log", 1, 1.0)], texto="stdout")
+    entorno = EntornoConLogs(archivos=[ArchivoEntorno("diario_20260101_020000.log", 1, 1.0)] + scripts_programados, texto="stdout")
     assert rp.ejecutar(consulta_con(fila()), Sentencia(), entorno, 7).log == "stdout"
 
 
 def test_ejecutar_listado_fallido_usa_la_salida_del_script():
-    entorno = EntornoConLogs(fallo_listado="sin acceso", texto="stdout")
+    entorno = EntornoListadoFallaEnDirectory(archivos=scripts_programados, texto="stdout")
     assert rp.ejecutar(consulta_con(fila()), Sentencia(), entorno, 7).log == "stdout"
 
 
@@ -141,7 +156,10 @@ def test_ejecutar_variante_windows():
         ArchivoEntorno("diario_20260102_020000.log", 1, 200.0),
     ]
     contenidos = {W(rf"C:\resp\{a.nombre}"): a.nombre for a in archivos}
-    entorno = EntornoWindows(contenidos, archivos={W(r"C:\resp"): archivos})
+    entorno = EntornoWindows(
+        contenidos,
+        archivos={W(r"C:\resp"): archivos, W(r"C:\resp\scripts_programados"): [ArchivoEntorno("diario.bat", 1, 1.0)]},
+    )
 
     resultado = rp.ejecutar(consulta_con(fila(ruta)), Sentencia(), entorno, 7)
 

@@ -277,16 +277,27 @@ class ProgramacionNoEncontrada(Exception):
         super().__init__("No existe la programación indicada")
 
 
+class ScriptNoEncontrado(Exception):
+    def __init__(self):
+        super().__init__("El script de la programación ya no existe en disco; usa «Reinstalar tareas»")
+
+
 @dataclass(frozen=True)
 class ResultadoEjecucion:
     resultado: str
     log: str
 
 
-def _log_mas_reciente(entorno: EntornoOracle, carpeta: Any, nombre: str) -> str | None:
+_TOLERANCIA_RELOJ = 5  # segundos de desfase admitidos entre el reloj local y el del entorno
+
+
+def _log_mas_reciente(entorno: EntornoOracle, carpeta: Any, nombre: str, desde: float | None = None) -> str | None:
     patron = re.compile(re.escape(nombre) + r"_\d{8}_\d{6}\.log", re.IGNORECASE)
     try:
-        logs = [a for a in entorno.listar_archivos(carpeta) if patron.fullmatch(a.nombre)]
+        logs = [
+            a for a in entorno.listar_archivos(carpeta)
+            if patron.fullmatch(a.nombre) and (desde is None or a.modificado >= desde - _TOLERANCIA_RELOJ)
+        ]
         if logs:
             return entorno.leer_archivo(carpeta / max(logs, key=lambda a: (a.nombre.upper(), a.modificado)).nombre)
     except (ArchivoNoLegible, OperacionEntornoFallida):
@@ -294,14 +305,27 @@ def _log_mas_reciente(entorno: EntornoOracle, carpeta: Any, nombre: str) -> str 
     return None
 
 
-def ejecutar(consulta: Consulta, sentencia: Sentencia, entorno: EntornoOracle, id_programacion: int) -> ResultadoEjecucion:
+def ejecutar(
+    consulta: Consulta,
+    sentencia: Sentencia,
+    entorno: EntornoOracle,
+    id_programacion: int,
+    reloj: Callable[[], float] | None = None,
+) -> ResultadoEjecucion:
     fila = obtener(consulta, id_programacion)
     if fila is None:
         raise ProgramacionNoEncontrada()
     ruta = entorno.tipo_ruta(fila.ruta_script)
+    # un fallo al listar se propaga: sin saber si el script existe no se ejecuta nada
+    if ruta.name not in {a.nombre for a in entorno.listar_archivos(ruta.parent)}:
+        raise ScriptNoEncontrado()
+    inicio = reloj() if reloj else None
     salida = entorno.ejecutar_archivo(ruta)
     # el envoltorio pasa `log=` a RMAN: la salida real está en el log del DIRECTORY, no en stdout
-    log = _log_mas_reciente(entorno, ruta.parent.parent, fila.nombre)
-    resultado = "Completo"  # RN-11; el código ≠ 0 es el check 18
+    log = _log_mas_reciente(entorno, ruta.parent.parent, fila.nombre, inicio)
+    texto = salida.texto if log is None else log
+    resultado = "Completo" if salida.codigo == 0 else "Con errores"  # RN-11
     actualizar_resultado(sentencia, id_programacion, resultado)
-    return ResultadoEjecucion(resultado, salida.texto if log is None else log)
+    if salida.codigo != 0:
+        raise RespaldoFallido(salida.codigo, texto, "rman")
+    return ResultadoEjecucion(resultado, texto)
