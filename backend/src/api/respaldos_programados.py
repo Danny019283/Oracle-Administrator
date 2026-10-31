@@ -1,8 +1,9 @@
 import os
+import time
 from typing import Any
 
 import oracledb
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -38,11 +39,15 @@ class SolicitudProgramacion(BaseModel):
     intervalo_horas: Any = 2
 
 
-def _fallo(explicacion: str, log: str) -> JSONResponse:
+def _fallo(explicacion: str, log: str, mensaje: str = "No se pudo programar el respaldo") -> JSONResponse:
     return JSONResponse(
-        status_code=500,
-        content={"mensaje": "No se pudo programar el respaldo", "explicacion": explicacion, "log": log},
+        status_code=500, content={"mensaje": mensaje, "explicacion": explicacion, "log": log},
     )
+
+
+def _fallo_de_entorno(error: Exception, mensaje: str) -> JSONResponse:
+    texto = str(error).strip()
+    return _fallo(explicar_error_admin(texto), texto, mensaje)
 
 
 def _iso(fecha):
@@ -106,3 +111,69 @@ def get_programaciones(_=Depends(exigir_sysdba), consulta=Depends(obtener_consul
             for p in servicio.listar(consulta)
         ]
     }
+
+
+# declarada antes de las rutas con {id} para que no se confunda con ellas
+@router.post("/reinstalar")
+def post_reinstalar(
+    _=Depends(exigir_sysdba),
+    consulta=Depends(obtener_consulta),
+    entorno=Depends(obtener_entorno),
+    programador=Depends(obtener_programador),
+):
+    try:
+        resultado = servicio.reinstalar(consulta, entorno, programador, sid_de_instancia(consulta))
+    except oracledb.Error as error:
+        return _fallo_de_entorno(error, "No se pudieron reinstalar las tareas")
+    n, m = resultado.reinstaladas, len(resultado.fallidas)
+    mensaje = f"{n} programación reinstalada" if n == 1 else f"{n} programaciones reinstaladas"
+    if m:
+        mensaje += f"; {m} falló" if m == 1 else f"; {m} fallaron"
+    return {
+        "mensaje": mensaje,
+        "reinstaladas": n,
+        "fallidas": [{"nombre": f.nombre, "mensaje": f.mensaje} for f in resultado.fallidas],
+    }
+
+
+@router.post("/{id}/ejecutar")
+def post_ejecutar(
+    id: int,
+    _=Depends(exigir_sysdba),
+    consulta=Depends(obtener_consulta),
+    sentencia=Depends(obtener_sentencia),
+    entorno=Depends(obtener_entorno),
+):
+    mensaje_error = "No se pudo ejecutar el respaldo programado"
+    try:
+        # reloj: acota el log a la ejecución actual
+        ejecutada = servicio.ejecutar(consulta, sentencia, entorno, id, reloj=time.time)
+    except servicio.ProgramacionNoEncontrada as error:
+        raise HTTPException(status_code=404, detail=str(error))
+    except servicio.ScriptNoEncontrado as error:
+        return JSONResponse(status_code=409, content={"mensaje": str(error), "detail": str(error)})
+    except RespaldoFallido as error:
+        return _fallo(error.explicacion, error.log, mensaje_error)
+    except (OperacionEntornoFallida, oracledb.Error) as error:
+        return _fallo_de_entorno(error, mensaje_error)
+    except HerramientaNoDisponible as error:
+        return respuesta_herramienta_no_disponible(error)
+    return {"mensaje": "Respaldo ejecutado", "resultado": ejecutada.resultado, "log": ejecutada.log}
+
+
+@router.delete("/{id}")
+def delete_programacion(
+    id: int,
+    _=Depends(exigir_sysdba),
+    consulta=Depends(obtener_consulta),
+    sentencia=Depends(obtener_sentencia),
+    entorno=Depends(obtener_entorno),
+    programador=Depends(obtener_programador),
+):
+    try:
+        nombre = servicio.eliminar(consulta, sentencia, entorno, programador, id)
+    except servicio.ProgramacionNoEncontrada as error:
+        raise HTTPException(status_code=404, detail=str(error))
+    except (OperacionEntornoFallida, HerramientaNoDisponible, oracledb.Error) as error:
+        return _fallo_de_entorno(error, "No se pudo eliminar la programación")
+    return {"mensaje": f"Programación {nombre} eliminada"}
