@@ -5,9 +5,18 @@ from typing import Any
 
 import oracledb
 
+from src.services.directorios import Directorio, DirectorioNoEncontrado
 from src.services.entorno_oracle import EntornoOracle
 from src.services.errores_admin import codigo_error
+from src.services.politica_respaldo import (
+    Programacion,
+    envoltorio,
+    extension_envoltorio,
+    script_rman,
+)
+from src.services.programador_tareas import ProgramadorTareas, nombre_tarea
 from src.services.respaldo import RespaldoFallido
+from src.services.respaldo_full import en_archivelog
 from src.services.rman_runner import ejecutar_rman
 
 TABLA = "SYSTEM.RESPALDOS_PROGRAMADOS"
@@ -142,3 +151,62 @@ def aplicar_politica_global(entorno: EntornoOracle, sid: str) -> None:
     salida = ejecutar_rman(entorno, _SCRIPT_POLITICA, sid)
     if salida.codigo != 0:
         raise RespaldoFallido(salida.codigo, salida.texto, "rman")
+
+
+@dataclass(frozen=True)
+class ProgramacionCreada:
+    id: int
+    ruta_script: str
+    ruta_rman: str
+
+
+def _ruta_directorio(directorios: Sequence[Directorio], prog: Programacion, entorno: EntornoOracle):
+    # la ruta sale siempre de all_directories, nunca del cliente (RN-5)
+    for d in directorios:
+        if d.nombre == prog.directorio:
+            return entorno.tipo_ruta(d.ruta)
+    raise DirectorioNoEncontrado(prog.directorio)
+
+
+def _columnas_frecuencia(prog: Programacion) -> dict[str, Any]:
+    if prog.frecuencia == "HORAS":
+        return {"hora": None, "dia": None, "intervalo_horas": prog.intervalo_horas}
+    dia = prog.dia_efectivo if prog.frecuencia in ("SEMANAL", "MENSUAL") else None
+    return {"hora": prog.hora, "dia": dia, "intervalo_horas": None}
+
+
+def crear(
+    consulta: Consulta,
+    sentencia: Sentencia,
+    directorios: Sequence[Directorio],
+    prog: Programacion,
+    entorno: EntornoOracle,
+    programador: ProgramadorTareas,
+    sid: str,
+    etiqueta_entorno: str,
+) -> ProgramacionCreada:
+    destino = _ruta_directorio(directorios, prog, entorno)
+    carpeta = destino / "scripts_programados"
+    en_archivelog(consulta)
+    asegurar_tabla(sentencia)
+    aplicar_politica_global(entorno, sid)
+
+    ruta_rman = carpeta / f"{prog.nombre}.rman"
+    ruta_script = carpeta / f"{prog.nombre}{extension_envoltorio(destino)}"
+    oracle_home = entorno.variable_de_entorno("ORACLE_HOME")
+    entorno.escribir_archivo(ruta_rman, script_rman(prog.politica, destino), False)
+    entorno.escribir_archivo(
+        ruta_script, envoltorio(prog.nombre, sid, oracle_home, ruta_rman, destino), True
+    )
+
+    # el nombre de la tarea lleva el ID de la fila (RN-13): primero la fila, luego la tarea
+    id_nuevo = insertar(
+        sentencia, consulta, nombre=prog.nombre, politica=prog.politica,
+        frecuencia=prog.frecuencia, directorio=prog.directorio,
+        ruta_script=str(ruta_script), ruta_rman=str(ruta_rman),
+        entorno=etiqueta_entorno, tarea=f"OracleAdmin_{prog.nombre}",  # provisional: aún no hay ID
+        **_columnas_frecuencia(prog),
+    )
+    sentencia(f"UPDATE {TABLA} SET TAREA = :tarea WHERE ID = :id", {"id": id_nuevo, "tarea": nombre_tarea(id_nuevo)})
+    programador.instalar(id_nuevo, prog, str(ruta_script))
+    return ProgramacionCreada(id_nuevo, str(ruta_script), str(ruta_rman))
