@@ -8,9 +8,15 @@ from src.services.entorno_fabrica import (
     ConfiguracionInvalida,
     fabrica_desde_variables,
     fra_desde_variables,
+    programador_desde_variables,
 )
 from src.services.entorno_local import EntornoLocal
 from src.services.entorno_oracle import Salida
+from src.services.programador_tareas import (
+    ProgramadorCron,
+    ProgramadorCronContenedor,
+    ProgramadorSchtasks,
+)
 
 
 @pytest.fixture
@@ -118,3 +124,42 @@ def test_la_fra_en_local_windows_toma_la_variable_como_ruta_de_windows():
 @pytest.mark.parametrize("variables", [{"ORACLE_ENTORNO": "local"}, {"ORACLE_ENTORNO": "local", "ORACLE_FRA_DIRECTORIO": ""}])
 def test_la_fra_en_local_sin_variable_no_tiene_defecto(variables):
     assert fra_desde_variables(variables, fabrica_desde_variables(variables, "linux")) is None
+
+
+def test_programador_sin_variables_es_cron_del_contenedor_con_docker_y_oracle21c(comandos):
+    programador = programador_desde_variables({}, "linux")
+
+    programador.eliminar(1)
+
+    assert isinstance(programador, ProgramadorCronContenedor)
+    assert comandos[0][:5] == ["docker", "exec", "-u", "root", "oracle21c"]
+
+
+def test_programador_contenedor_con_podman_y_contenedor_indicados(comandos):
+    variables = {"ORACLE_CONTAINER_CLI": "podman", "ORACLE_CONTAINER": "miora"}
+
+    programador_desde_variables(variables, "win32").eliminar(1)
+
+    assert comandos[0][:5] == ["podman", "exec", "-u", "root", "miora"]
+
+
+def test_programador_local_en_linux_es_cron():
+    programador = programador_desde_variables({"ORACLE_ENTORNO": "local"}, "linux")
+
+    assert type(programador) is ProgramadorCron
+
+
+def test_programador_local_en_windows_es_schtasks():
+    programador = programador_desde_variables({"ORACLE_ENTORNO": "local"}, "win32")
+
+    assert isinstance(programador, ProgramadorSchtasks)
+
+
+def test_programador_entorno_desconocido_indica_los_valores_validos():
+    with pytest.raises(ConfiguracionInvalida, match="ORACLE_ENTORNO.*nube.*contenedor, local"):
+        programador_desde_variables({"ORACLE_ENTORNO": "nube"}, "linux")
+
+
+def test_programador_cli_desconocido_indica_los_valores_validos():
+    with pytest.raises(ConfiguracionInvalida, match="ORACLE_CONTAINER_CLI.*nerdctl.*docker, podman"):
+        programador_desde_variables({"ORACLE_CONTAINER_CLI": "nerdctl"}, "linux")

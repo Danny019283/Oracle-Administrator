@@ -6,6 +6,12 @@ from src.services.entorno_contenedor import EntornoContenedor
 from src.services.entorno_local import EntornoLocal, SistemaLinux, SistemaWindows
 from src.services.entorno_oracle import EntornoOracle
 from src.services.procesos import ejecutar_proceso
+from src.services.programador_tareas import (
+    ProgramadorCron,
+    ProgramadorCronContenedor,
+    ProgramadorSchtasks,
+    ProgramadorTareas,
+)
 
 ENTORNOS = ("contenedor", "local")
 CLIS = ("docker", "podman")
@@ -31,6 +37,17 @@ def fabrica_desde_variables(variables: Mapping[str, str], plataforma: str) -> En
         return EntornoLocal(SistemaWindows() if plataforma.startswith("win") else SistemaLinux())
     cli = _elegir(variables, "ORACLE_CONTAINER_CLI", CLIS)
     return EntornoContenedor(variables.get("ORACLE_CONTAINER", "oracle21c"), ejecutar_proceso, cli)
+
+
+def programador_desde_variables(variables: Mapping[str, str], plataforma: str) -> ProgramadorTareas:
+    """Programador de tareas del mismo entorno que `fabrica_desde_variables`."""
+    entorno = _elegir(variables, "ORACLE_ENTORNO", ENTORNOS)
+    if entorno == "local":
+        return ProgramadorSchtasks() if plataforma.startswith("win") else ProgramadorCron()
+    cli = _elegir(variables, "ORACLE_CONTAINER_CLI", CLIS)
+    return ProgramadorCronContenedor(
+        contenedor=variables.get("ORACLE_CONTAINER", "oracle21c"), ejecutar=ejecutar_proceso, cli=cli
+    )
 
 
 def fra_desde_variables(variables: Mapping[str, str], entorno: EntornoOracle) -> PurePath | None:

@@ -7,6 +7,7 @@ from src.api.sesion import obtener_almacen, token_de
 from src.services.entorno_fabrica import fra_desde_variables
 from src.services.entorno_oracle import EntornoOracle
 from src.services.expdp_runner import Conexion
+from src.services.programador_tareas import ProgramadorTareas
 from src.services.sesiones import AlmacenSesiones
 
 _ENTORNO: EntornoOracle | None = None
@@ -19,6 +20,18 @@ def fijar_entorno(entorno: EntornoOracle) -> None:
 
 def obtener_entorno() -> EntornoOracle:
     return _ENTORNO
+
+
+_PROGRAMADOR: ProgramadorTareas | None = None
+
+
+def fijar_programador(programador: ProgramadorTareas) -> None:
+    global _PROGRAMADOR
+    _PROGRAMADOR = programador
+
+
+def obtener_programador() -> ProgramadorTareas:
+    return _PROGRAMADOR
 
 
 def obtener_directorio_fra(entorno: EntornoOracle = Depends(obtener_entorno)) -> PurePath | None:

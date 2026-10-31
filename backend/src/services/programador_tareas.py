@@ -7,6 +7,7 @@ from src.services.politica_respaldo import FRECUENCIAS, POLITICAS, Programacion
 from src.services.procesos import ejecutar_proceso
 
 _DIAS = ("SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT")
+_MARCAS_PERMISOS = ("denied", "denegado", "acceso", "access")
 _SC = {"DIARIO": "DAILY", "SEMANAL": "WEEKLY", "MENSUAL": "MONTHLY", "HORAS": "HOURLY"}
 
 
@@ -152,16 +153,20 @@ class ProgramadorSchtasks(ProgramadorTareas):
         self._ejecutar = ejecutar
 
     def _correr(self, *args: str) -> Salida:
-        salida = self._ejecutar(["schtasks", *args])
-        if salida.codigo != 0 and args[0] != "/Query":
-            raise OperacionEntornoFallida(salida.texto)
-        return salida
+        return self._ejecutar(["schtasks", *args])
 
     def instalar(self, id_programacion: int, prog: Programacion, ruta_script: str) -> None:
-        self._correr(*argumentos_schtasks(prog, id_programacion, str(ruta_script)))
+        salida = self._correr(*argumentos_schtasks(prog, id_programacion, str(ruta_script)))
+        if salida.codigo != 0:
+            raise OperacionEntornoFallida(salida.texto)
 
     def eliminar(self, id_programacion: int) -> None:
         nombre = nombre_tarea(id_programacion)
-        # el texto de la consulta sale en el idioma del SO: solo se mira el código
-        if self._correr("/Query", "/TN", nombre).codigo == 0:
-            self._correr("/Delete", "/TN", nombre, "/F")
+        borrado = self._correr("/Delete", "/TN", nombre, "/F")
+        if borrado.codigo == 0:
+            return
+        consulta = self._correr("/Query", "/TN", nombre)
+        # la consulta solo diagnostica; su texto sale en el idioma del SO, de ahí las marcas en varios idiomas
+        textos = f"{consulta.texto} {borrado.texto}".lower()
+        if consulta.codigo == 0 or any(m in textos for m in _MARCAS_PERMISOS):
+            raise OperacionEntornoFallida(borrado.texto)
