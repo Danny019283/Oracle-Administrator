@@ -14,7 +14,7 @@ from src.api.respaldos import respuesta_herramienta_no_disponible
 from src.services.entorno_oracle import HerramientaNoDisponible, OperacionEntornoFallida
 from src.services.errores_oracle import explicacion_de
 from src.services.instancia import sid_de_instancia
-from src.services.recuperacion import RecuperacionFallida, recuperar_datapump, recuperar_full, recuperar_tabla
+from src.services.recuperacion import RecuperacionFallida, recuperar_datapump, recuperar_full
 from src.services.respaldo_full import SinArchivelog
 
 router = APIRouter(prefix="/directorios")
@@ -102,14 +102,7 @@ class SolicitudFull(BaseModel):
     hasta: str | None = None
 
 
-class SolicitudTabla(BaseModel):
-    modo: Literal["tabla"]
-    tabla: str
-    hasta: str
-    nuevo_nombre: str
-
-
-SolicitudRecuperar = Annotated[SolicitudDatapump | SolicitudFull | SolicitudTabla, Field(discriminator="modo")]
+SolicitudRecuperar = Annotated[SolicitudDatapump | SolicitudFull, Field(discriminator="modo")]
 
 
 @router.post("/{nombre}/respaldos/{base}/recuperar")
@@ -135,11 +128,6 @@ def post_recuperar(
             resultado = recuperar_datapump(
                 consulta, entorno, conexion, nombre, base, solicitud.objeto_modo, solicitud.objetos,
                 solicitud.existentes, ahora,
-            )
-        elif solicitud.modo == "tabla":
-            resultado = recuperar_tabla(
-                consulta, entorno, nombre, base, solicitud.tabla, solicitud.hasta, solicitud.nuevo_nombre,
-                sid_de_instancia(consulta), ahora,
             )
         else:
             try:
@@ -168,15 +156,6 @@ def post_recuperar(
             )
         except HerramientaNoDisponible as error:
             return respuesta_herramienta_no_disponible(error)
-        except OperacionEntornoFallida as error:
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "mensaje": "No se pudo preparar o limpiar la carpeta auxiliar de la recuperación",
-                    "explicacion": "Oracle necesita escribir en la carpeta aux_<base> junto al respaldo y poder borrarla; revisa los permisos de la carpeta del DIRECTORY.",
-                    "error": str(error).strip(),
-                },
-            )
 
     return responder(con_errores_de_recuperacion)
 

@@ -10,7 +10,6 @@ from src.api.admin_comun import obtener_consulta_admin
 from src.api.dependencias import obtener_conexion, obtener_entorno
 from src.api.sesion import obtener_almacen
 from src.services.entorno_oracle import ArchivoEntorno, HerramientaNoDisponible
-from src.services.errores_oracle import explicar_error
 from src.services.expdp_runner import Conexion
 from src.services.sesiones import AlmacenSesiones
 from tests.services.entorno_falso import EntornoFalso
@@ -150,13 +149,12 @@ def sesion_abierta(almacen):
     return token
 
 
-@pytest.mark.parametrize("cuerpo", [FULL, TABLA])
-def test_full_y_tabla_sin_sysdba_responden_403_sin_ejecutar_rman_ni_cerrar_sesiones(cliente, almacen, cuerpo):
+def test_full_sin_sysdba_responde_403_sin_ejecutar_rman_ni_cerrar_sesiones(cliente, almacen):
     entorno = EntornoFalso(log=LOG_RMAN, archivos=ARCHIVOS_RMAN)
     usar(entorno, roles=(("DBA",),), sysdba=False)
     token = sesion_abierta(almacen)
 
-    respuesta = recuperar(cliente, cuerpo, base=RMAN)
+    respuesta = recuperar(cliente, FULL, base=RMAN)
 
     assert respuesta.status_code == 403
     assert respuesta.json() == {"detail": "Se requiere sesión SYSDBA"}
@@ -210,24 +208,6 @@ def test_full_que_llega_a_ejecutar_rman_y_falla_tambien_cierra_las_sesiones_y_re
     }
     assert entorno.herramientas[0]["nombre"] == "rman"
     assert almacen.resolver(token) is None
-
-
-def test_tabla_con_sysdba_recupera_sin_cerrar_las_sesiones(cliente, almacen):
-    entorno = EntornoFalso(log=LOG_RMAN, archivos=ARCHIVOS_RMAN)
-    usar(entorno, sysdba=True)
-    token = sesion_abierta(almacen)
-
-    respuesta = recuperar(cliente, TABLA, base=RMAN)
-
-    assert respuesta.status_code == 200
-    cuerpo = respuesta.json()
-    assert cuerpo["mensaje"] == f"Respaldo {RMAN} recuperado"
-    assert cuerpo["log"] == LOG_RMAN
-    assert not cuerpo.get("sesion_cerrada")
-    script = entorno.herramientas[0]["script"]
-    assert script.startswith('RECOVER TABLE "HR"."EMPLOYEES"')
-    assert 'REMAP TABLE "HR"."EMPLOYEES":"EMPLOYEES_AYER"' in script
-    assert almacen.resolver(token) is not None
 
 
 def test_impdp_con_error_responde_500_con_mensaje_explicacion_y_log(cliente):
@@ -297,13 +277,12 @@ def test_datapump_sobre_un_respaldo_rman_responde_422_sin_ejecutar_impdp(cliente
     assert entorno.herramientas == []
 
 
-@pytest.mark.parametrize("cuerpo", [FULL, TABLA])
-def test_rman_sobre_un_respaldo_datapump_responde_422_sin_ejecutar_rman(cliente, almacen, cuerpo):
+def test_rman_sobre_un_respaldo_datapump_responde_422_sin_ejecutar_rman(cliente, almacen):
     entorno = EntornoFalso(log=LOG_OK, archivos=ARCHIVOS)
     usar(entorno, sysdba=True)
     token = sesion_abierta(almacen)
 
-    respuesta = recuperar(cliente, cuerpo)
+    respuesta = recuperar(cliente, FULL)
 
     assert respuesta.status_code == 422
     assert respuesta.json() == {"errores": ["Solo se puede recuperar con RMAN un respaldo de tipo RMAN"]}
@@ -332,15 +311,6 @@ def test_hasta_invalido_responde_422_sin_ejecutar_rman_ni_cerrar_sesiones(client
     assert almacen.resolver(token) is not None
 
 
-def test_nuevo_nombre_igual_al_original_responde_422(cliente):
-    usar(EntornoFalso(log=LOG_RMAN, archivos=ARCHIVOS_RMAN), sysdba=True)
-
-    respuesta = recuperar(cliente, {**TABLA, "nuevo_nombre": "employees"}, base=RMAN)
-
-    assert respuesta.status_code == 422
-    assert respuesta.json() == {"errores": ["El nombre nuevo debe ser distinto del de la tabla original"]}
-
-
 def test_directorio_inexistente_responde_404(cliente):
     usar(EntornoFalso(log=LOG_OK, archivos=ARCHIVOS))
 
@@ -361,13 +331,12 @@ def test_respaldo_inexistente_responde_404(cliente):
     assert entorno.herramientas == []
 
 
-@pytest.mark.parametrize("cuerpo", [FULL, TABLA])
-def test_sin_archivelog_responde_409_con_la_explicacion_de_rman_06149_sin_ejecutar_rman(cliente, almacen, cuerpo):
+def test_sin_archivelog_responde_409_con_la_explicacion_de_rman_06149_sin_ejecutar_rman(cliente, almacen):
     entorno = EntornoFalso(log=LOG_RMAN, archivos=ARCHIVOS_RMAN)
     usar(entorno, sysdba=True, modo_log="NOARCHIVELOG")
     token = sesion_abierta(almacen)
 
-    respuesta = recuperar(cliente, cuerpo, base=RMAN)
+    respuesta = recuperar(cliente, FULL, base=RMAN)
 
     assert respuesta.status_code == 409
     assert respuesta.json() == {
@@ -391,34 +360,6 @@ def test_herramienta_no_disponible_responde_500_con_el_mensaje_de_respaldos(clie
     assert respuesta.json() == {"mensaje": "No se pudo ejecutar «impdp»: no está disponible en el entorno."}
 
 
-def test_tabla_con_rman_fallido_y_borrado_fallido_responde_el_error_de_rman_y_no_el_de_la_carpeta(cliente):
-    log = "RMAN-05063: Cannot recover specified tables"
-    usar(EntornoFalso(codigo=1, log=log, archivos=ARCHIVOS_RMAN, fallo_borrado_carpeta="rm: no permitido"), sysdba=True)
-
-    respuesta = recuperar(cliente, TABLA, base=RMAN)
-
-    assert respuesta.status_code == 500
-    assert respuesta.json() == {
-        "mensaje": "No se pudo recuperar el respaldo",
-        "explicacion": explicar_error(log),
-        "log": log,
-    }
-
-
-@pytest.mark.parametrize("fallo", [{"fallo_permisos": "chown: no permitido"}, {"fallo_borrado_carpeta": "rm: no permitido"}])
-def test_fallo_de_la_carpeta_auxiliar_responde_500_con_mensaje_propio_de_la_recuperacion(cliente, fallo):
-    usar(EntornoFalso(log=LOG_RMAN, archivos=ARCHIVOS_RMAN, **fallo), sysdba=True)
-
-    respuesta = recuperar(cliente, TABLA, base=RMAN)
-
-    assert respuesta.status_code == 500
-    assert respuesta.json() == {
-        "mensaje": "No se pudo preparar o limpiar la carpeta auxiliar de la recuperación",
-        "explicacion": "Oracle necesita escribir en la carpeta aux_<base> junto al respaldo y poder borrarla; revisa los permisos de la carpeta del DIRECTORY.",
-        "error": next(iter(fallo.values())),
-    }
-
-
 def test_full_con_hasta_lleva_al_script_la_hora_de_la_base(cliente, almacen):
     entorno = EntornoFalso(log=LOG_RMAN, archivos=ARCHIVOS_RMAN)
     usar(entorno, sysdba=True, desfase=timedelta(hours=6))
@@ -429,11 +370,13 @@ def test_full_con_hasta_lleva_al_script_la_hora_de_la_base(cliente, almacen):
     assert "TO_DATE('01/06/2024 15:00:00','DD/MM/YYYY HH24:MI:SS')" in entorno.herramientas[0]["script"]
 
 
-def test_tabla_lleva_al_script_la_hora_de_la_base(cliente, almacen):
+def test_modo_tabla_ya_no_existe_y_responde_422_sin_ejecutar_rman_ni_cerrar_sesiones(cliente, almacen):
     entorno = EntornoFalso(log=LOG_RMAN, archivos=ARCHIVOS_RMAN)
-    usar(entorno, sysdba=True, desfase=timedelta(hours=6))
+    usar(entorno, sysdba=True)
+    token = sesion_abierta(almacen)
 
     respuesta = recuperar(cliente, TABLA, base=RMAN)
 
-    assert respuesta.status_code == 200
-    assert "TO_DATE('01/06/2024 15:00:00','DD/MM/YYYY HH24:MI:SS')" in entorno.herramientas[0]["script"]
+    assert respuesta.status_code == 422
+    assert entorno.herramientas == []
+    assert almacen.resolver(token) is not None
