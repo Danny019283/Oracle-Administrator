@@ -148,12 +148,8 @@ function FormularioDatapump({ token, respaldo }: { token: string; respaldo: Resp
 }
 
 function FormularioRman({ token, respaldo }: { token: string; respaldo: Respaldo }) {
-  const [modo, setModo] = useState('full')
-  const [tabla, setTabla] = useState('')
   const [hasta, setHasta] = useState('')
-  const [nuevoNombre, setNuevoNombre] = useState('')
   const { recuperando, resultado, setResultado, recuperar } = usarRecuperacion(token, respaldo)
-  const esFull = modo === 'full'
 
   // Mismo endpoint que RespaldoFull; la base se reinicia, así que la sesión vuelve a pedirse en la siguiente petición.
   const activarArchivelog = async () => {
@@ -178,33 +174,9 @@ function FormularioRman({ token, respaldo }: { token: string; respaldo: Respaldo
       <h2>Recuperar {respaldo.base}</h2>
       <AvisoEstado respaldo={respaldo} />
       <label className="campo">
-        Modo
-        <select value={modo} onChange={(e) => setModo(e.target.value)}>
-          <option value="full">Base completa</option>
-          <option value="tabla">Tabla</option>
-        </select>
+        UNTIL TIME (opcional)
+        <input value={hasta} onChange={(e) => setHasta(e.target.value)} placeholder="AAAA-MM-DD HH:MM:SS" />
       </label>
-      {!esFull && (
-        <label className="campo">
-          Tabla
-          <input required value={tabla} onChange={(e) => setTabla(e.target.value)} placeholder="OWNER.TABLA" />
-        </label>
-      )}
-      <label className="campo">
-        {esFull ? 'UNTIL TIME (opcional)' : 'UNTIL TIME'}
-        <input
-          required={!esFull}
-          value={hasta}
-          onChange={(e) => setHasta(e.target.value)}
-          placeholder="AAAA-MM-DD HH:MM:SS"
-        />
-      </label>
-      {!esFull && (
-        <label className="campo">
-          Nombre nuevo
-          <input required value={nuevoNombre} onChange={(e) => setNuevoNombre(e.target.value)} />
-        </label>
-      )}
       <Resultados resultado={resultado} />
       {resultado?.tipo === 'error' && resultado.sinArchivelog && (
         <BotonConfirmar
@@ -215,18 +187,8 @@ function FormularioRman({ token, respaldo }: { token: string; respaldo: Respaldo
       )}
       <BotonConfirmar
         etiqueta="Ejecutar recuperación"
-        pregunta={
-          esFull
-            ? `¿Recuperar la base completa desde ${respaldo.base}? Se apaga la base de datos y se cierra la sesión.`
-            : `¿Recuperar la tabla ${tabla} desde ${respaldo.base} como ${nuevoNombre}?`
-        }
-        onConfirmar={() =>
-          void recuperar(
-            esFull
-              ? { modo, ...(hasta && { hasta }) }
-              : { modo, tabla, hasta, nuevo_nombre: nuevoNombre },
-          )
-        }
+        pregunta={`¿Recuperar la base completa desde ${respaldo.base}? Se apaga la base de datos y se cierra la sesión.`}
+        onConfirmar={() => void recuperar({ modo: 'full', ...(hasta && { hasta }) })}
       />
       {recuperando && <Progreso />}
     </section>

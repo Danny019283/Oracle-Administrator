@@ -40,13 +40,6 @@ const abrirFormulario = async () => {
 const escribir = (etiqueta: string, valor: string) =>
   fireEvent.change(screen.getByLabelText(etiqueta), { target: { value: valor } })
 
-const elegirTabla = () => {
-  escribir('Modo', 'tabla')
-  escribir('Tabla', 'HR.EMPLEADOS')
-  escribir('UNTIL TIME', '2025-01-02 04:00:00')
-  escribir('Nombre nuevo', 'EMPLEADOS_RECUPERADA')
-}
-
 const confirmar = () => {
   fireEvent.click(screen.getByRole('button', { name: 'Ejecutar recuperación' }))
   fireEvent.click(screen.getByRole('button', { name: 'Sí, confirmar' }))
@@ -59,27 +52,23 @@ afterEach(() => {
 })
 
 describe('Recuperar un respaldo RMAN', () => {
-  it('muestra el formulario con «Base completa» y «Tabla», sin los campos de Data Pump', async () => {
+  it('muestra el formulario de base completa sin los campos de Data Pump', async () => {
     simular(respuesta(200, {}))
     await abrirFormulario()
 
-    const modo = screen.getByLabelText('Modo') as HTMLSelectElement
-    expect(Array.from(modo.options).map((o) => o.text)).toEqual(['Base completa', 'Tabla'])
-    expect(modo.value).toBe('full')
     expect(screen.getByLabelText('UNTIL TIME (opcional)')).not.toBeNull()
     expect(screen.queryByLabelText('Objetos')).toBeNull()
-    expect(screen.queryByLabelText('Tabla')).toBeNull()
   })
 
-  it('en modo Tabla pide OWNER.TABLA, UNTIL TIME y nombre nuevo como obligatorios', async () => {
+  it('no ofrece el modo «Tabla»: ni selector de modo, ni opción, ni los campos Tabla y Nombre nuevo', async () => {
     simular(respuesta(200, {}))
     await abrirFormulario()
-    escribir('Modo', 'tabla')
 
-    for (const etiqueta of ['Tabla', 'UNTIL TIME', 'Nombre nuevo']) {
-      expect((screen.getByLabelText(etiqueta) as HTMLInputElement).required).toBe(true)
-    }
-    expect(screen.queryByLabelText('UNTIL TIME (opcional)')).toBeNull()
+    expect(screen.queryByLabelText('Modo')).toBeNull()
+    expect(screen.queryByRole('option', { name: 'Tabla' })).toBeNull()
+    expect(screen.queryByLabelText('Tabla')).toBeNull()
+    expect(screen.queryByLabelText('Nombre nuevo')).toBeNull()
+    expect(screen.getByLabelText('UNTIL TIME (opcional)')).not.toBeNull()
   })
 
   it('con estado distinto de Completo advierte el estado', async () => {
@@ -128,25 +117,6 @@ describe('Recuperar un respaldo RMAN', () => {
 
     await screen.findByRole('status')
     expect(JSON.parse(posts()[0][1].body)).toEqual({ modo: 'full', hasta: '2025-01-02 04:00:00' })
-  })
-
-  it('tabla envía tabla, hasta y nuevo_nombre y muestra el log sin pedir cerrar la sesión', async () => {
-    simular(respuesta(200, { mensaje: 'Recuperado', log: 'RECOVER TABLE terminó', advertencia: null }))
-    await abrirFormulario()
-    elegirTabla()
-    fireEvent.click(screen.getByRole('button', { name: 'Ejecutar recuperación' }))
-    expect(screen.getByRole('group').textContent).not.toMatch(/apaga la base/)
-    fireEvent.click(screen.getByRole('button', { name: 'Sí, confirmar' }))
-
-    expect((await screen.findByRole('status')).textContent).toContain('Recuperado')
-    expect(screen.getByText('RECOVER TABLE terminó')).not.toBeNull()
-    expect(screen.queryByText(/Inicia sesión de nuevo/)).toBeNull()
-    expect(JSON.parse(posts()[0][1].body)).toEqual({
-      modo: 'tabla',
-      tabla: 'HR.EMPLEADOS',
-      hasta: '2025-01-02 04:00:00',
-      nuevo_nombre: 'EMPLEADOS_RECUPERADA',
-    })
   })
 
   it('muestra «Recuperando...» mientras corre', async () => {
