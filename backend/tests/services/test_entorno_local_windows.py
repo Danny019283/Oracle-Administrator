@@ -16,7 +16,13 @@ class ArchivoFalso:
         self.estado = estado
         self.ruta = ruta
 
+    @property
+    def parent(self):
+        return ArchivoFalso(self.estado, self.ruta.parent)
+
     def write_text(self, texto):
+        if self.estado.get("fallo_escritura"):
+            raise PermissionError("Acceso denegado")
         self.estado["archivos"][self.ruta] = texto
 
     def read_text(self, errors="strict"):
@@ -258,3 +264,19 @@ def test_borrar_archivo_con_error_de_es_en_windows_lanza_operacion_entorno_falli
 
     with pytest.raises(OperacionEntornoFallida, match="Acceso denegado"):
         entorno(estado).borrar_archivo(PureWindowsPath(r"C:\oracle\dump\a.dmp"))
+
+
+def test_escribir_archivo_en_windows_crea_la_carpeta_padre_y_escribe_el_texto(estado):
+    ruta = PureWindowsPath(r"C:\oracle\scripts_programados\a.bat")
+
+    entorno(estado).escribir_archivo(ruta, "@echo off\r\n", ejecutable=True)
+
+    assert estado["archivos"][ruta] == "@echo off\r\n"
+    assert (ruta.parent, True, True) in estado["carpetas"]
+
+
+def test_escribir_archivo_con_error_de_es_en_windows_lanza_operacion_entorno_fallida(estado):
+    estado["fallo_escritura"] = True
+
+    with pytest.raises(OperacionEntornoFallida, match="Acceso denegado"):
+        entorno(estado).escribir_archivo(PureWindowsPath(r"C:\oracle\a.rman"), "x", ejecutable=False)

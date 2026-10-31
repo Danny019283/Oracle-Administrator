@@ -74,6 +74,11 @@ class EntornoOracle(ABC):
         """Borra el archivo; lanza OperacionEntornoFallida con la salida si falla."""
 
     @abstractmethod
+    def escribir_archivo(self, ruta: PurePath, texto: str, ejecutable: bool) -> None:
+        """Escribe (o reemplaza) el archivo, creando la carpeta padre; lanza OperacionEntornoFallida con la salida si falla.
+        Permisos privados al grupo: 0750 si `ejecutable`, 0640 si no."""
+
+    @abstractmethod
     def ejecutar(self, comando: ComandoHerramienta) -> Salida:
         """Escribe `comando.script` en un temporal privado (sin que aparezca en los argumentos
         del proceso), ejecuta `comando.nombre` con `comando.args(ruta_del_temporal)` y siempre lo borra."""

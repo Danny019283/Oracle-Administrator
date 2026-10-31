@@ -297,3 +297,47 @@ def test_borrar_archivo_con_rm_fallido_lanza_operacion_entorno_fallida_con_la_sa
 
     with pytest.raises(OperacionEntornoFallida, match="Permission denied"):
         EntornoContenedor("c", proceso).borrar_archivo(EntornoContenedor.tipo_ruta("/u01/a.dmp"))
+
+
+def test_escribir_archivo_crea_la_carpeta_y_escribe_por_stdin_con_umask_sin_el_texto_en_los_argumentos():
+    proceso = ProcesoFalso()
+    ruta = EntornoContenedor.tipo_ruta("/u01/scripts_programados/a.rman")
+
+    EntornoContenedor("oracle-test", proceso, cli="podman").escribir_archivo(ruta, "backup;\n", ejecutable=False)
+
+    assert proceso.llamadas == [
+        (
+            [
+                "podman", "exec", "-i", "oracle-test", "sh", "-c",
+                "mkdir -p /u01/scripts_programados && umask 027 && cat > /u01/scripts_programados/a.rman",
+            ],
+            "backup;\n",
+        )
+    ]
+
+
+def test_escribir_archivo_ejecutable_hace_chmod_750_despues_de_escribir():
+    proceso = ProcesoFalso()
+
+    EntornoContenedor("oracle-test", proceso).escribir_archivo(
+        EntornoContenedor.tipo_ruta("/u01/a.sh"), "#!/bin/sh\n", ejecutable=True
+    )
+
+    assert len(proceso.llamadas) == 2
+    assert proceso.llamadas[1] == (["docker", "exec", "oracle-test", "chmod", "750", "/u01/a.sh"], None)
+
+
+def test_escribir_archivo_con_comando_fallido_lanza_operacion_entorno_fallida_con_la_salida():
+    def proceso(args, entrada=None):
+        return Salida(codigo=1, texto="sh: can't create: Permission denied")
+
+    with pytest.raises(OperacionEntornoFallida, match="Permission denied"):
+        EntornoContenedor("c", proceso).escribir_archivo(EntornoContenedor.tipo_ruta("/u01/a.sh"), "x", ejecutable=True)
+
+
+def test_escribir_archivo_con_chmod_fallido_lanza_operacion_entorno_fallida():
+    def proceso(args, entrada=None):
+        return Salida(codigo=1 if "chmod" in args else 0, texto="chmod: Operation not permitted")
+
+    with pytest.raises(OperacionEntornoFallida, match="Operation not permitted"):
+        EntornoContenedor("c", proceso).escribir_archivo(EntornoContenedor.tipo_ruta("/u01/a.sh"), "x", ejecutable=True)

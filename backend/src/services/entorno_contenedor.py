@@ -1,3 +1,4 @@
+import shlex
 from collections.abc import Callable
 from pathlib import PurePath, PurePosixPath
 from uuid import uuid4
@@ -64,6 +65,18 @@ class EntornoContenedor(EntornoOracle):
         salida = self._ejecutar([self._cli, "exec", self._contenedor, "rm", "-f", str(ruta)])
         if salida.codigo != 0:
             raise OperacionEntornoFallida(salida.texto)
+
+    def escribir_archivo(self, ruta: PurePath, texto: str, ejecutable: bool) -> None:
+        destino, carpeta = shlex.quote(str(ruta)), shlex.quote(str(ruta.parent))
+        comandos = [
+            ([self._cli, "exec", "-i", self._contenedor, "sh", "-c", f"mkdir -p {carpeta} && umask 027 && cat > {destino}"], texto)
+        ]
+        if ejecutable:
+            comandos.append(([self._cli, "exec", self._contenedor, "chmod", "750", str(ruta)], None))
+        for args, entrada in comandos:
+            salida = self._ejecutar(args, entrada=entrada)
+            if salida.codigo != 0:
+                raise OperacionEntornoFallida(salida.texto)
 
     def ejecutar(self, comando: ComandoHerramienta) -> Salida:
         ruta = f"/tmp/{comando.prefijo}_{uuid4().hex}{comando.extension}"

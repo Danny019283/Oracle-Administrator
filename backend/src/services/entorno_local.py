@@ -48,6 +48,12 @@ class SistemaLinux:
     def borrar(self, ruta: PurePath) -> None:
         Path(ruta).unlink(missing_ok=True)
 
+    def escribir_archivo(self, ruta: PurePath, texto: str, ejecutable: bool) -> None:
+        archivo = Path(ruta)
+        archivo.parent.mkdir(parents=True, exist_ok=True)
+        archivo.write_text(texto)
+        archivo.chmod(0o750 if ejecutable else 0o640)
+
     def dar_permisos_a_oracle(self, ruta: PurePath, sid: str, ejecutar: Callable[..., Salida]) -> None:
         proceso = f"ora_pmon_{sid}"
         try:
@@ -95,6 +101,11 @@ class SistemaWindows:
 
     def borrar(self, ruta: PurePath) -> None:
         self._a_path(ruta).unlink(missing_ok=True)
+
+    def escribir_archivo(self, ruta: PurePath, texto: str, ejecutable: bool) -> None:
+        archivo = self._a_path(ruta)
+        archivo.parent.mkdir(parents=True, exist_ok=True)
+        archivo.write_text(texto)
 
     def dar_permisos_a_oracle(self, ruta: PurePath, sid: str, ejecutar: Callable[..., Salida]) -> None:
         clave = f"HKLM\\SYSTEM\\CurrentControlSet\\Services\\OracleService{sid}"
@@ -144,6 +155,12 @@ class EntornoLocal(EntornoOracle):
     def borrar_archivo(self, ruta: PurePath) -> None:
         try:
             self._sistema.borrar(ruta)
+        except OSError as error:
+            raise OperacionEntornoFallida(str(error)) from error
+
+    def escribir_archivo(self, ruta: PurePath, texto: str, ejecutable: bool) -> None:
+        try:
+            self._sistema.escribir_archivo(ruta, texto, ejecutable)
         except OSError as error:
             raise OperacionEntornoFallida(str(error)) from error
 

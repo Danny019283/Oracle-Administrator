@@ -20,6 +20,7 @@ class EntornoFalso(EntornoOracle):
         archivos=(),
         fallo_listado=None,
         fallo_borrado=None,
+        fallo_escritura=None,
     ):
         self.codigo = codigo
         self.texto = texto
@@ -37,6 +38,9 @@ class EntornoFalso(EntornoOracle):
         self.fallo_borrado = fallo_borrado
         self.listados = []
         self.borrados = []
+        # fallo_escritura: texto con el que escribir_archivo lanza OperacionEntornoFallida
+        self.fallo_escritura = fallo_escritura
+        self.escrituras = []
 
     def crear_carpeta(self, ruta):
         self.carpetas.append(ruta)
@@ -66,6 +70,11 @@ class EntornoFalso(EntornoOracle):
         self.borrados.append(ruta)
         if self.fallo_borrado is not None:
             raise OperacionEntornoFallida(self.fallo_borrado)
+
+    def escribir_archivo(self, ruta, texto, ejecutable):
+        if self.fallo_escritura is not None:
+            raise OperacionEntornoFallida(self.fallo_escritura)
+        self.escrituras.append((ruta, texto, ejecutable))
 
     def ejecutar(self, comando):
         self.herramientas.append(

@@ -169,3 +169,37 @@ def test_borrar_archivo_con_error_de_es_lanza_operacion_entorno_fallida(tmp_path
 
     with pytest.raises(OperacionEntornoFallida):
         entorno().borrar_archivo(carpeta)
+
+
+def test_escribir_archivo_crea_la_carpeta_padre_y_escribe_con_permisos_0640(tmp_path):
+    ruta = tmp_path / "scripts_programados" / "a.rman"
+
+    entorno().escribir_archivo(ruta, "backup;\n", ejecutable=False)
+
+    assert ruta.read_text() == "backup;\n"
+    assert ruta.stat().st_mode & 0o777 == 0o640
+
+
+def test_escribir_archivo_ejecutable_en_linux_tiene_permisos_0750(tmp_path):
+    ruta = tmp_path / "a.sh"
+
+    entorno().escribir_archivo(ruta, "#!/bin/sh\n", ejecutable=True)
+
+    assert ruta.stat().st_mode & 0o777 == 0o750
+
+
+def test_escribir_archivo_sobre_uno_existente_lo_reemplaza_y_ajusta_permisos(tmp_path):
+    ruta = tmp_path / "a.sh"
+    ruta.write_text("viejo del todo")
+
+    entorno().escribir_archivo(ruta, "nuevo", ejecutable=True)
+
+    assert ruta.read_text() == "nuevo"
+    assert ruta.stat().st_mode & 0o777 == 0o750
+
+
+def test_escribir_archivo_con_error_de_es_lanza_operacion_entorno_fallida(tmp_path):
+    (tmp_path / "es_un_archivo").write_text("x")
+
+    with pytest.raises(OperacionEntornoFallida):
+        entorno().escribir_archivo(tmp_path / "es_un_archivo" / "a.sh", "x", ejecutable=False)
