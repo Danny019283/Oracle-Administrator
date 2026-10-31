@@ -1,6 +1,7 @@
 import re
 from collections.abc import Collection
 from dataclasses import dataclass
+from pathlib import PurePath
 
 from src.services.respaldo import errores_destino
 
@@ -54,3 +55,37 @@ def validar_programacion(prog: Programacion, directorios: Collection[str]) -> li
     if prog.frecuencia == "MENSUAL" and not _entero_en(prog.dia_efectivo, 1, 28):
         errores.append("El día del mes debe ser de 1 a 28")
     return errores
+
+
+_CUERPOS_RMAN = {
+    "FULL": """  BACKUP INCREMENTAL LEVEL 0
+  DATABASE
+  TAG 'PROG_FULL_L0'
+  FORMAT '{f}';
+  CROSSCHECK BACKUP;
+  CROSSCHECK ARCHIVELOG ALL;
+  DELETE NOPROMPT OBSOLETE;
+""",
+    "INCREMENTAL": """  BACKUP INCREMENTAL LEVEL 1
+  DATABASE
+  TAG 'PROG_INCREMENTAL_L1'
+  FORMAT '{f}';
+  BACKUP ARCHIVELOG ALL
+  FORMAT '{f}'
+  DELETE INPUT;
+""",
+    "TRANSACCIONAL": """  SQL 'ALTER SYSTEM SWITCH LOGFILE';
+  BACKUP ARCHIVELOG ALL
+  TAG 'PROG_TRANSACCIONAL'
+  FORMAT '{f}'
+  DELETE INPUT;
+""",
+}
+
+
+def script_rman(politica: str, ruta_destino: PurePath) -> str:
+    """`&1` lo sustituye RMAN (`using <base>`), así el script no lleva nombre ni fecha."""
+    if politica not in _CUERPOS_RMAN:
+        raise ValueError(f"Política desconocida: {politica}")
+    cuerpo = _CUERPOS_RMAN[politica].format(f=ruta_destino / "&1_%d_%s_%p.dbf")
+    return f"RUN {{\n  ALLOCATE CHANNEL ch1 DEVICE TYPE DISK;\n{cuerpo}  RELEASE CHANNEL ch1;\n}}\n"
