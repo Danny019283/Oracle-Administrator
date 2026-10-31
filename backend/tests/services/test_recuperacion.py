@@ -547,3 +547,24 @@ def test_la_validacion_sigue_en_hora_del_host_con_la_base_adelantada():
 
     with pytest.raises(RespaldoInvalido, match="futura"):
         _recuperar_full(_entorno_full(), hasta="2024-06-01 10:00:00", consulta=consulta)
+
+
+# --- Extensiones en mayúsculas (RN-18) ---
+
+
+def test_log_de_recuperacion_en_mayusculas_tampoco_es_respaldo():
+    r = agrupar_archivos([_a(f"{BASE}.DMP", 100), _a(f"{BASE}.LOG", 5), _a(LOG.replace(".log", ".LOG"), 7)])
+
+    assert [(x.base, x.tamano) for x in r] == [(BASE, 105)]
+
+
+def test_datapump_pasa_dumpfile_con_el_nombre_real_listado():
+    entorno = EntornoFalso(
+        log="successfully completed",
+        texto="salida de impdp",
+        archivos={PurePosixPath("/a"): [_a(f"{BASE}.DMP"), _a(f"{BASE}.LOG")]},
+    )
+
+    _recuperar(entorno)
+
+    assert f"DUMPFILE={BASE}.DMP" in entorno.herramientas[0]["script"].splitlines()

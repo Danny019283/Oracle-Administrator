@@ -95,12 +95,13 @@ def recuperar_datapump(
         raise RespaldoInvalido("Solo se puede recuperar con Data Pump un respaldo de tipo Data Pump")
     objetos, existentes = validar_solicitud_datapump(objeto_modo, objetos, existentes)
     nombre_log = nombre_log_recuperacion(base, ahora)
+    dump = next(a.nombre for a in respaldo.archivos if a.nombre.lower().endswith(".dmp"))
     salida = ejecutar_impdp(
         entorno,
         conexion,
         [
             f"DIRECTORY={respaldo.directorio}",
-            f"DUMPFILE={base}.dmp",
+            f"DUMPFILE={dump}",
             f"LOGFILE={nombre_log}",
             f"{'TABLES' if objeto_modo == 'tablas' else 'SCHEMAS'}={','.join(objetos)}",
             f"TABLE_EXISTS_ACTION={existentes}",
