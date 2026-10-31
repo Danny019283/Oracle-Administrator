@@ -451,3 +451,55 @@ def test_si_falla_el_borrado_de_archivos_no_se_ejecuta_rman():
         eliminar_respaldo(_DIRS, entorno, "RESPALDO", "f_20240101_000000", SID)
 
     assert entorno.herramientas == []
+
+
+# --- Extensiones en mayúsculas o mezcladas (RN-18) ---
+
+
+def test_dump_en_mayusculas_con_log_es_data_pump():
+    (r,) = agrupar_archivos([_a("X_20260101_101010.DMP"), _a("X_20260101_101010.log")])
+
+    assert (r.base, r.tipo, len(r.archivos)) == ("X_20260101_101010", "Data Pump", 2)
+
+
+def test_piezas_dbf_en_mayusculas_son_rman():
+    (r,) = agrupar_archivos([_a("X_20260101_101010_ORCL_7_1.DBF"), _a("X_20260101_101010.LOG")])
+
+    assert (r.tipo, len(r.archivos)) == ("RMAN", 2)
+
+
+def test_extension_mezclada_se_reconoce():
+    (r,) = agrupar_archivos([_a("X_20260101_101010.Dmp")])
+
+    assert r.tipo == "Data Pump"
+
+
+def test_estado_se_lee_del_log_con_extension_en_mayusculas():
+    estado, entorno = _estado(
+        ["hr_20240105_103000.DMP", "hr_20240105_103000.LOG"], "Job successfully completed at 10:31"
+    )
+
+    assert estado == "Completo"
+    assert entorno.lecturas == [PurePosixPath(RUTA) / "hr_20240105_103000.LOG"]
+
+
+def test_listar_respaldos_da_estado_leido_del_log_en_mayusculas():
+    entorno = _entorno_con(
+        {"/a": [_a("a_20240101_000000.DMP"), _a("a_20240101_000000.LOG")]}, log="successfully completed"
+    )
+
+    respaldos, _ = listar_respaldos(_Consulta([("RESPALDO", "/a")]), entorno)
+
+    assert [(r.tipo, r.estado) for r in respaldos] == [("Data Pump", "Completo")]
+
+
+def test_eliminar_borra_dmp_y_log_con_su_nombre_original():
+    entorno = _entorno_con({"/a": [_a("a_20240101_000000.DMP"), _a("a_20240101_000000.LOG")]})
+
+    resultado = eliminar_respaldo(_DIRS, entorno, "RESPALDO", "a_20240101_000000", SID)
+
+    assert resultado == ResultadoEliminacion("Data Pump")
+    assert sorted(entorno.borrados) == [
+        PurePosixPath("/a/a_20240101_000000.DMP"),
+        PurePosixPath("/a/a_20240101_000000.LOG"),
+    ]

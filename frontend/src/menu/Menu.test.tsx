@@ -45,11 +45,11 @@ describe('menú principal', () => {
     }
   })
 
-  it('«Administración de archivos de respaldos y directorios» está disponible y «Recuperación de respaldos» sigue como próximamente', () => {
+  it('«Administración de archivos de respaldos y directorios» y «Recuperación de respaldos» están disponibles', () => {
     render(<App />)
 
     expect(boton('Administración de archivos de respaldos y directorios')!.getAttribute('aria-disabled')).toBeNull()
-    expect(boton('Recuperación de respaldos')!.getAttribute('aria-disabled')).toBe('true')
+    expect(boton('Recuperación de respaldos')!.getAttribute('aria-disabled')).toBeNull()
   })
 
   it('no muestra el submenú de respaldos hasta elegir «Creación de respaldos»', () => {

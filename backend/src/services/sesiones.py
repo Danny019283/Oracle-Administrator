@@ -31,3 +31,6 @@ class AlmacenSesiones:
 
     def cerrar(self, token: str) -> None:
         self._sesiones.pop(token, None)
+
+    def cerrar_todas(self) -> None:
+        self._sesiones.clear()

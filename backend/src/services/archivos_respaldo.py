@@ -1,6 +1,7 @@
 import re
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from pathlib import PurePath
 
 from src.services.directorios import Consulta, DirectorioNoEncontrado, listar_todos_directorios
 from src.services.identificadores import IdentificadorInvalido, normalizar_identificador
@@ -18,7 +19,7 @@ from src.services.rman_runner import ejecutar_rman
 _BASE = r"(?P<base>[A-Za-z0-9_-]{1,50}_(?P<marca>\d{8}_\d{6}))"
 # .dmp/.log son `<base>.<ext>`; la pieza RMAN es `<base>_<DB>_<set>_<pieza>.dbf` con DB sin '_',
 # así `_<DB>_<n>_<n>` solo casa al final y no se confunde con una marca de tiempo dentro del nombre.
-_ARCHIVO = re.compile(rf"{_BASE}(?:\.(?:dmp|log)|_[A-Za-z0-9$#]+_\d+_\d+\.dbf)")
+_ARCHIVO = re.compile(rf"{_BASE}(?:\.(?:dmp|log)|_[A-Za-z0-9$#]+_\d+_\d+\.dbf)", re.IGNORECASE)
 
 
 class RespaldoInvalido(Exception):
@@ -42,13 +43,10 @@ class ResultadoEliminacion:
 _SCRIPT_LIMPIEZA = "CROSSCHECK BACKUP;\nDELETE NOPROMPT EXPIRED BACKUP;\n"
 
 
-def eliminar_respaldo(
-    consulta: Consulta, entorno: EntornoOracle, directorio: str, base: str, sid: str
-) -> ResultadoEliminacion:
-    """Borra los archivos de un respaldo y devuelve su tipo, con advertencia si falla la limpieza RMAN.
-
-    Los nombres a borrar salen del listado del directorio, nunca de la entrada del cliente.
-    """
+def resolver_respaldo(
+    consulta: Consulta, entorno: EntornoOracle, directorio: str, base: str
+) -> tuple[PurePath, "Respaldo"]:
+    """Localiza un respaldo por DIRECTORY y base: devuelve su carpeta y el Respaldo con ruta y estado."""
     if not _BASE_VALIDA.fullmatch(base):
         raise RespaldoInvalido("El identificador del respaldo no es válido")
     try:
@@ -63,6 +61,17 @@ def eliminar_respaldo(
     respaldo = next((r for r in agrupar_archivos(entorno.listar_archivos(carpeta)) if r.base == base), None)
     if respaldo is None:
         raise RespaldoNoEncontrado("Respaldo no encontrado")
+    return carpeta, replace(respaldo, directorio=nombre, ruta=ruta, estado=estado_de(respaldo, entorno, ruta))
+
+
+def eliminar_respaldo(
+    consulta: Consulta, entorno: EntornoOracle, directorio: str, base: str, sid: str
+) -> ResultadoEliminacion:
+    """Borra los archivos de un respaldo y devuelve su tipo, con advertencia si falla la limpieza RMAN.
+
+    Los nombres a borrar salen del listado del directorio, nunca de la entrada del cliente.
+    """
+    carpeta, respaldo = resolver_respaldo(consulta, entorno, directorio, base)
     for archivo in respaldo.archivos:
         entorno.borrar_archivo(carpeta / archivo.nombre)
     if respaldo.tipo != "RMAN":
@@ -93,8 +102,9 @@ _EXITO = {"Data Pump": "successfully completed", "RMAN": "Finished backup"}
 
 
 def estado_de(respaldo: Respaldo, entorno: EntornoOracle, ruta: str) -> str:
-    nombre_log = f"{respaldo.base}.log"
-    if not any(a.nombre == nombre_log for a in respaldo.archivos):
+    # Windows lista las extensiones en mayúsculas: se usa el nombre real del log.
+    nombre_log = next((a.nombre for a in respaldo.archivos if a.nombre.lower() == f"{respaldo.base.lower()}.log"), None)
+    if nombre_log is None:
         return "Sin log"
     try:
         log = entorno.leer_archivo(entorno.tipo_ruta(ruta) / nombre_log)
@@ -123,7 +133,7 @@ def agrupar_archivos(archivos: list[ArchivoEntorno]) -> list[Respaldo]:
 
     respaldos = []
     for base, lista in grupos.items():
-        extensiones = {a.nombre.rsplit(".", 1)[1] for a in lista}
+        extensiones = {a.nombre.rsplit(".", 1)[1].lower() for a in lista}
         tipo = (
             "Data Pump" if "dmp" in extensiones else "RMAN" if "dbf" in extensiones else "Desconocido"
         )

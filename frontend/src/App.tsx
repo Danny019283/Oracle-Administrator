@@ -2,6 +2,7 @@ import { useState, useSyncExternalStore, type ReactNode } from 'react'
 import './App.css'
 import { MenuPrincipal, MenuRespaldos } from './menu/Menu'
 import { Directorios } from './directorios/Directorios'
+import { Recuperacion } from './recuperacion/Recuperacion'
 import { Auditoria } from './auditoria/Auditoria'
 import { Performance } from './performance/Performance'
 import { RespaldoFull } from './respaldos/RespaldoFull'
@@ -13,8 +14,9 @@ import { Tuning } from './tuning/Tuning'
 import { ModalLogin } from './sesion/ModalLogin'
 import { alCambiarSesion, cerrarSesion, motivoDeSalida, sesionActual, type Sesion } from './sesion/sesion'
 import { ToggleTema } from './tema/ToggleTema'
+import { EstadoBase } from './estadoBase/EstadoBase'
 
-type VistaModulo = 'tablespaces' | 'tuning' | 'performance' | 'auditoria' | 'seguridad' | 'directorios'
+type VistaModulo = 'tablespaces' | 'tuning' | 'performance' | 'auditoria' | 'seguridad' | 'directorios' | 'recuperacion'
 
 type Vista = 'principal' | 'respaldos' | 'tablas' | 'schemas' | 'full' | VistaModulo
 
@@ -25,6 +27,7 @@ const VISTA_DE_MODULO: Record<string, VistaModulo> = {
   'Auditoría de la BD': 'auditoria',
   'Seguridad de usuarios': 'seguridad',
   'Administración de archivos de respaldos y directorios': 'directorios',
+  'Recuperación de respaldos': 'recuperacion',
 }
 
 function MarcaBaseDeDatos() {
@@ -54,13 +57,14 @@ const useMotivoDeSalida = () => useSyncExternalStore(suscribirse, motivoDeSalida
 
 function Marco({ children, sesion }: { children: ReactNode; sesion: Sesion | null }) {
   return (
-    <div className="app" inert={!sesion}>
+    <div className="app">
       <header className="barra">
         <span className="marca">
           <MarcaBaseDeDatos />
           Administrador Oracle
         </span>
         <div className="barra-acciones">
+          <EstadoBase />
           {sesion && (
             <>
               <span className="usuario">
@@ -75,7 +79,9 @@ function Marco({ children, sesion }: { children: ReactNode; sesion: Sesion | nul
           <ToggleTema />
         </div>
       </header>
-      <main className="hoja">{children}</main>
+      <main className="hoja" inert={!sesion}>
+        {children}
+      </main>
     </div>
   )
 }
@@ -131,6 +137,7 @@ function Navegador({ sesion }: { sesion: Sesion | null }) {
         {vista === 'auditoria' && <Auditoria token={sesion.token} />}
         {vista === 'seguridad' && <Seguridad token={sesion.token} />}
         {vista === 'directorios' && <Directorios token={sesion.token} />}
+        {vista === 'recuperacion' && <Recuperacion token={sesion.token} />}
       </>
     )
   }

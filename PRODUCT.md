@@ -14,7 +14,7 @@ Un DBA o estudiante de bases de datos que administra su propia instancia de Orac
 
 Administrador Oracle convierte tareas de administración de Oracle en flujos visuales guiados. Hoy permite respaldar tablas con `expdp` (elegir tablas, DIRECTORY y nombre del dumpfile). El éxito es que el administrador complete una tarea sin escribir comandos y, cuando algo falla, entienda exactamente qué ocurrió.
 
-El alcance de producto previsto, de los requisitos del autor: administración de tablespaces, tuning de consultas (planes de ejecución, estadísticas, índices), performance de la base de datos, auditoría de la BD, seguridad de usuarios, creación de respaldos (por tablas, schemas o full), recuperación de respaldos y administración de archivos de respaldos y directorios. Solo el respaldo de tablas está construido.
+El alcance de producto previsto, de los requisitos del autor: administración de tablespaces, tuning de consultas (planes de ejecución, estadísticas, índices), performance de la base de datos, auditoría de la BD, seguridad de usuarios, creación de respaldos (por tablas, schemas o full), recuperación de respaldos y administración de archivos de respaldos y directorios. Están construidos el respaldo de tablas y la recuperación de respaldos.
 
 ## Positioning
 
@@ -27,7 +27,8 @@ Se usa en local, junto a un contenedor Docker `oracle21c` (Oracle XE 21c, servic
 ## Capabilities and Constraints
 
 - Construido: menú principal, submenú de respaldos, respaldo de tablas (listar tablas del usuario conectado, listar DIRECTORY con READ y WRITE, nombre de dumpfile con fecha y hora, explicación de errores ORA, aviso de backend caído).
-- Pendiente de construir: respaldo de schemas, respaldo de base completa, creación de DIRECTORY, recuperación, y el resto de módulos del menú.
+- Construido: recuperación de respaldos. Desde un respaldo Data Pump se recuperan tablas y schemas con `impdp` (sesión SYSDBA o DBA); desde un respaldo full RMAN, la base completa con RESTORE/RECOVER, SHUTDOWN y cierre de sesiones (sesión SYSDBA, `UNTIL TIME` opcional). Cada recuperación deja un log `<base>_recuperacion_AAAAMMDD-HHMMSS.log` junto al respaldo.
+- Pendiente de construir: respaldo de schemas, respaldo de base completa, creación de DIRECTORY y el resto de módulos del menú.
 - Las credenciales de Oracle se ingresan una vez al abrir la app y viven solo en memoria de la sesión; esa pantalla de ingreso aún no existe.
 - Interfaz solo en español.
 - Las acciones destructivas (recuperaciones con `impdp`, `DROP USER`, sobrescrituras) deben pedir confirmación explícita.

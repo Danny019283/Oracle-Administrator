@@ -12,6 +12,7 @@ beforeEach(async () => {
     'fetch',
     vi.fn(async (url: string) => {
       if (url === '/sesion') return respuesta({ token: 'tok-123', usuario: 'HR', sysdba: false })
+      if (url === '/base/estado') return respuesta({ estado: 'ABIERTA' })
       return url === '/respaldos/tablas'
         ? respuesta({ tablas: ['CLIENTES'] })
         : respuesta({ directorios: [{ nombre: 'RESPALDO', ruta: '/opt/oracle/Respaldos' }] })

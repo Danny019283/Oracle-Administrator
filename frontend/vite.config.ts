@@ -13,6 +13,7 @@ export default defineConfig({
       '/tablespaces': 'http://localhost:8000',
       '/tuning': 'http://localhost:8000',
       '/directorios': 'http://localhost:8000',
+      '/base': 'http://localhost:8000',
     },
   },
   test: { environment: 'jsdom' },

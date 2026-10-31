@@ -17,6 +17,7 @@ let fetchFalso: ReturnType<typeof vi.fn>
 beforeEach(async () => {
   fetchFalso = vi.fn(async (url: string) => {
     if (url === '/sesion') return respuesta({ token: TOKEN, usuario: 'HR', sysdba: false })
+    if (url === '/base/estado') return respuesta({ estado: 'ABIERTA' })
     return respuesta({ detail: 'Sin datos de prueba' }, 404)
   })
   vi.stubGlobal('fetch', fetchFalso)
@@ -38,6 +39,7 @@ const MODULOS = [
   ['Performance de la base de datos', 'Performance de la base de datos', '/performance/resumen'],
   ['Auditoría de la BD', 'Auditoría de la BD', '/auditoria/estado'],
   ['Seguridad de usuarios', 'Seguridad de usuarios', '/seguridad/usuarios'],
+  ['Recuperación de respaldos', 'Recuperación de respaldos', '/directorios/respaldos'],
 ]
 
 const llamadasA = (url: string) => fetchFalso.mock.calls.filter(([u]) => u === url)
