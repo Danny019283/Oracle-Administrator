@@ -3,6 +3,7 @@ import '../admin/admin.css'
 import { llamar, type Aviso } from '../admin/api'
 import { BotonConfirmar, MostrarAviso, Tabla } from '../admin/Avisos'
 import { ArchivosRespaldo } from './ArchivosRespaldo'
+import { RespaldosProgramados } from './RespaldosProgramados'
 
 type Directorio = { nombre: string; ruta: string }
 
@@ -171,6 +172,7 @@ export function Directorios({ token }: { token: string }) {
       </div>
 
       <ArchivosRespaldo token={token} />
+      <RespaldosProgramados token={token} />
     </section>
   )
 }

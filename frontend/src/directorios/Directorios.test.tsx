@@ -13,7 +13,11 @@ let fetchFalso: ReturnType<typeof vi.fn>
 // /directorios/respaldos (sección Respaldos) se responde aparte para que fetchFalso solo cuente las llamadas de directorios.
 const stubear = (falso: ReturnType<typeof vi.fn>) =>
   vi.stubGlobal('fetch', (url: string, opciones?: unknown) =>
-    url === '/directorios/respaldos' ? Promise.resolve(ok({ respaldos: [], avisos: [] })) : falso(url, opciones),
+    url === '/directorios/respaldos'
+      ? Promise.resolve(ok({ respaldos: [], avisos: [] }))
+      : url === '/respaldos/programados'
+        ? Promise.resolve(ok({ programaciones: [] }))
+        : falso(url, opciones),
   )
 
 const simular = (respuesta: unknown) => {
@@ -39,6 +43,13 @@ describe('pantalla de directorios', () => {
     expect(screen.getByText('DATA_PUMP_DIR')).not.toBeNull()
     expect(screen.getByText('/opt/oracle/admin/dpdump')).not.toBeNull()
     expect(fetchFalso.mock.calls[0][0]).toBe('/directorios')
+  })
+
+  it('muestra la sección Respaldos programados', async () => {
+    render(<Directorios token={TOKEN} />)
+
+    expect(await screen.findByRole('heading', { name: 'Respaldos programados' })).not.toBeNull()
+    expect(await screen.findByText('No hay respaldos programados')).not.toBeNull()
   })
 
   it('muestra el botón de crear', async () => {
@@ -91,7 +102,9 @@ describe('crear directorio', () => {
         ? usuariosFalso(url, opciones)
         : url === '/directorios/respaldos'
           ? Promise.resolve(ok({ respaldos: [], avisos: [] }))
-          : fetchFalso(url, opciones),
+          : url === '/respaldos/programados'
+            ? Promise.resolve(ok({ programaciones: [] }))
+            : fetchFalso(url, opciones),
     )
   }
 
