@@ -56,8 +56,38 @@ describe('Recuperar un respaldo RMAN', () => {
     simular(respuesta(200, {}))
     await abrirFormulario()
 
-    expect(screen.getByLabelText('UNTIL TIME (opcional)')).not.toBeNull()
+    expect(screen.getByLabelText('Punto de recuperación')).not.toBeNull()
     expect(screen.queryByLabelText('Objetos')).toBeNull()
+  })
+
+  it('el combo «Punto de recuperación» ofrece tres opciones y tiene «Lo último» elegida', async () => {
+    simular(respuesta(200, {}))
+    await abrirFormulario()
+
+    const combo = screen.getByLabelText('Punto de recuperación') as HTMLSelectElement
+    expect(Array.from(combo.options).map((o) => o.textContent)).toEqual(['Lo último', 'Un instante', 'Al estado del respaldo'])
+    expect(combo.selectedOptions[0].textContent).toBe('Lo último')
+  })
+
+  it('el campo UNTIL TIME solo aparece con «Un instante»', async () => {
+    simular(respuesta(200, {}))
+    await abrirFormulario()
+    expect(screen.queryByLabelText('UNTIL TIME')).toBeNull()
+
+    escribir('Punto de recuperación', 'instante')
+    expect(screen.getByLabelText('UNTIL TIME')).not.toBeNull()
+
+    escribir('Punto de recuperación', 'respaldo')
+    expect(screen.queryByLabelText('UNTIL TIME')).toBeNull()
+  })
+
+  it('la pregunta de confirmación nombra el punto elegido', async () => {
+    simular(respuesta(200, {}))
+    await abrirFormulario()
+    escribir('Punto de recuperación', 'respaldo')
+    fireEvent.click(screen.getByRole('button', { name: 'Ejecutar recuperación' }))
+
+    expect(screen.getByRole('group').textContent).toContain('Al estado del respaldo')
   })
 
   it('no ofrece el modo «Tabla»: ni selector de modo, ni opción, ni los campos Tabla y Nombre nuevo', async () => {
@@ -68,7 +98,6 @@ describe('Recuperar un respaldo RMAN', () => {
     expect(screen.queryByRole('option', { name: 'Tabla' })).toBeNull()
     expect(screen.queryByLabelText('Tabla')).toBeNull()
     expect(screen.queryByLabelText('Nombre nuevo')).toBeNull()
-    expect(screen.getByLabelText('UNTIL TIME (opcional)')).not.toBeNull()
   })
 
   it('con estado distinto de Completo advierte el estado', async () => {
@@ -97,7 +126,7 @@ describe('Recuperar un respaldo RMAN', () => {
     expect(fetchFalso).toHaveBeenCalledTimes(1)
   })
 
-  it('base completa sin UNTIL TIME envía solo modo full', async () => {
+  it('«Lo último» envía modo full con punto ultimo', async () => {
     simular(respuesta(200, { mensaje: 'Recuperado', log: 'RMAN ok', advertencia: null }))
     await abrirFormulario()
     confirmar()
@@ -106,17 +135,28 @@ describe('Recuperar un respaldo RMAN', () => {
     expect(posts()).toHaveLength(1)
     const [, opciones] = posts()[0]
     expect(opciones.headers.Authorization).toBe(`Bearer ${TOKEN}`)
-    expect(JSON.parse(opciones.body)).toEqual({ modo: 'full' })
+    expect(JSON.parse(opciones.body)).toEqual({ modo: 'full', punto: 'ultimo' })
   })
 
-  it('base completa con UNTIL TIME lo envía como hasta', async () => {
+  it('«Al estado del respaldo» envía modo full con punto respaldo', async () => {
     simular(respuesta(200, { mensaje: 'Recuperado', log: 'RMAN ok', advertencia: null }))
     await abrirFormulario()
-    escribir('UNTIL TIME (opcional)', '2025-01-02 04:00:00')
+    escribir('Punto de recuperación', 'respaldo')
     confirmar()
 
     await screen.findByRole('status')
-    expect(JSON.parse(posts()[0][1].body)).toEqual({ modo: 'full', hasta: '2025-01-02 04:00:00' })
+    expect(JSON.parse(posts()[0][1].body)).toEqual({ modo: 'full', punto: 'respaldo' })
+  })
+
+  it('«Un instante» envía el UNTIL TIME como hasta', async () => {
+    simular(respuesta(200, { mensaje: 'Recuperado', log: 'RMAN ok', advertencia: null }))
+    await abrirFormulario()
+    escribir('Punto de recuperación', 'instante')
+    escribir('UNTIL TIME', '2025-01-02 04:00:00')
+    confirmar()
+
+    await screen.findByRole('status')
+    expect(JSON.parse(posts()[0][1].body)).toEqual({ modo: 'full', punto: 'instante', hasta: '2025-01-02 04:00:00' })
   })
 
   it('muestra «Recuperando...» mientras corre', async () => {
@@ -170,7 +210,8 @@ describe('Recuperar un respaldo RMAN', () => {
   it('422 muestra los errores de validación', async () => {
     simular(respuesta(422, { errores: ['La fecha UNTIL TIME no puede ser futura'] }))
     await abrirFormulario()
-    escribir('UNTIL TIME (opcional)', '2999-01-01 00:00:00')
+    escribir('Punto de recuperación', 'instante')
+    escribir('UNTIL TIME', '2999-01-01 00:00:00')
     confirmar()
 
     expect((await screen.findByRole('alert')).textContent).toContain('La fecha UNTIL TIME no puede ser futura')

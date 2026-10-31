@@ -147,7 +147,10 @@ function FormularioDatapump({ token, respaldo }: { token: string; respaldo: Resp
   )
 }
 
+const PUNTOS = { ultimo: 'Lo último', instante: 'Un instante', respaldo: 'Al estado del respaldo' }
+
 function FormularioRman({ token, respaldo }: { token: string; respaldo: Respaldo }) {
+  const [punto, setPunto] = useState<keyof typeof PUNTOS>('ultimo')
   const [hasta, setHasta] = useState('')
   const { recuperando, resultado, setResultado, recuperar } = usarRecuperacion(token, respaldo)
 
@@ -174,9 +177,21 @@ function FormularioRman({ token, respaldo }: { token: string; respaldo: Respaldo
       <h2>Recuperar {respaldo.base}</h2>
       <AvisoEstado respaldo={respaldo} />
       <label className="campo">
-        UNTIL TIME (opcional)
-        <input value={hasta} onChange={(e) => setHasta(e.target.value)} placeholder="AAAA-MM-DD HH:MM:SS" />
+        Punto de recuperación
+        <select value={punto} onChange={(e) => setPunto(e.target.value as keyof typeof PUNTOS)}>
+          {Object.entries(PUNTOS).map(([valor, texto]) => (
+            <option key={valor} value={valor}>
+              {texto}
+            </option>
+          ))}
+        </select>
       </label>
+      {punto === 'instante' && (
+        <label className="campo">
+          UNTIL TIME
+          <input value={hasta} onChange={(e) => setHasta(e.target.value)} placeholder="AAAA-MM-DD HH:MM:SS" />
+        </label>
+      )}
       <Resultados resultado={resultado} />
       {resultado?.tipo === 'error' && resultado.sinArchivelog && (
         <BotonConfirmar
@@ -187,8 +202,8 @@ function FormularioRman({ token, respaldo }: { token: string; respaldo: Respaldo
       )}
       <BotonConfirmar
         etiqueta="Ejecutar recuperación"
-        pregunta={`¿Recuperar la base completa desde ${respaldo.base}? Se apaga la base de datos y se cierra la sesión.`}
-        onConfirmar={() => void recuperar({ modo: 'full', ...(hasta && { hasta }) })}
+        pregunta={`¿Recuperar la base completa desde ${respaldo.base} (${PUNTOS[punto]})? Se apaga la base de datos y se cierra la sesión.`}
+        onConfirmar={() => void recuperar({ modo: 'full', punto, ...(punto === 'instante' && { hasta }) })}
       />
       {recuperando && <Progreso />}
     </section>
