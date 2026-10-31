@@ -99,6 +99,7 @@ class SolicitudDatapump(BaseModel):
 
 class SolicitudFull(BaseModel):
     modo: Literal["full"]
+    punto: Literal["ultimo", "instante", "respaldo"] = "ultimo"
     hasta: str | None = None
 
 
@@ -132,7 +133,7 @@ def post_recuperar(
         else:
             try:
                 resultado = recuperar_full(
-                    consulta, entorno, nombre, base, solicitud.hasta, sid_de_instancia(consulta), ahora
+                    consulta, entorno, nombre, base, solicitud.punto, solicitud.hasta, sid_de_instancia(consulta), ahora
                 )
             except RecuperacionFallida:
                 almacen.cerrar_todas()  # RMAN llegó a apagar la base: las sesiones ya no valen

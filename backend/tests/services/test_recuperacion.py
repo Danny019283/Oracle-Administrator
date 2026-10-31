@@ -337,8 +337,8 @@ def _entorno_full(log="Finished backup", **kwargs):
     )
 
 
-def _recuperar_full(entorno, hasta=None, consulta=None):
-    return recuperar_full(consulta or _ConsultaFull(), entorno, "respaldo", BASE, hasta, "XE", AHORA_FULL)
+def _recuperar_full(entorno, hasta=None, consulta=None, punto="ultimo"):
+    return recuperar_full(consulta or _ConsultaFull(), entorno, "respaldo", BASE, punto, hasta, "XE", AHORA_FULL)
 
 
 SCRIPT_SIN_HASTA = f"""SHUTDOWN IMMEDIATE;
@@ -382,7 +382,7 @@ def test_full_sin_hasta_lanza_el_script_fijo_con_log_de_recuperacion():
 def test_full_con_hasta_incluye_set_until_time():
     entorno = _entorno_full()
 
-    _recuperar_full(entorno, hasta="2024-03-02 04:05:06")
+    _recuperar_full(entorno, punto="instante", hasta="2024-03-02 04:05:06")
 
     assert entorno.herramientas[0]["script"] == SCRIPT_CON_HASTA
 
@@ -430,7 +430,7 @@ def test_full_con_hasta_invalido_no_lanza_rman(hasta):
     entorno = _entorno_full()
 
     with pytest.raises(RespaldoInvalido):
-        _recuperar_full(entorno, hasta=hasta)
+        _recuperar_full(entorno, punto="instante", hasta=hasta)
 
     assert entorno.herramientas == []
 
@@ -476,9 +476,9 @@ def test_full_relanzado_con_la_base_montada_o_con_until_time_anterior_genera_el_
     entorno.salidas = [Salida(codigo=1, texto="x"), Salida(codigo=0, texto=""), Salida(codigo=0, texto="")]
 
     with pytest.raises(RecuperacionFallida):
-        _recuperar_full(entorno, hasta="2024-03-02 04:05:06")
+        _recuperar_full(entorno, punto="instante", hasta="2024-03-02 04:05:06")
     _recuperar_full(entorno)
-    _recuperar_full(entorno, hasta="2024-03-01 04:05:06")
+    _recuperar_full(entorno, punto="instante", hasta="2024-03-01 04:05:06")
 
     scripts = [h["script"] for h in entorno.herramientas]
     assert scripts[1] == SCRIPT_SIN_HASTA
@@ -506,7 +506,7 @@ def test_full_lleva_el_hasta_convertido_a_la_hora_de_la_base(desfase, fecha):
     consulta = _ConsultaFull(desfase=desfase)
     para_full = _entorno_full()
 
-    _recuperar_full(para_full, hasta="2024-03-02 04:05:06", consulta=consulta)
+    _recuperar_full(para_full, punto="instante", hasta="2024-03-02 04:05:06", consulta=consulta)
 
     assert SYSDATE in consulta.sqls
     esperado = f"""TO_DATE('{fecha}','DD/MM/YYYY HH24:MI:SS')"""
@@ -516,7 +516,7 @@ def test_full_lleva_el_hasta_convertido_a_la_hora_de_la_base(desfase, fecha):
 def test_full_con_desfase_cero_deja_el_script_identico_al_de_hoy():
     entorno = _entorno_full()
 
-    _recuperar_full(entorno, hasta="2024-03-02 04:05:06")
+    _recuperar_full(entorno, punto="instante", hasta="2024-03-02 04:05:06")
 
     assert entorno.herramientas[0]["script"] == SCRIPT_CON_HASTA
 
@@ -535,7 +535,7 @@ def test_hasta_invalido_no_consulta_la_hora_de_la_base_ni_lanza_rman(hasta):
     para_full = _entorno_full()
 
     with pytest.raises(RespaldoInvalido):
-        _recuperar_full(para_full, hasta=hasta, consulta=consulta)
+        _recuperar_full(para_full, punto="instante", hasta=hasta, consulta=consulta)
 
     assert SYSDATE not in consulta.sqls
     assert para_full.herramientas == []
@@ -546,7 +546,7 @@ def test_la_validacion_sigue_en_hora_del_host_con_la_base_adelantada():
     consulta = _ConsultaFull(desfase=timedelta(hours=6))
 
     with pytest.raises(RespaldoInvalido, match="futura"):
-        _recuperar_full(_entorno_full(), hasta="2024-06-01 10:00:00", consulta=consulta)
+        _recuperar_full(_entorno_full(), punto="instante", hasta="2024-06-01 10:00:00", consulta=consulta)
 
 
 # --- Extensiones en mayúsculas (RN-18) ---
@@ -568,3 +568,53 @@ def test_datapump_pasa_dumpfile_con_el_nombre_real_listado():
     _recuperar(entorno)
 
     assert f"DUMPFILE={BASE}.DMP" in entorno.herramientas[0]["script"].splitlines()
+
+
+# --- Punto de recuperación (FP-4, FP-5, FA-4e, FA-4f, RN-7, RN-12, RN-19) ---
+
+SCRIPT_RESPALDO = SCRIPT_CON_HASTA.replace("02/03/2024 04:05:06", "{fecha}")
+
+
+def _entorno_con_fechas(*modificados):
+    piezas = [ArchivoEntorno(f"{BASE}_USERS_{i}_1.dbf", 1, m) for i, m in enumerate(modificados)]
+    return EntornoFalso(log="Finished backup", archivos={PurePosixPath("/a"): [*piezas, _a(f"{BASE}.log")]})
+
+
+def test_punto_ultimo_no_lleva_set_until_ni_resetlogs():
+    entorno = _entorno_full()
+
+    _recuperar_full(entorno, punto="ultimo")
+
+    assert entorno.herramientas[0]["script"] == SCRIPT_SIN_HASTA
+
+
+def test_punto_respaldo_usa_la_modificacion_mas_reciente_mas_un_segundo():
+    antes = datetime(2024, 3, 2, 4, 5, 5, 700000).timestamp()
+    despues = datetime(2024, 3, 2, 4, 5, 5, 900000).timestamp()
+    entorno = _entorno_con_fechas(antes, despues, antes)
+
+    _recuperar_full(entorno, punto="respaldo")
+
+    assert entorno.herramientas[0]["script"] == SCRIPT_RESPALDO.replace("{fecha}", "02/03/2024 04:05:06")
+
+
+def test_punto_respaldo_se_convierte_a_la_hora_de_la_base():
+    entorno = _entorno_con_fechas(datetime(2024, 3, 2, 4, 5, 5).timestamp())
+    consulta = _ConsultaFull(desfase=timedelta(hours=6))
+
+    _recuperar_full(entorno, punto="respaldo", consulta=consulta)
+
+    assert entorno.herramientas[0]["script"] == SCRIPT_RESPALDO.replace("{fecha}", "02/03/2024 10:05:06")
+
+
+@pytest.mark.parametrize(
+    "punto, hasta",
+    [("otro", None), ("instante", None), ("ultimo", "2024-03-02 04:05:06"), ("respaldo", "2024-03-02 04:05:06")],
+)
+def test_punto_invalido_lanza_respaldo_invalido_sin_ejecutar_rman(punto, hasta):
+    entorno = _entorno_full()
+
+    with pytest.raises(RespaldoInvalido):
+        _recuperar_full(entorno, punto=punto, hasta=hasta)
+
+    assert entorno.herramientas == []

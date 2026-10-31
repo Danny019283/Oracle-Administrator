@@ -137,6 +137,7 @@ def recuperar_full(
     entorno: EntornoOracle,
     directorio: str,
     base: str,
+    punto: str,
     hasta: str | None,
     sid: str,
     ahora: datetime,
@@ -144,9 +145,20 @@ def recuperar_full(
     carpeta, respaldo = resolver_respaldo(consulta, entorno, directorio, base)
     if respaldo.tipo != "RMAN":
         raise RespaldoInvalido("Solo se puede recuperar con RMAN un respaldo de tipo RMAN")
+    if punto not in ("ultimo", "instante", "respaldo"):
+        raise RespaldoInvalido("El punto de recuperación debe ser Lo último, Un instante o Al estado del respaldo")
+    if punto == "instante" and not hasta:
+        raise RespaldoInvalido("Debes indicar la fecha límite para recuperar a un instante")
+    if punto != "instante" and hasta:
+        raise RespaldoInvalido("La fecha límite solo se acepta al recuperar a un instante")
     if not en_archivelog(consulta):
         raise SinArchivelog()
-    fecha = a_hora_de_la_base(consulta, validar_hasta(hasta, respaldo.fecha, ahora), ahora) if hasta else None
+    fecha = None
+    if punto == "instante":
+        fecha = a_hora_de_la_base(consulta, validar_hasta(hasta, respaldo.fecha, ahora), ahora)
+    elif punto == "respaldo":
+        fin = datetime.fromtimestamp(int(max(a.modificado for a in respaldo.archivos))) + timedelta(seconds=1)
+        fecha = a_hora_de_la_base(consulta, fin.strftime("%d/%m/%Y %H:%M:%S"), ahora)
     ruta_log = carpeta / nombre_log_recuperacion(base, ahora)
     salida = ejecutar_rman(entorno, _script_full(carpeta, base, fecha), sid, log=ruta_log)
     # con `log=` RMAN deja su salida en el archivo, no en stdout

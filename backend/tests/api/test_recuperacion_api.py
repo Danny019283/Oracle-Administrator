@@ -187,7 +187,7 @@ def test_full_con_hasta_lo_lleva_al_script(cliente, almacen):
     entorno = EntornoFalso(log=LOG_RMAN, archivos=ARCHIVOS_RMAN)
     usar(entorno, sysdba=True)
 
-    respuesta = recuperar(cliente, {**FULL, "hasta": "2024-06-01 09:00:00"}, base=RMAN)
+    respuesta = recuperar(cliente, {**FULL, "punto": "instante", "hasta": "2024-06-01 09:00:00"}, base=RMAN)
 
     assert respuesta.status_code == 200
     assert "TO_DATE('01/06/2024 09:00:00','DD/MM/YYYY HH24:MI:SS')" in entorno.herramientas[0]["script"]
@@ -303,7 +303,7 @@ def test_hasta_invalido_responde_422_sin_ejecutar_rman_ni_cerrar_sesiones(client
     usar(entorno, sysdba=True)
     token = sesion_abierta(almacen)
 
-    respuesta = recuperar(cliente, {**FULL, "hasta": hasta}, base=RMAN)
+    respuesta = recuperar(cliente, {**FULL, "punto": "instante", "hasta": hasta}, base=RMAN)
 
     assert respuesta.status_code == 422
     assert respuesta.json() == {"errores": [error]}
@@ -364,7 +364,7 @@ def test_full_con_hasta_lleva_al_script_la_hora_de_la_base(cliente, almacen):
     entorno = EntornoFalso(log=LOG_RMAN, archivos=ARCHIVOS_RMAN)
     usar(entorno, sysdba=True, desfase=timedelta(hours=6))
 
-    respuesta = recuperar(cliente, {**FULL, "hasta": "2024-06-01 09:00:00"}, base=RMAN)
+    respuesta = recuperar(cliente, {**FULL, "punto": "instante", "hasta": "2024-06-01 09:00:00"}, base=RMAN)
 
     assert respuesta.status_code == 200
     assert "TO_DATE('01/06/2024 15:00:00','DD/MM/YYYY HH24:MI:SS')" in entorno.herramientas[0]["script"]
@@ -376,6 +376,53 @@ def test_modo_tabla_ya_no_existe_y_responde_422_sin_ejecutar_rman_ni_cerrar_sesi
     token = sesion_abierta(almacen)
 
     respuesta = recuperar(cliente, TABLA, base=RMAN)
+
+    assert respuesta.status_code == 422
+    assert entorno.herramientas == []
+    assert almacen.resolver(token) is not None
+
+
+def test_full_con_punto_respaldo_lleva_al_script_el_fin_del_respaldo(cliente, almacen):
+    archivos = {PurePosixPath("/respaldos"): [
+        ArchivoEntorno(f"{RMAN}_XE_1_1.dbf", 100, datetime(2024, 6, 1, 9, 0, 0).timestamp()),
+        ArchivoEntorno(f"{RMAN}.log", 5, datetime(2024, 6, 1, 9, 0, 3).timestamp()),
+    ]}
+    entorno = EntornoFalso(log=LOG_RMAN, archivos=archivos)
+    usar(entorno, sysdba=True, desfase=timedelta(hours=6))
+
+    respuesta = recuperar(cliente, {**FULL, "punto": "respaldo"}, base=RMAN)
+
+    assert respuesta.status_code == 200
+    script = entorno.herramientas[0]["script"]
+    assert "TO_DATE('01/06/2024 15:00:04','DD/MM/YYYY HH24:MI:SS')" in script
+    assert script.endswith("ALTER DATABASE OPEN RESETLOGS;\n")
+
+
+def test_full_con_punto_ultimo_no_lleva_set_until(cliente, almacen):
+    entorno = EntornoFalso(log=LOG_RMAN, archivos=ARCHIVOS_RMAN)
+    usar(entorno, sysdba=True)
+
+    respuesta = recuperar(cliente, {**FULL, "punto": "ultimo"}, base=RMAN)
+
+    assert respuesta.status_code == 200
+    assert "SET UNTIL TIME" not in entorno.herramientas[0]["script"]
+
+
+@pytest.mark.parametrize(
+    "cuerpo",
+    [
+        {"punto": "otro"},
+        {"punto": "instante"},
+        {"punto": "ultimo", "hasta": "2024-06-01 09:00:00"},
+        {"punto": "respaldo", "hasta": "2024-06-01 09:00:00"},
+    ],
+)
+def test_full_con_punto_invalido_responde_422_sin_ejecutar_rman_ni_cerrar_sesiones(cliente, almacen, cuerpo):
+    entorno = EntornoFalso(log=LOG_RMAN, archivos=ARCHIVOS_RMAN)
+    usar(entorno, sysdba=True)
+    token = sesion_abierta(almacen)
+
+    respuesta = recuperar(cliente, {**FULL, **cuerpo}, base=RMAN)
 
     assert respuesta.status_code == 422
     assert entorno.herramientas == []
