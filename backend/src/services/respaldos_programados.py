@@ -1,3 +1,4 @@
+import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import PurePosixPath
@@ -7,7 +8,7 @@ from typing import Any
 import oracledb
 
 from src.services.directorios import Directorio, DirectorioNoEncontrado
-from src.services.entorno_oracle import EntornoOracle, OperacionEntornoFallida
+from src.services.entorno_oracle import ArchivoNoLegible, EntornoOracle, OperacionEntornoFallida
 from src.services.errores_admin import codigo_error
 from src.services.politica_respaldo import (
     Programacion,
@@ -269,3 +270,38 @@ def crear(
             raise ProgramacionDuplicada() from error
         raise
     return ProgramacionCreada(id_nuevo, str(ruta_script), str(ruta_rman))
+
+
+class ProgramacionNoEncontrada(Exception):
+    def __init__(self):
+        super().__init__("No existe la programación indicada")
+
+
+@dataclass(frozen=True)
+class ResultadoEjecucion:
+    resultado: str
+    log: str
+
+
+def _log_mas_reciente(entorno: EntornoOracle, carpeta: Any, nombre: str) -> str | None:
+    patron = re.compile(re.escape(nombre) + r"_\d{8}_\d{6}\.log", re.IGNORECASE)
+    try:
+        logs = [a for a in entorno.listar_archivos(carpeta) if patron.fullmatch(a.nombre)]
+        if logs:
+            return entorno.leer_archivo(carpeta / max(logs, key=lambda a: (a.nombre.upper(), a.modificado)).nombre)
+    except (ArchivoNoLegible, OperacionEntornoFallida):
+        pass
+    return None
+
+
+def ejecutar(consulta: Consulta, sentencia: Sentencia, entorno: EntornoOracle, id_programacion: int) -> ResultadoEjecucion:
+    fila = obtener(consulta, id_programacion)
+    if fila is None:
+        raise ProgramacionNoEncontrada()
+    ruta = entorno.tipo_ruta(fila.ruta_script)
+    salida = entorno.ejecutar_archivo(ruta)
+    # el envoltorio pasa `log=` a RMAN: la salida real está en el log del DIRECTORY, no en stdout
+    log = _log_mas_reciente(entorno, ruta.parent.parent, fila.nombre)
+    resultado = "Completo"  # RN-11; el código ≠ 0 es el check 18
+    actualizar_resultado(sentencia, id_programacion, resultado)
+    return ResultadoEjecucion(resultado, salida.texto if log is None else log)
