@@ -28,6 +28,7 @@ Se usa en local, junto a un contenedor Docker `oracle21c` (Oracle XE 21c, servic
 
 - Construido: menú principal, submenú de respaldos, respaldo de tablas (listar tablas del usuario conectado, listar DIRECTORY con READ y WRITE, nombre de dumpfile con fecha y hora, explicación de errores ORA, aviso de backend caído).
 - Construido: recuperación de respaldos. Desde un respaldo Data Pump se recuperan tablas y schemas con `impdp` (sesión SYSDBA o DBA); desde un respaldo full RMAN, la base completa con RESTORE/RECOVER, SHUTDOWN y cierre de sesiones (sesión SYSDBA, `UNTIL TIME` opcional). Cada recuperación deja un log `<base>_recuperacion_AAAAMMDD-HHMMSS.log` junto al respaldo.
+- Construido: programación de respaldos RMAN (política Full, Incremental o Transaccional; frecuencia diaria, semanal, mensual o cada N horas). La app genera los scripts `.rman` y `.sh`/`.bat`, crea la tarea en cron, schtasks o el cron del contenedor, guarda la programación en `SYSTEM.RESPALDOS_PROGRAMADOS` y la administra (ver, ejecutar, eliminar, reinstalar tareas) desde la pantalla de archivos de respaldos.
 - Pendiente de construir: respaldo de schemas, respaldo de base completa, creación de DIRECTORY y el resto de módulos del menú.
 - Las credenciales de Oracle se ingresan una vez al abrir la app y viven solo en memoria de la sesión; esa pantalla de ingreso aún no existe.
 - Interfaz solo en español.
