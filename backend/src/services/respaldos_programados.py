@@ -329,3 +329,23 @@ def ejecutar(
     if salida.codigo != 0:
         raise RespaldoFallido(salida.codigo, texto, "rman")
     return ResultadoEjecucion(resultado, texto)
+
+
+def eliminar(
+    consulta: Consulta,
+    sentencia: Sentencia,
+    entorno: EntornoOracle,
+    programador: ProgramadorTareas,
+    id_programacion: int,
+) -> str:
+    fila = obtener(consulta, id_programacion)
+    if fila is None:
+        raise ProgramacionNoEncontrada()
+    # primero la tarea: si falla no se borra nada, para no dejar una tarea huérfana (FA-12a)
+    programador.eliminar(id_programacion)
+    # solo los dos archivos de la programación; los respaldos generados no se tocan (RN-12)
+    entorno.borrar_archivo(entorno.tipo_ruta(fila.ruta_script))
+    entorno.borrar_archivo(entorno.tipo_ruta(fila.ruta_rman))
+    # la fila va al final: si algo falló antes, "Eliminar" se puede reintentar
+    eliminar_fila(sentencia, id_programacion)
+    return fila.nombre
