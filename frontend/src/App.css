@@ -502,8 +502,48 @@ input[aria-invalid='true'] {
 /* Top bar: usuario con sesión iniciada */
 .barra-acciones {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 0.75rem;
+}
+
+/* Control de estado de la base: sin sesión el modal queda debajo (z-index mayor que .modal-fondo),
+   y el resultado flota bajo la barra para no deformarla. */
+.estado-base {
+  position: relative;
+  z-index: 11;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.estado-base-resultado {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 1;
+  width: min(30rem, 90vw);
+  max-height: 16rem;
+  margin-top: 0.5rem;
+  overflow: auto;
+}
+
+.estado-base-resultado .aviso {
+  margin: 0;
+}
+
+.estado-base-resultado pre {
+  margin: 0.5rem 0 0;
+  padding: 0.75rem;
+  border-radius: 12px;
+  background: var(--superficie);
+  box-shadow: var(--hundido);
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .usuario {

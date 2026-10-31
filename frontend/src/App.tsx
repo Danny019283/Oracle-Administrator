@@ -14,6 +14,7 @@ import { Tuning } from './tuning/Tuning'
 import { ModalLogin } from './sesion/ModalLogin'
 import { alCambiarSesion, cerrarSesion, motivoDeSalida, sesionActual, type Sesion } from './sesion/sesion'
 import { ToggleTema } from './tema/ToggleTema'
+import { EstadoBase } from './estadoBase/EstadoBase'
 
 type VistaModulo = 'tablespaces' | 'tuning' | 'performance' | 'auditoria' | 'seguridad' | 'directorios' | 'recuperacion'
 
@@ -56,13 +57,14 @@ const useMotivoDeSalida = () => useSyncExternalStore(suscribirse, motivoDeSalida
 
 function Marco({ children, sesion }: { children: ReactNode; sesion: Sesion | null }) {
   return (
-    <div className="app" inert={!sesion}>
+    <div className="app">
       <header className="barra">
         <span className="marca">
           <MarcaBaseDeDatos />
           Administrador Oracle
         </span>
         <div className="barra-acciones">
+          <EstadoBase />
           {sesion && (
             <>
               <span className="usuario">
@@ -77,7 +79,9 @@ function Marco({ children, sesion }: { children: ReactNode; sesion: Sesion | nul
           <ToggleTema />
         </div>
       </header>
-      <main className="hoja">{children}</main>
+      <main className="hoja" inert={!sesion}>
+        {children}
+      </main>
     </div>
   )
 }

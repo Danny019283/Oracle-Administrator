@@ -23,6 +23,7 @@ beforeEach(async () => {
     if (url === '/sesion') {
       return opciones?.method === 'DELETE' ? respuesta(null, 204) : respuesta(sesionDevuelta)
     }
+    if (url === '/base/estado') return respuesta({ estado: 'ABIERTA' })
     if (url === '/respaldos/tablas') return respuesta({ tablas: ['CLIENTES'] })
     return respuesta({ directorios: [{ nombre: 'RESPALDO', ruta: '/opt/oracle/Respaldos' }] })
   })
@@ -54,10 +55,33 @@ describe('sin sesión', () => {
     expect(screen.getByRole('dialog', { name: 'Iniciar sesión' })).not.toBeNull()
   })
 
-  it('deja la aplicación inerte detrás del modal', () => {
+  it('deja el contenido de la aplicación inerte detrás del modal', () => {
     const { container } = render(<App />)
 
-    expect(container.querySelector('.app')!.hasAttribute('inert')).toBe(true)
+    expect(container.querySelector('main.hoja')!.hasAttribute('inert')).toBe(true)
+  })
+
+  it('el control de estado de la base no queda dentro de ningún ancestro inerte', async () => {
+    render(<App />)
+
+    const apagar = await barra().findByRole('button', { name: 'APAGAR' })
+
+    expect(apagar.closest('[inert]')).toBeNull()
+  })
+
+  it('el clic en APAGAR sin sesión muestra la confirmación', async () => {
+    render(<App />)
+
+    fireEvent.click(await barra().findByRole('button', { name: 'APAGAR' }))
+
+    expect(barra().getByRole('group').textContent).toMatch(/corta la app/)
+  })
+
+  it('la top bar muestra el estado de la base y sus acciones aunque no haya sesión', async () => {
+    render(<App />)
+
+    expect(await barra().findByText('ABIERTA')).not.toBeNull()
+    expect(barra().getByRole('button', { name: 'APAGAR' })).not.toBeNull()
   })
 
   it('la top bar no ofrece cerrar sesión ni muestra usuario', () => {
@@ -81,7 +105,7 @@ describe('al iniciar sesión desde el modal', () => {
     iniciarDesdeElModal()
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-    expect(container.querySelector('.app')!.hasAttribute('inert')).toBe(false)
+    expect(container.querySelector('main.hoja')!.hasAttribute('inert')).toBe(false)
     expect(boton('Creación de respaldos')).not.toBeNull()
   })
 

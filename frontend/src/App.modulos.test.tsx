@@ -17,6 +17,7 @@ let fetchFalso: ReturnType<typeof vi.fn>
 beforeEach(async () => {
   fetchFalso = vi.fn(async (url: string) => {
     if (url === '/sesion') return respuesta({ token: TOKEN, usuario: 'HR', sysdba: false })
+    if (url === '/base/estado') return respuesta({ estado: 'ABIERTA' })
     return respuesta({ detail: 'Sin datos de prueba' }, 404)
   })
   vi.stubGlobal('fetch', fetchFalso)
