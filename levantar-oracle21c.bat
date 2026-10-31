@@ -25,4 +25,6 @@ timeout /t 5 /nobreak >nul
 goto esperar
 
 :listo
+docker exec -u root oracle21c sh -c "pgrep -x crond >/dev/null 2>&1 || crond"
+if errorlevel 1 echo Aviso: no se pudo arrancar crond; los respaldos programados no se dispararan hasta que lo arranques
 echo Oracle listo en localhost:1521
