@@ -7,7 +7,7 @@ import pytest
 
 from src.services.archivos_respaldo import RespaldoInvalido, RespaldoNoEncontrado
 from src.services.directorios import DirectorioNoEncontrado
-from src.services.entorno_oracle import HerramientaNoDisponible, OperacionEntornoFallida
+from src.services.entorno_oracle import HerramientaNoDisponible
 from src.services.errores_oracle import explicar_error
 from src.services.identificadores import IdentificadorInvalido
 from src.services.expdp_runner import Conexion
@@ -17,9 +17,7 @@ from src.services.recuperacion import (
     nombre_log_recuperacion,
     recuperar_datapump,
     recuperar_full,
-    recuperar_tabla,
     validar_hasta,
-    validar_remap,
     validar_solicitud_datapump,
 )
 from tests.services.entorno_falso import EntornoFalso
@@ -312,27 +310,6 @@ def test_validar_hasta_rechaza_una_fecha_anterior_al_respaldo():
         validar_hasta("2024-01-05 10:29:59", RESPALDO, AHORA_RMAN)
 
 
-def test_validar_remap_devuelve_tabla_y_nombre_normalizados():
-    assert validar_remap("hr.empleados", "empleados_rec") == ("HR.EMPLEADOS", "EMPLEADOS_REC")
-
-
-@pytest.mark.parametrize("tabla", ["", "empleados", "hr.empleados.x", "hr.", "1hr.emp", 'hr."emp"', "hr.emp;DROP"])
-def test_validar_remap_exige_tabla_con_owner_valida(tabla):
-    with pytest.raises((RespaldoInvalido, IdentificadorInvalido)):
-        validar_remap(tabla, "nueva")
-
-
-@pytest.mark.parametrize("nuevo", ["", "1nueva", 'a"b', "a b", "x;y"])
-def test_validar_remap_exige_un_nombre_nuevo_valido(nuevo):
-    with pytest.raises(IdentificadorInvalido):
-        validar_remap("hr.empleados", nuevo)
-
-
-def test_validar_remap_rechaza_el_nombre_igual_al_original_sin_importar_mayusculas():
-    with pytest.raises(RespaldoInvalido, match="distinto"):
-        validar_remap("hr.empleados", "Empleados")
-
-
 # --- recuperar_full con éxito (FP-4..FP-7, FA-2a, FA-4d, FA-4e, FA-5c, RN-7, RN-8, RN-10, RN-11, RNF-2, RNF-3) ---
 
 AHORA_FULL = datetime(2024, 6, 1, 9, 45, 7)
@@ -509,156 +486,6 @@ def test_full_relanzado_con_la_base_montada_o_con_until_time_anterior_genera_el_
     assert scripts[2] == SCRIPT_CON_HASTA.replace("02/03/2024 04:05:06", "01/03/2024 04:05:06")
 
 
-# --- recuperar_tabla (FP-4..FP-7, FA-4d, FA-4e, FA-5a..FA-5c, RN-2, RN-6, RN-10, RN-11, RNF-2, RNF-3) ---
-
-AUX = PurePosixPath("/a/aux_" + BASE)
-
-SCRIPT_TABLA = f"""RECOVER TABLE "HR"."EMPLOYEES" UNTIL TIME "TO_DATE('02/03/2024 04:05:06','DD/MM/YYYY HH24:MI:SS')" AUXILIARY DESTINATION '/a/aux_{BASE}' REMAP TABLE "HR"."EMPLOYEES":"EMPLOYEES_REC";
-"""
-
-
-def _recuperar_tabla(entorno, consulta=None, hasta="2024-03-02 04:05:06", tabla="hr.employees", nuevo="employees_rec"):
-    return recuperar_tabla(consulta or _ConsultaFull(), entorno, "respaldo", BASE, tabla, hasta, nuevo, "XE", AHORA_FULL)
-
-
-def test_tabla_lanza_el_script_fijo_con_carpeta_auxiliar_y_log_de_recuperacion():
-    entorno = _entorno_full(log="Finished backup\nrecuperada")
-
-    resultado = _recuperar_tabla(entorno)
-
-    assert len(entorno.herramientas) == 1
-    herramienta = entorno.herramientas[0]
-    assert herramienta["nombre"] == "rman"
-    assert herramienta["script"] == SCRIPT_TABLA
-    assert herramienta["args"] == ["target", "/", "cmdfile=/tmp/herramienta.tmp", f"log=/a/{LOG}"]
-    assert herramienta["variables"] == {"ORACLE_SID": "XE"}
-    assert entorno.carpetas == [AUX]
-    assert entorno.permisos == [(AUX, "XE")]
-    assert resultado.log == "Finished backup\nrecuperada"
-    assert resultado.advertencia is None
-    assert entorno.lecturas[-1] == PurePosixPath("/a") / LOG
-
-
-def test_tabla_borra_exactamente_la_carpeta_auxiliar_con_exito():
-    entorno = _entorno_full()
-
-    _recuperar_tabla(entorno)
-
-    # borrar_carpeta es rm -rf: nunca la carpeta del DIRECTORY ni un padre
-    assert entorno.carpetas_borradas == [PurePosixPath("/a/aux_" + BASE)]
-
-
-def test_tabla_borra_exactamente_la_carpeta_auxiliar_si_rman_falla():
-    entorno = _entorno_full(log="RMAN-05063: Cannot recover specified tables")
-    entorno.codigo = 1
-
-    with pytest.raises(RecuperacionFallida) as error:
-        _recuperar_tabla(entorno)
-
-    assert error.value.codigo == 1
-    assert error.value.log == "RMAN-05063: Cannot recover specified tables"
-    assert error.value.explicacion == explicar_error(error.value.log)
-    assert "rman" in str(error.value)
-    assert entorno.carpetas_borradas == [PurePosixPath("/a/aux_" + BASE)]
-
-
-def test_tabla_si_rman_falla_y_el_borrado_tambien_conserva_la_recuperacion_fallida_con_el_log():
-    entorno = _entorno_full(log="RMAN-05063: Cannot recover specified tables", fallo_borrado_carpeta="rm: no permitido")
-    entorno.codigo = 1
-
-    with pytest.raises(RecuperacionFallida) as error:
-        _recuperar_tabla(entorno)
-
-    assert error.value.codigo == 1
-    assert error.value.log == "RMAN-05063: Cannot recover specified tables"
-    assert error.value.explicacion == explicar_error(error.value.log)
-    assert entorno.carpetas_borradas == [AUX]
-
-
-def test_tabla_si_rman_va_bien_y_el_borrado_falla_lanza_operacion_entorno_fallida():
-    entorno = _entorno_full(fallo_borrado_carpeta="rm: no permitido")
-
-    with pytest.raises(OperacionEntornoFallida, match="rm: no permitido"):
-        _recuperar_tabla(entorno)
-
-    assert entorno.carpetas_borradas == [AUX]
-
-
-def test_tabla_borra_la_carpeta_auxiliar_si_rman_no_esta_disponible():
-    class _SinRman(EntornoFalso):
-        def ejecutar(self, comando):
-            raise HerramientaNoDisponible("rman")
-
-    entorno = _SinRman(archivos={PurePosixPath("/a"): [_a(f"{BASE}_USERS_1_1.dbf"), _a(f"{BASE}.log")]})
-
-    with pytest.raises(HerramientaNoDisponible):
-        _recuperar_tabla(entorno)
-
-    assert entorno.carpetas_borradas == [AUX]
-
-
-def test_tabla_fallida_usa_la_salida_si_el_log_no_se_puede_leer():
-    entorno = _entorno_full(log=None)
-    entorno.codigo = 1
-    entorno.texto = "RMAN-05063: no"
-
-    with pytest.raises(RecuperacionFallida) as error:
-        _recuperar_tabla(entorno)
-
-    assert error.value.log == "RMAN-05063: no"
-
-
-def test_tabla_si_el_log_no_se_puede_leer_devuelve_la_salida_de_rman():
-    assert _recuperar_tabla(_entorno_full(log=None)).log == "salida de rman"
-
-
-def test_tabla_respaldo_no_completo_se_recupera_igual_con_advertencia_del_estado():
-    entorno = EntornoFalso(log="ok", archivos={PurePosixPath("/a"): [_a(f"{BASE}_USERS_1_1.dbf")]})
-
-    resultado = _recuperar_tabla(entorno)
-
-    assert len(entorno.herramientas) == 1
-    assert "Sin log" in resultado.advertencia
-
-
-def test_tabla_respaldo_datapump_es_invalido_sin_rman_ni_carpeta_auxiliar():
-    entorno = EntornoFalso(archivos={PurePosixPath("/a"): [_a(f"{BASE}.dmp")]})
-
-    with pytest.raises(RespaldoInvalido, match="RMAN"):
-        _recuperar_tabla(entorno)
-
-    assert entorno.herramientas == [] and entorno.carpetas == [] and entorno.carpetas_borradas == []
-
-
-def test_tabla_sin_archivelog_lanza_sin_archivelog_sin_rman_ni_carpeta_auxiliar():
-    entorno = _entorno_full()
-
-    with pytest.raises(SinArchivelog):
-        _recuperar_tabla(entorno, consulta=_ConsultaFull("NOARCHIVELOG"))
-
-    assert entorno.herramientas == [] and entorno.carpetas == [] and entorno.carpetas_borradas == []
-
-
-@pytest.mark.parametrize(
-    "kwargs",
-    [
-        {"hasta": "2024-13-01 00:00:00"},
-        {"hasta": "2099-01-01 00:00:00"},
-        {"hasta": "2023-01-01 00:00:00"},
-        {"tabla": "employees"},
-        {"nuevo": "employees"},
-        {"nuevo": "1x"},
-    ],
-)
-def test_tabla_con_datos_invalidos_no_crea_carpeta_ni_lanza_rman(kwargs):
-    entorno = _entorno_full()
-
-    with pytest.raises((RespaldoInvalido, IdentificadorInvalido)):
-        _recuperar_tabla(entorno, **kwargs)
-
-    assert entorno.herramientas == [] and entorno.carpetas == [] and entorno.carpetas_borradas == []
-
-
 # --- UNTIL TIME en la hora de la base (FA-4e, RN-6, RN-7, RN-10) ---
 
 SYSDATE = "SELECT TO_CHAR(SYSDATE,'YYYY-MM-DD HH24:MI:SS') FROM dual"
@@ -675,17 +502,15 @@ SYSDATE = "SELECT TO_CHAR(SYSDATE,'YYYY-MM-DD HH24:MI:SS') FROM dual"
         (timedelta(hours=5, minutes=30), "02/03/2024 09:35:06"),
     ],
 )
-def test_full_y_tabla_llevan_el_hasta_convertido_a_la_hora_de_la_base(desfase, fecha):
+def test_full_lleva_el_hasta_convertido_a_la_hora_de_la_base(desfase, fecha):
     consulta = _ConsultaFull(desfase=desfase)
-    para_full, para_tabla = _entorno_full(), _entorno_full()
+    para_full = _entorno_full()
 
     _recuperar_full(para_full, hasta="2024-03-02 04:05:06", consulta=consulta)
-    _recuperar_tabla(para_tabla, consulta=consulta)
 
     assert SYSDATE in consulta.sqls
     esperado = f"""TO_DATE('{fecha}','DD/MM/YYYY HH24:MI:SS')"""
     assert esperado in para_full.herramientas[0]["script"]
-    assert esperado in para_tabla.herramientas[0]["script"]
 
 
 def test_full_con_desfase_cero_deja_el_script_identico_al_de_hoy():
@@ -707,15 +532,13 @@ def test_full_sin_hasta_no_consulta_la_hora_de_la_base():
 @pytest.mark.parametrize("hasta", ["2024-13-01 00:00:00", "2099-01-01 00:00:00", "2023-01-01 00:00:00"])
 def test_hasta_invalido_no_consulta_la_hora_de_la_base_ni_lanza_rman(hasta):
     consulta = _ConsultaFull(desfase=timedelta(hours=6))
-    para_full, para_tabla = _entorno_full(), _entorno_full()
+    para_full = _entorno_full()
 
     with pytest.raises(RespaldoInvalido):
         _recuperar_full(para_full, hasta=hasta, consulta=consulta)
-    with pytest.raises(RespaldoInvalido):
-        _recuperar_tabla(para_tabla, hasta=hasta, consulta=consulta)
 
     assert SYSDATE not in consulta.sqls
-    assert para_full.herramientas == [] and para_tabla.herramientas == []
+    assert para_full.herramientas == []
 
 
 def test_la_validacion_sigue_en_hora_del_host_con_la_base_adelantada():

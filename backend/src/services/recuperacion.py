@@ -1,11 +1,10 @@
 import re
-import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from src.services.archivos_respaldo import RespaldoInvalido, resolver_respaldo
 from src.services.directorios import Consulta
-from src.services.entorno_oracle import ArchivoNoLegible, EntornoOracle, OperacionEntornoFallida
+from src.services.entorno_oracle import ArchivoNoLegible, EntornoOracle
 from src.services.errores_oracle import explicar_error
 from src.services.expdp_runner import Conexion, ejecutar_impdp
 from src.services.identificadores import normalizar_identificador
@@ -59,15 +58,6 @@ def a_hora_de_la_base(consulta: Consulta, fecha: str, ahora: datetime) -> str:
     # los husos horarios son múltiplos de 15 minutos: redondear absorbe lo que tardan las dos lecturas
     desfase = timedelta(seconds=round((base - ahora).total_seconds() / 900) * 900)
     return (datetime.strptime(fecha, "%d/%m/%Y %H:%M:%S") + desfase).strftime("%d/%m/%Y %H:%M:%S")
-
-
-def validar_remap(tabla: str, nuevo_nombre: str) -> tuple[str, str]:
-    """Devuelve (OWNER.TABLA, NUEVO) normalizados o lanza RespaldoInvalido/IdentificadorInvalido."""
-    tabla = _tabla_con_owner(tabla)
-    nuevo = normalizar_identificador(nuevo_nombre, "la tabla nueva")
-    if nuevo == tabla.split(".")[1]:
-        raise RespaldoInvalido("El nombre nuevo debe ser distinto del de la tabla original")
-    return tabla, nuevo
 
 
 def nombre_log_recuperacion(base: str, ahora: datetime) -> str:
@@ -164,54 +154,5 @@ def recuperar_full(
     if salida.codigo != 0:
         # sin OPEN automático: la base puede quedar montada y se relanza con el mismo script
         raise RecuperacionFallida(salida.codigo, log, "rman")
-    advertencia = None if respaldo.estado == "Completo" else f"El respaldo tiene estado «{respaldo.estado}»"
-    return ResultadoRecuperacion(log, advertencia)
-
-
-def recuperar_tabla(
-    consulta: Consulta,
-    entorno: EntornoOracle,
-    directorio: str,
-    base: str,
-    tabla: str,
-    hasta: str,
-    nuevo_nombre: str,
-    sid: str,
-    ahora: datetime,
-) -> ResultadoRecuperacion:
-    carpeta, respaldo = resolver_respaldo(consulta, entorno, directorio, base)
-    if respaldo.tipo != "RMAN":
-        raise RespaldoInvalido("Solo se puede recuperar con RMAN un respaldo de tipo RMAN")
-    if not en_archivelog(consulta):
-        raise SinArchivelog()
-    fecha = validar_hasta(hasta, respaldo.fecha, ahora)
-    tabla, nuevo = validar_remap(tabla, nuevo_nombre)
-    fecha = a_hora_de_la_base(consulta, fecha, ahora)
-    owner, nombre = tabla.split(".")
-    # borrar_carpeta es rm -rf: solo recibe esta carpeta, nunca la del DIRECTORY ni un padre
-    aux = carpeta / f"aux_{base}"
-    ruta_log = carpeta / nombre_log_recuperacion(base, ahora)
-    script = (
-        f"""RECOVER TABLE "{owner}"."{nombre}" UNTIL TIME "TO_DATE('{fecha}','DD/MM/YYYY HH24:MI:SS')" """
-        f"""AUXILIARY DESTINATION '{aux}' REMAP TABLE "{owner}"."{nombre}":"{nuevo}";\n"""
-    )
-    try:
-        entorno.crear_carpeta(aux)
-        entorno.dar_permisos_a_oracle(aux, sid)
-        salida = ejecutar_rman(entorno, script, sid, log=ruta_log)
-        try:
-            log = entorno.leer_archivo(ruta_log)
-        except ArchivoNoLegible:
-            log = salida.texto
-        if salida.codigo != 0:
-            raise RecuperacionFallida(salida.codigo, log, "rman")
-    finally:
-        en_vuelo = sys.exception()
-        try:
-            entorno.borrar_carpeta(aux)
-        except OperacionEntornoFallida:
-            # un fallo del borrado no tapa el error de RMAN (ni otro que ya viaje); solo se propaga si todo fue bien
-            if en_vuelo is None:
-                raise
     advertencia = None if respaldo.estado == "Completo" else f"El respaldo tiene estado «{respaldo.estado}»"
     return ResultadoRecuperacion(log, advertencia)
