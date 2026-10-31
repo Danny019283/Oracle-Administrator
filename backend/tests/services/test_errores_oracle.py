@@ -138,10 +138,6 @@ def test_un_codigo_rman_especifico_prevalece_sobre_el_envoltorio_03002():
             "RMAN-06054: la recuperación de medios solicita el archive log secuencia 12",
             "La recuperación pide un archive log que no se encuentra; ejecuta un CROSSCHECK o usa un UNTIL TIME anterior",
         ),
-        (
-            "RMAN-05063: no se puede recuperar la tabla HR.EMP",
-            "No se pudo recuperar la tabla indicada; revisa la fecha UNTIL TIME y el log",
-        ),
     ],
 )
 def test_explica_los_codigos_de_la_recuperacion(log, esperado):

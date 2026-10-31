@@ -31,7 +31,6 @@ _EXPLICACIONES = {
     "RMAN-06023": "No hay una copia del datafile para restaurar en este respaldo",
     "RMAN-06026": "Algunos destinos no se encontraron en el respaldo; no se pudo restaurar",
     "RMAN-06054": "La recuperación pide un archive log que no se encuentra; ejecuta un CROSSCHECK o usa un UNTIL TIME anterior",
-    "RMAN-05063": "No se pudo recuperar la tabla indicada; revisa la fecha UNTIL TIME y el log",
     "DPY-6005": "No se pudo alcanzar el servidor de Oracle en ese host y puerto",
 }
 
