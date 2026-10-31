@@ -143,3 +143,25 @@ class ProgramadorCronContenedor(ProgramadorCron):
     def eliminar(self, id_programacion: int) -> None:
         self._asegurar_crond()
         super().eliminar(id_programacion)
+
+
+class ProgramadorSchtasks(ProgramadorTareas):
+    """Tareas programadas de Windows; `/F` en la creación hace idempotente la reinstalación."""
+
+    def __init__(self, ejecutar: Callable[..., Salida] = ejecutar_proceso):
+        self._ejecutar = ejecutar
+
+    def _correr(self, *args: str) -> Salida:
+        salida = self._ejecutar(["schtasks", *args])
+        if salida.codigo != 0 and args[0] != "/Query":
+            raise OperacionEntornoFallida(salida.texto)
+        return salida
+
+    def instalar(self, id_programacion: int, prog: Programacion, ruta_script: str) -> None:
+        self._correr(*argumentos_schtasks(prog, id_programacion, str(ruta_script)))
+
+    def eliminar(self, id_programacion: int) -> None:
+        nombre = nombre_tarea(id_programacion)
+        # el texto de la consulta sale en el idioma del SO: solo se mira el código
+        if self._correr("/Query", "/TN", nombre).codigo == 0:
+            self._correr("/Delete", "/TN", nombre, "/F")
