@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { RespaldosProgramados } from './RespaldosProgramados'
 
 const TOKEN = 'tok-123'
@@ -59,6 +59,7 @@ describe('sección Respaldos programados', () => {
       'Script',
       'Última ejecución',
       'Último resultado',
+      'Acciones',
     ])
     for (const texto of [
       'Full',
@@ -136,3 +137,177 @@ describe('sección Respaldos programados', () => {
     expect(screen.queryByRole('table')).toBeNull()
   })
 })
+
+describe('pulido de la columna Frecuencia', () => {
+  it.each([
+    [{ frecuencia: 'DIARIO', hora: null }, 'Diario a las —'],
+    [{ frecuencia: 'SEMANAL', hora: '08:30', dia: null }, 'Semanal: — a las 08:30'],
+    [{ frecuencia: 'SEMANAL', hora: '08:30', dia: 9 }, 'Semanal: — a las 08:30'],
+    [{ frecuencia: 'SEMANAL', hora: null, dia: 2 }, 'Semanal: martes a las —'],
+    [{ frecuencia: 'MENSUAL', hora: '23:00', dia: null }, 'Mensual: día — a las 23:00'],
+    [{ frecuencia: 'HORAS', hora: null, dia: null, intervalo_horas: null }, 'Cada — horas'],
+    [{ frecuencia: 'HORAS', hora: null, dia: null, intervalo_horas: 1 }, 'Cada 1 hora'],
+  ])('formatea %j como «%s»', async (cambios, texto) => {
+    simular(ok({ programaciones: [{ ...BASE, ...cambios }] }))
+    render(<RespaldosProgramados token={TOKEN} />)
+
+    expect(await screen.findByText(texto)).not.toBeNull()
+    expect(document.body.textContent).not.toMatch(/null|undefined/)
+  })
+})
+
+describe('botón Ejecutar', () => {
+  const FILAS = [
+    { ...BASE, id: 1, nombre: 'nocturno' },
+    { ...BASE, id: 2, nombre: 'semanal' },
+  ]
+  const LISTA = ok({ programaciones: FILAS })
+  const ACTUALIZADA = ok({
+    programaciones: [
+      { ...FILAS[0], ultima_ejecucion: '2025-02-03T04:05:06', ultimo_resultado: 'Completo' },
+      FILAS[1],
+    ],
+  })
+
+  // GET devuelve las listas en orden; el POST lo resuelve la prueba (puede quedar pendiente).
+  const prepararEjecucion = (alPost: () => Promise<unknown>, listas: unknown[] = [LISTA, ACTUALIZADA]) => {
+    let get = 0
+    fetchFalso = vi.fn(async (_url: string, opciones?: RequestInit) =>
+      opciones?.method === 'POST' ? alPost() : listas[Math.min(get++, listas.length - 1)],
+    )
+    vi.stubGlobal('fetch', fetchFalso)
+  }
+  const posts = () => fetchFalso.mock.calls.filter((c) => c[1]?.method === 'POST')
+  const gets = () => fetchFalso.mock.calls.filter((c) => c[1]?.method !== 'POST')
+
+  it('añade la columna Acciones y un botón «Ejecutar <nombre>» por fila', async () => {
+    simular(LISTA)
+    render(<RespaldosProgramados token={TOKEN} />)
+
+    expect(await screen.findByRole('button', { name: 'Ejecutar nocturno' })).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'Ejecutar semanal' })).not.toBeNull()
+    expect(screen.getAllByRole('columnheader').map((c) => c.textContent)).toContain('Acciones')
+  })
+
+  it('envía POST /respaldos/programados/<id>/ejecutar con el token y sin pedir confirmación', async () => {
+    prepararEjecucion(async () => ok({ mensaje: 'Respaldo ejecutado', resultado: 'Completo', log: 'ok' }))
+    render(<RespaldosProgramados token={TOKEN} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ejecutar semanal' }))
+
+    await waitFor(() => expect(posts()).toHaveLength(1))
+    expect(posts()[0][0]).toBe('/respaldos/programados/2/ejecutar')
+    expect(posts()[0][1].headers.Authorization).toBe(`Bearer ${TOKEN}`)
+    expect(screen.queryByRole('group')).toBeNull()
+  })
+
+  it('mientras corre muestra «Ejecutando…» y deshabilita todos los botones Ejecutar', async () => {
+    let liberar: (v: unknown) => void = () => {}
+    prepararEjecucion(() => new Promise((r) => (liberar = r)))
+    render(<RespaldosProgramados token={TOKEN} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ejecutar nocturno' }))
+
+    expect(await screen.findByText('Ejecutando…')).not.toBeNull()
+    const botones = screen.getAllByRole('button', { name: /^Ejecutar / })
+    expect(botones).toHaveLength(2)
+    for (const b of botones) expect((b as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(botones[1])
+    expect(posts()).toHaveLength(1)
+
+    liberar(ok({ mensaje: 'Respaldo ejecutado', resultado: 'Completo', log: 'fin' }))
+    await waitFor(() => expect(screen.queryByText('Ejecutando…')).toBeNull())
+    for (const b of screen.getAllByRole('button', { name: /^Ejecutar / })) {
+      expect((b as HTMLButtonElement).disabled).toBe(false)
+    }
+  })
+
+  it('en éxito muestra «Respaldo ejecutado» con el log y recarga la lista', async () => {
+    prepararEjecucion(async () =>
+      ok({ mensaje: 'Respaldo ejecutado', resultado: 'Completo', log: 'Recovery Manager completado' }),
+    )
+    render(<RespaldosProgramados token={TOKEN} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ejecutar nocturno' }))
+
+    expect((await screen.findByRole('status')).textContent).toContain('Respaldo ejecutado')
+    expect(screen.getByText('Recovery Manager completado')).not.toBeNull()
+    expect(await screen.findByText('Completo')).not.toBeNull()
+    expect(screen.getByText(new Date('2025-02-03T04:05:06').toLocaleString('es'))).not.toBeNull()
+    expect(gets()).toHaveLength(2)
+    expect(gets()[1][0]).toBe('/respaldos/programados')
+  })
+
+  it('ante 404 muestra el detalle y recarga la lista', async () => {
+    prepararEjecucion(async () => ({ ok: false, status: 404, json: async () => ({ detail: 'La programación 1 no existe' }) }))
+    render(<RespaldosProgramados token={TOKEN} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ejecutar nocturno' }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('La programación 1 no existe')
+    await waitFor(() => expect(gets()).toHaveLength(2))
+  })
+
+  it('ante 409 muestra el mensaje con la sugerencia «Reinstalar tareas»', async () => {
+    const texto = 'El script de la programación ya no existe en disco; usa «Reinstalar tareas»'
+    prepararEjecucion(async () => ({ ok: false, status: 409, json: async () => ({ mensaje: texto, detail: texto }) }))
+    render(<RespaldosProgramados token={TOKEN} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ejecutar nocturno' }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('«Reinstalar tareas»')
+    expect(screen.queryByText('Ejecutando…')).toBeNull()
+  })
+
+  it('ante 500 de RMAN muestra mensaje, explicación y log, y recarga la lista', async () => {
+    prepararEjecucion(
+      async () => ({
+        ok: false,
+        status: 500,
+        json: async () => ({
+          mensaje: 'No se pudo ejecutar el respaldo programado',
+          explicacion: 'RMAN terminó con errores',
+          log: 'RMAN-03009: failure of backup command',
+        }),
+      }),
+      [LISTA, ok({ programaciones: [{ ...FILAS[0], ultimo_resultado: 'Con errores' }, FILAS[1]] })],
+    )
+    render(<RespaldosProgramados token={TOKEN} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ejecutar nocturno' }))
+
+    const alerta = (await screen.findByRole('alert')).textContent
+    expect(alerta).toContain('No se pudo ejecutar el respaldo programado')
+    expect(alerta).toContain('RMAN terminó con errores')
+    expect(alerta).toContain('RMAN-03009: failure of backup command')
+    expect(await screen.findByText('Con errores')).not.toBeNull()
+    expect(gets()).toHaveLength(2)
+  })
+
+  it('ante 403 muestra el aviso de sesión SYSDBA', async () => {
+    prepararEjecucion(async () => ({ ok: false, status: 403, json: async () => ({ detail: 'Se requiere sesión SYSDBA' }) }))
+    render(<RespaldosProgramados token={TOKEN} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ejecutar nocturno' }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Se requiere sesión SYSDBA')
+  })
+
+  it('con el backend caído muestra el aviso de conexión', async () => {
+    let get = 0
+    fetchFalso = vi.fn(async (_url: string, opciones?: RequestInit) => {
+      if (opciones?.method === 'POST') throw new TypeError('Failed to fetch')
+      get++
+      return LISTA
+    })
+    vi.stubGlobal('fetch', fetchFalso)
+    render(<RespaldosProgramados token={TOKEN} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ejecutar nocturno' }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('No se pudo conectar con el servidor')
+    expect(get).toBeGreaterThan(0)
+    expect(screen.queryByText('Ejecutando…')).toBeNull()
+  })
+})
+
