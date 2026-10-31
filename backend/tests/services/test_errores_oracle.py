@@ -138,6 +138,10 @@ def test_un_codigo_rman_especifico_prevalece_sobre_el_envoltorio_03002():
             "RMAN-06054: la recuperación de medios solicita el archive log secuencia 12",
             "La recuperación pide un archive log que no se encuentra; ejecuta un CROSSCHECK o usa un UNTIL TIME anterior",
         ),
+        (
+            "ORA-01139: la opción RESETLOGS solo es válida tras una recuperación incompleta",
+            "RESETLOGS solo es válido tras una recuperación incompleta; recupera sin RESETLOGS o indica UNTIL TIME",
+        ),
     ],
 )
 def test_explica_los_codigos_de_la_recuperacion(log, esperado):
@@ -153,3 +157,12 @@ def test_un_codigo_de_recuperacion_prevalece_sobre_los_envoltorios_en_un_log_rea
     )
 
     assert explicar_error(log).startswith("La tabla ya existe y se omitió")
+
+
+def test_ora_01139_prevalece_sobre_el_envoltorio_rman_03002():
+    log = (
+        "RMAN-03002: fallo del comando alter db\n"
+        "ORA-01139: la opción RESETLOGS solo es válida tras una recuperación incompleta"
+    )
+
+    assert explicar_error(log).startswith("RESETLOGS solo es válido")

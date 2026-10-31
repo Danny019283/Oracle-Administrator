@@ -118,6 +118,8 @@ def recuperar_datapump(
 
 def _script_full(ruta: str, base: str, fecha: str | None) -> str:
     until = f"""  SET UNTIL TIME "TO_DATE('{fecha}','DD/MM/YYYY HH24:MI:SS')";\n""" if fecha else ""
+    # Sin UNTIL TIME la recuperación es completa y Oracle rechaza RESETLOGS (ORA-01139).
+    abrir = "ALTER DATABASE OPEN RESETLOGS;" if fecha else "ALTER DATABASE OPEN;"
     return f"""SHUTDOWN IMMEDIATE;
 STARTUP MOUNT;
 CATALOG START WITH '{ruta}/{base}_' NOPROMPT;
@@ -125,7 +127,7 @@ RUN {{
 {until}  RESTORE DATABASE;
   RECOVER DATABASE;
 }}
-ALTER DATABASE OPEN RESETLOGS;
+{abrir}
 """
 
 
