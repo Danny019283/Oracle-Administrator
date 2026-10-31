@@ -34,7 +34,10 @@ def _entero_en(valor, minimo: int, maximo: int) -> bool:
 
 def validar_programacion(prog: Programacion, directorios: Collection[str]) -> list[str]:
     nombre = prog.nombre if isinstance(prog.nombre, str) else ""
-    errores = errores_destino(prog.directorio, nombre, directorios)
+    errores = [
+        "Debes ingresar un nombre para la programación" if e == "Debes ingresar un nombre de dumpfile" else e
+        for e in errores_destino(prog.directorio, nombre, directorios)
+    ]
 
     if prog.politica not in POLITICAS:
         errores.append("La política no es válida (FULL, INCREMENTAL o TRANSACCIONAL)")

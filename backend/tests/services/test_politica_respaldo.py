@@ -81,3 +81,9 @@ def test_un_error_por_problema():
 
 def test_no_lanza_con_valores_raros():
     assert errores(politica=None, frecuencia=None, hora=5, nombre=None)
+
+
+def test_nombre_vacio_pide_un_nombre_para_la_programacion():
+    resultado = errores(nombre="")
+    assert "Debes ingresar un nombre para la programación" in resultado
+    assert all("dumpfile" not in e for e in resultado)
