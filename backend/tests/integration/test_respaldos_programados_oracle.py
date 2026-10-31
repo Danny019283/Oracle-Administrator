@@ -104,7 +104,7 @@ def _existe(ruta: str) -> bool:
 
 def test_programar_ejecutar_reinstalar_y_eliminar_con_cron_y_rman_reales(contexto):
     c = contexto
-    nombre = f"prueba_prog_{c.sufijo}"
+    nombre = f"prueba-prog_{c.sufijo}"
     crontab_inicial = _ajenas(_crontab())
     id_prog = None
     try:

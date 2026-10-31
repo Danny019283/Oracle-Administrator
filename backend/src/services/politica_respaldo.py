@@ -113,6 +113,7 @@ def envoltorio(nombre: str, sid: str, oracle_home: str, ruta_rman: PurePath, rut
         raise ValueError("ORACLE_SID no válido")
     if not (isinstance(oracle_home, str) and _HOME.fullmatch(oracle_home)):
         raise ValueError("ORACLE_HOME no válido")
+    # `using` lleva la base entre comillas simples para RMAN: sin ellas rechaza el guion (RMAN-00552/02001)
     if extension_envoltorio(ruta_rman) == ".sh":
         return (
             "#!/bin/sh\n"
@@ -120,7 +121,7 @@ def envoltorio(nombre: str, sid: str, oracle_home: str, ruta_rman: PurePath, rut
             f"export ORACLE_HOME={shlex.quote(oracle_home)}\n"
             'export PATH="$ORACLE_HOME/bin:$PATH"\n'
             f'BASE="{nombre}_$(date +%Y%m%d_%H%M%S)"\n'
-            f'rman target / cmdfile={ruta_rman} log={ruta_destino}/$BASE.log using "$BASE"\n'
+            f'rman target / cmdfile={ruta_rman} log={ruta_destino}/$BASE.log using "\'$BASE\'"\n'
             "exit $?\n"
         )
     lineas = [
@@ -130,7 +131,7 @@ def envoltorio(nombre: str, sid: str, oracle_home: str, ruta_rman: PurePath, rut
         r"set PATH=%ORACLE_HOME%\bin;%PATH%",
         """for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss"') do set TS=%%i""",
         f"set BASE={nombre}_%TS%",
-        f'rman target / cmdfile="{ruta_rman}" log="{ruta_destino}\\%BASE%.log" using %BASE%',
+        f'rman target / cmdfile="{ruta_rman}" log="{ruta_destino}\\%BASE%.log" using \'%BASE%\'',
         "exit /b %errorlevel%",
         "",
     ]
