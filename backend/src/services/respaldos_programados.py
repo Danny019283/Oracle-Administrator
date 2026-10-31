@@ -7,7 +7,7 @@ from typing import Any
 import oracledb
 
 from src.services.directorios import Directorio, DirectorioNoEncontrado
-from src.services.entorno_oracle import EntornoOracle
+from src.services.entorno_oracle import EntornoOracle, OperacionEntornoFallida
 from src.services.errores_admin import codigo_error
 from src.services.politica_respaldo import (
     Programacion,
@@ -168,12 +168,16 @@ class ProgramacionDuplicada(Exception):
 
 
 # el envoltorio .sh usa la ruta sin entrecomillar; el .bat sí, así que allí los espacios valen
-_PROHIBIDOS = set("'\"$`;&|<>()*?!%\n\r")
+_PROHIBIDOS = set("'\"$`;&|<>()*?!%\n\r[]{}")
 
 
 def errores_ruta_directorio(ruta: str, tipo_ruta: type) -> list[str]:
-    prohibidos = _PROHIBIDOS | ({" "} if issubclass(tipo_ruta, PurePosixPath) else set())
-    malos = sorted({c for c in ruta if c in prohibidos})
+    posix = issubclass(tipo_ruta, PurePosixPath)
+    # en Windows solo el espacio simple es admisible; en POSIX tampoco la barra invertida
+    malos = sorted({
+        c for c in ruta
+        if c in _PROHIBIDOS or (c.isspace() and (posix or c != " ")) or (posix and c == "\\")
+    })
     if not malos:
         return []
     return [
@@ -225,19 +229,43 @@ def crear(
     ruta_rman = carpeta / f"{prog.nombre}.rman"
     ruta_script = carpeta / f"{prog.nombre}{extension_envoltorio(destino)}"
     oracle_home = entorno.variable_de_entorno("ORACLE_HOME")
-    entorno.escribir_archivo(ruta_rman, script_rman(prog.politica, destino), False)
-    entorno.escribir_archivo(
-        ruta_script, envoltorio(prog.nombre, sid, oracle_home, ruta_rman, destino), True
-    )
+    texto_rman = script_rman(prog.politica, destino)
+    try:
+        if not oracle_home:
+            raise ValueError("ORACLE_HOME vacío")
+        texto_script = envoltorio(prog.nombre, sid, oracle_home, ruta_rman, destino)
+    except ValueError as error:
+        raise OperacionEntornoFallida(
+            "No se pudo determinar ORACLE_HOME del servidor de Oracle (variable ausente o no válida)."
+        ) from error
 
-    # el nombre de la tarea lleva el ID de la fila (RN-13): primero la fila, luego la tarea
-    id_nuevo = insertar(
-        sentencia, consulta, nombre=prog.nombre, politica=prog.politica,
-        frecuencia=prog.frecuencia, directorio=prog.directorio,
-        ruta_script=str(ruta_script), ruta_rman=str(ruta_rman),
-        entorno=etiqueta_entorno, tarea=f"OracleAdmin_{prog.nombre}",  # provisional: aún no hay ID
-        **_columnas_frecuencia(prog),
-    )
-    sentencia(f"UPDATE {TABLA} SET TAREA = :tarea WHERE ID = :id", {"id": id_nuevo, "tarea": nombre_tarea(id_nuevo)})
-    programador.instalar(id_nuevo, prog, str(ruta_script))
+    # pasos de deshacer, solo de lo que este crear ya hizo; se ejecutan en orden inverso
+    deshacer: list[Callable[[], None]] = []
+    try:
+        entorno.escribir_archivo(ruta_rman, texto_rman, False)
+        deshacer.append(lambda: entorno.borrar_archivo(ruta_rman))
+        entorno.escribir_archivo(ruta_script, texto_script, True)
+        deshacer.append(lambda: entorno.borrar_archivo(ruta_script))
+        # el nombre de la tarea lleva el ID de la fila (RN-13): primero la fila, luego la tarea
+        id_nuevo = insertar(
+            sentencia, consulta, nombre=prog.nombre, politica=prog.politica,
+            frecuencia=prog.frecuencia, directorio=prog.directorio,
+            ruta_script=str(ruta_script), ruta_rman=str(ruta_rman),
+            entorno=etiqueta_entorno, tarea=f"OracleAdmin_{prog.nombre}",  # provisional: aún no hay ID
+            **_columnas_frecuencia(prog),
+        )
+        deshacer.append(lambda: eliminar_fila(sentencia, id_nuevo))
+        sentencia(
+            f"UPDATE {TABLA} SET TAREA = :tarea WHERE ID = :id", {"id": id_nuevo, "tarea": nombre_tarea(id_nuevo)}
+        )
+        programador.instalar(id_nuevo, prog, str(ruta_script))
+    except Exception as error:
+        for paso in reversed(deshacer):
+            try:
+                paso()
+            except Exception:  # best-effort: no tapa el error original
+                pass
+        if isinstance(error, oracledb.Error) and _es(error, "ORA-00001"):  # carrera con otra petición
+            raise ProgramacionDuplicada() from error
+        raise
     return ProgramacionCreada(id_nuevo, str(ruta_script), str(ruta_rman))
