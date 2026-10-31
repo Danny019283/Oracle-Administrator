@@ -1,4 +1,10 @@
+import shlex
+from abc import ABC, abstractmethod
+from collections.abc import Callable, Sequence
+
+from src.services.entorno_oracle import OperacionEntornoFallida, Salida
 from src.services.politica_respaldo import FRECUENCIAS, POLITICAS, Programacion
+from src.services.procesos import ejecutar_proceso
 
 _DIAS = ("SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT")
 _SC = {"DIARIO": "DAILY", "SEMANAL": "WEEKLY", "MENSUAL": "MONTHLY", "HORAS": "HOURLY"}
@@ -53,3 +59,53 @@ def argumentos_schtasks(prog: Programacion, id_programacion: int, ruta_script: s
     elif prog.frecuencia == "HORAS":
         args += ["/MO", str(prog.intervalo_horas)]
     return args + ["/RU", "SYSTEM", "/F"]
+
+
+class ProgramadorTareas(ABC):
+    @abstractmethod
+    def instalar(self, id_programacion: int, prog: Programacion, ruta_script: str) -> None: ...
+
+    @abstractmethod
+    def eliminar(self, id_programacion: int) -> None: ...
+
+
+class ProgramadorCron(ProgramadorTareas):
+    def __init__(self, ejecutar: Callable[..., Salida] = ejecutar_proceso, comando: Sequence[str] = ("crontab",)):
+        self._ejecutar = ejecutar
+        self._comando = list(comando)
+
+    def _leer(self) -> list[str]:
+        salida = self._ejecutar([*self._comando, "-l"], variables={"LC_ALL": "C"})
+        if salida.codigo != 0:
+            if salida.texto and "no crontab" not in salida.texto.lower():
+                raise OperacionEntornoFallida(salida.texto)
+            return []
+        return salida.texto.splitlines()
+
+    def _escribir(self, lineas: list[str]) -> None:
+        salida = self._ejecutar([*self._comando, "-"], entrada="\n".join(lineas) + "\n")
+        if salida.codigo != 0:
+            raise OperacionEntornoFallida(salida.texto)
+
+    @staticmethod
+    def _sin(lineas: list[str], marca: str) -> list[str]:
+        resto, saltar = [], False
+        for linea in lineas:
+            if saltar:
+                saltar = False
+            elif linea == marca:
+                saltar = True
+            else:
+                resto.append(linea)
+        return resto
+
+    def instalar(self, id_programacion: int, prog: Programacion, ruta_script: str) -> None:
+        marca = marca_cron(id_programacion)
+        trabajo = f"{expresion_cron(prog)} {shlex.quote(ruta_script)}"
+        self._escribir([*self._sin(self._leer(), marca), marca, trabajo])
+
+    def eliminar(self, id_programacion: int) -> None:
+        actual = self._leer()
+        resto = self._sin(actual, marca_cron(id_programacion))
+        if resto != actual:
+            self._escribir(resto)
