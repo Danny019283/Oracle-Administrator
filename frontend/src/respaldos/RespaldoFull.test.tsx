@@ -226,6 +226,64 @@ describe('pantalla de respaldo Full', () => {
   })
 })
 
+describe('programar respaldo', () => {
+  const check = () => screen.getByRole('checkbox', { name: 'Programar respaldo' }) as HTMLInputElement
+
+  it('el check existe, está desmarcado y no hay controles de programación', () => {
+    montar()
+
+    expect(check().checked).toBe(false)
+    expect(screen.queryByLabelText('Política')).toBeNull()
+    expect(screen.queryByLabelText('Frecuencia')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Respaldar' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Programar' })).toBeNull()
+  })
+
+  it('al marcarlo muestra el formulario y el botón pasa a «Programar»', () => {
+    montar()
+
+    fireEvent.click(check())
+
+    expect(screen.getByLabelText('Política')).toBeTruthy()
+    expect(screen.getByLabelText('Frecuencia')).toBeTruthy()
+    expect(screen.getByLabelText('Hora')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Programar' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Respaldar' })).toBeNull()
+  })
+
+  it('al desmarcarlo vuelve «Respaldar» y desaparece el formulario', () => {
+    montar()
+    fireEvent.click(check())
+
+    fireEvent.click(check())
+
+    expect(screen.getByRole('button', { name: 'Respaldar' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Programar' })).toBeNull()
+    expect(screen.queryByLabelText('Política')).toBeNull()
+  })
+
+  it('«Programar» aún no envía nada', async () => {
+    montar()
+    await screen.findByRole('option', { name: /RESPALDO/ })
+    fireEvent.click(check())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Programar' }))
+
+    expect(fetchFalso.mock.calls.filter(([, o]) => o?.method === 'POST')).toHaveLength(0)
+  })
+
+  it('los cambios del formulario se reflejan en pantalla', () => {
+    montar()
+    fireEvent.click(check())
+
+    fireEvent.change(screen.getByLabelText('Política'), { target: { value: 'TRANSACCIONAL' } })
+    fireEvent.change(screen.getByLabelText('Frecuencia'), { target: { value: 'HORAS' } })
+
+    expect((screen.getByLabelText('Cada cuántas horas') as HTMLInputElement).value).toBe('2')
+    expect(screen.queryByLabelText('Hora')).toBeNull()
+  })
+})
+
 describe('activar ARCHIVELOG', () => {
   const abrirConfirmacion = async () => {
     montar({ estado: respuesta({ archivelog: false }) })

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { avisoDeConexion, cabeceras, ErrorConexion, pedir } from './api'
 import { AvisoError, AvisoExito, BarraRespaldando } from './AvisosRespaldo'
 import { FormularioDestino, type Directorio } from './FormularioDestino'
+import { PROGRAMACION_INICIAL, ProgramarRespaldo, type Programacion } from './ProgramarRespaldo'
 
 type Advertencia = { explicacion: string; log: string }
 
@@ -43,6 +44,9 @@ export function RespaldoFull({ token }: Props) {
   const [resultado, setResultado] = useState<Resultado | null>(null)
   const [confirmando, setConfirmando] = useState(false)
   const [respaldando, setRespaldando] = useState(false)
+  const [programando, setProgramando] = useState(false)
+  // El envío llega en el check 25; aquí solo queda el estado listo.
+  const [programacion, setProgramacion] = useState<Programacion>(PROGRAMACION_INICIAL)
 
   useEffect(() => {
     const headers = cabeceras(token)
@@ -175,15 +179,21 @@ export function RespaldoFull({ token }: Props) {
         ayudaNombre="Las piezas se nombran con este nombre más la base, la fecha y el número de pieza. Usa letras, números, guion y guion bajo."
       />
 
+      <label>
+        <input type="checkbox" checked={programando} onChange={(e) => setProgramando(e.target.checked)} />
+        Programar respaldo
+      </label>
+      {programando && <ProgramarRespaldo valor={programacion} onChange={setProgramacion} />}
+
       {respaldando && <BarraRespaldando />}
 
       <button
         type="button"
         className="accion"
-        onClick={respaldar}
+        onClick={programando ? undefined : respaldar}
         disabled={respaldando || sinSysdba}
       >
-        Respaldar
+        {programando ? 'Programar' : 'Respaldar'}
       </button>
     </section>
   )
