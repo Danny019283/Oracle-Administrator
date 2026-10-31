@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { llamar, type Aviso } from '../admin/api'
-import { MostrarAviso, Tabla } from '../admin/Avisos'
+import { BotonConfirmar, MostrarAviso, Tabla } from '../admin/Avisos'
 import { avisoDeConexion, cabeceras, ErrorConexion, pedir } from '../respaldos/api'
 
 type Programacion = {
@@ -54,51 +54,95 @@ function avisoDeFallo(status: number, cuerpo: Record<string, unknown>): Aviso {
 
 export function RespaldosProgramados({ token }: { token: string }) {
   const [programaciones, setProgramaciones] = useState<Programacion[]>([])
-  const [aviso, setAviso] = useState<Aviso | null>(null)
+  const [avisoLista, setAvisoLista] = useState<Aviso | null>(null)
+  const [avisos, setAvisos] = useState<Aviso[]>([])
   const [log, setLog] = useState('')
+  const [ocupado, setOcupado] = useState(false)
   const [ejecutando, setEjecutando] = useState<number | null>(null)
+  const guarda = useRef(false) // el estado no se actualiza entre dos clics del mismo tick
 
   const cargar = useCallback(async () => {
     const r = await llamar<{ programaciones: Programacion[] }>(token, '/respaldos/programados')
-    if (!r.ok) return setAviso(r.aviso)
+    if (!r.ok) return setAvisoLista(r.aviso)
     setProgramaciones(r.datos.programaciones ?? [])
-    setAviso(null)
+    setAvisoLista(null)
   }, [token])
 
   useEffect(() => {
     void cargar()
   }, [cargar])
 
-  const ejecutar = async (id: number) => {
-    setAviso(null)
+  // Envía la acción; `alExito` convierte el cuerpo 200 en avisos (y log). Recarga tras 200, 404 y 500.
+  const accion = async (
+    url: string,
+    method: 'POST' | 'DELETE',
+    alExito: (cuerpo: Record<string, any>) => { avisos: Aviso[]; log?: string },
+    idEjecutando: number | null = null,
+  ) => {
+    if (guarda.current) return
+    guarda.current = true
+    setAvisos([])
     setLog('')
-    setEjecutando(id)
-    let resultado: Aviso | null = null
+    setOcupado(true)
+    setEjecutando(idEjecutando)
+    let resultado: Aviso[] = []
     let logOk = ''
     let recargar = false
     try {
-      const r = await pedir(`/respaldos/programados/${id}/ejecutar`, { method: 'POST', headers: cabeceras(token) })
+      const r = await pedir(url, { method, headers: cabeceras(token) })
       if (r.ok) {
-        resultado = { tipo: 'ok', textos: [r.cuerpo.mensaje ?? 'Respaldo ejecutado'] }
-        logOk = r.cuerpo.log ?? ''
+        const exito = alExito(r.cuerpo)
+        resultado = exito.avisos
+        logOk = exito.log ?? ''
         recargar = true
       } else if (r.status !== 401) {
-        resultado = avisoDeFallo(r.status, r.cuerpo)
+        resultado = [avisoDeFallo(r.status, r.cuerpo)]
         recargar = r.status === 404 || r.status === 500
       }
     } catch (error) {
-      if (error instanceof ErrorConexion) resultado = { tipo: 'error', textos: [avisoDeConexion(error)] }
+      if (error instanceof ErrorConexion) resultado = [{ tipo: 'error', textos: [avisoDeConexion(error)] }]
     }
     setEjecutando(null)
     if (recargar) await cargar()
-    setAviso(resultado)
+    setAvisos(resultado)
     setLog(logOk)
+    setOcupado(false)
+    guarda.current = false
   }
+
+  const ejecutar = (id: number) =>
+    accion(
+      `/respaldos/programados/${id}/ejecutar`,
+      'POST',
+      (c) => ({ avisos: [{ tipo: 'ok', textos: [c.mensaje ?? 'Respaldo ejecutado'] }], log: c.log }),
+      id,
+    )
+
+  const eliminar = (id: number) =>
+    accion(`/respaldos/programados/${id}`, 'DELETE', (c) => ({
+      avisos: [{ tipo: 'ok', textos: [c.mensaje ?? 'Programación eliminada'] }],
+    }))
+
+  const reinstalar = () =>
+    accion('/respaldos/programados/reinstalar', 'POST', (c) => {
+      const fallidas: { nombre: string; mensaje: string }[] = c.fallidas ?? []
+      const lista: Aviso[] = [{ tipo: 'ok', textos: [c.mensaje ?? 'Tareas reinstaladas'] }]
+      if (fallidas.length > 0) {
+        lista.push({ tipo: 'error', textos: fallidas.map((f) => `${f.nombre}: ${f.mensaje}`) })
+      }
+      return { avisos: lista }
+    })
 
   return (
     <div className="panel">
       <h2>Respaldos programados</h2>
-      <MostrarAviso aviso={aviso} />
+      <button type="button" className="boton" disabled={ocupado} onClick={() => void reinstalar()}>
+        Reinstalar tareas
+      </button>
+      {avisos.map((a, i) => (
+        <MostrarAviso key={i} aviso={a} />
+      ))}
+      <MostrarAviso aviso={avisoLista} />
       {log && <pre>{log}</pre>}
       <Tabla
         titulo="Respaldos programados"
@@ -116,15 +160,29 @@ export function RespaldosProgramados({ token }: { token: string }) {
           {
             titulo: 'Acciones',
             valor: (p: Programacion) => (
-              <button
-                type="button"
-                className="boton"
-                aria-label={`Ejecutar ${p.nombre}`}
-                disabled={ejecutando !== null}
-                onClick={() => void ejecutar(p.id)}
-              >
-                {ejecutando === p.id ? 'Ejecutando…' : 'Ejecutar'}
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="boton"
+                  aria-label={`Ejecutar ${p.nombre}`}
+                  disabled={ocupado}
+                  onClick={() => void ejecutar(p.id)}
+                >
+                  {ejecutando === p.id ? 'Ejecutando…' : 'Ejecutar'}
+                </button>
+                {ocupado ? (
+                  // BotonConfirmar no se deshabilita desde fuera: mientras corre una acción se sustituye por un botón inerte.
+                  <button type="button" className="boton peligro" disabled>
+                    {`Eliminar ${p.nombre}`}
+                  </button>
+                ) : (
+                  <BotonConfirmar
+                    etiqueta={`Eliminar ${p.nombre}`}
+                    pregunta={`¿Eliminar la programación ${p.nombre}? Se quitan la tarea programada y los scripts de la programación; los respaldos ya generados NO se borran.`}
+                    onConfirmar={() => void eliminar(p.id)}
+                  />
+                )}
+              </>
             ),
           },
         ]}

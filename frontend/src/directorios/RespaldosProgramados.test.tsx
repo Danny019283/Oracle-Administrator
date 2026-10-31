@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { RespaldosProgramados } from './RespaldosProgramados'
 
 const TOKEN = 'tok-123'
@@ -311,3 +311,240 @@ describe('botón Ejecutar', () => {
   })
 })
 
+
+describe('Eliminar y Reinstalar tareas', () => {
+  const FILAS = [
+    { ...BASE, id: 1, nombre: 'nocturno' },
+    { ...BASE, id: 2, nombre: 'semanal' },
+  ]
+  const LISTA = ok({ programaciones: FILAS })
+  const SIN_PRIMERA = ok({ programaciones: [FILAS[1]] })
+  const fallo = (status: number, cuerpo: unknown) => ({ ok: false, status, json: async () => cuerpo })
+
+  // GET devuelve las listas en orden; las demás peticiones las resuelve la prueba.
+  const preparar = (alMutar: () => Promise<unknown>, listas: unknown[] = [LISTA, SIN_PRIMERA]) => {
+    let get = 0
+    fetchFalso = vi.fn(async (_url: string, opciones?: RequestInit) =>
+      opciones?.method === 'POST' || opciones?.method === 'DELETE' ? alMutar() : listas[Math.min(get++, listas.length - 1)],
+    )
+    vi.stubGlobal('fetch', fetchFalso)
+  }
+  const mutaciones = () => fetchFalso.mock.calls.filter((c) => c[1]?.method === 'POST' || c[1]?.method === 'DELETE')
+  const gets = () => fetchFalso.mock.calls.filter((c) => !c[1]?.method || c[1].method === 'GET')
+  const deshabilitado = (b: HTMLElement) => b.matches(':disabled')
+  const eliminarConfirmado = async (nombre: string) => {
+    fireEvent.click(await screen.findByRole('button', { name: `Eliminar ${nombre}` }))
+    fireEvent.click(screen.getByRole('button', { name: 'Sí, confirmar' }))
+  }
+
+  it('muestra un botón «Eliminar <nombre>» por fila y la pregunta avisa de qué se borra y qué no, sin petición', async () => {
+    preparar(async () => ok({}))
+    render(<RespaldosProgramados token={TOKEN} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Eliminar nocturno' }))
+    expect(screen.getByRole('button', { name: 'Eliminar semanal' })).not.toBeNull()
+    const grupo = screen.getByRole('group').getAttribute('aria-label') ?? ''
+    expect(grupo).toContain('nocturno')
+    expect(grupo).toMatch(/tarea programada/)
+    expect(grupo).toMatch(/scripts/)
+    expect(grupo).toMatch(/respaldos ya generados NO se borran/)
+    expect(mutaciones()).toHaveLength(0)
+  })
+
+  it('al cancelar no envía nada', async () => {
+    preparar(async () => ok({}))
+    render(<RespaldosProgramados token={TOKEN} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Eliminar nocturno' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+
+    expect(screen.queryByRole('group')).toBeNull()
+    expect(mutaciones()).toHaveLength(0)
+    expect(gets()).toHaveLength(1)
+  })
+
+  it('al confirmar envía DELETE /respaldos/programados/<id> con el token, avisa y recarga', async () => {
+    preparar(async () => ok({ mensaje: 'Programación nocturno eliminada' }))
+    render(<RespaldosProgramados token={TOKEN} />)
+
+    await eliminarConfirmado('nocturno')
+
+    expect((await screen.findByRole('status')).textContent).toContain('Programación nocturno eliminada')
+    expect(mutaciones()).toHaveLength(1)
+    expect(mutaciones()[0][0]).toBe('/respaldos/programados/1')
+    expect(mutaciones()[0][1].method).toBe('DELETE')
+    expect(mutaciones()[0][1].headers.Authorization).toBe(`Bearer ${TOKEN}`)
+    await waitFor(() => expect(screen.queryByText('nocturno')).toBeNull())
+    expect(gets()).toHaveLength(2)
+  })
+
+  it('ante 404 muestra su detalle y recarga', async () => {
+    preparar(async () => fallo(404, { detail: 'La programación 1 no existe' }))
+    render(<RespaldosProgramados token={TOKEN} />)
+
+    await eliminarConfirmado('nocturno')
+
+    expect((await screen.findByRole('alert')).textContent).toContain('La programación 1 no existe')
+    await waitFor(() => expect(gets()).toHaveLength(2))
+  })
+
+  it('ante 500 muestra mensaje, explicación y log, recarga y la fila sigue', async () => {
+    preparar(async () => fallo(500, { mensaje: 'No se pudo eliminar', explicacion: 'crontab falló', log: 'crontab: error' }), [
+      LISTA,
+      LISTA,
+    ])
+    render(<RespaldosProgramados token={TOKEN} />)
+
+    await eliminarConfirmado('nocturno')
+
+    const alerta = (await screen.findByRole('alert')).textContent
+    expect(alerta).toContain('No se pudo eliminar')
+    expect(alerta).toContain('crontab falló')
+    expect(alerta).toContain('crontab: error')
+    await waitFor(() => expect(gets()).toHaveLength(2))
+    expect(screen.getByRole('button', { name: 'Eliminar nocturno' })).not.toBeNull()
+  })
+
+  it('Eliminar ante 403 y con el backend caído muestra los avisos habituales', async () => {
+    preparar(async () => fallo(403, { detail: 'Se requiere sesión SYSDBA' }))
+    render(<RespaldosProgramados token={TOKEN} />)
+    await eliminarConfirmado('nocturno')
+    expect((await screen.findByRole('alert')).textContent).toContain('Se requiere sesión SYSDBA')
+    cleanup()
+
+    preparar(async () => {
+      throw new TypeError('Failed to fetch')
+    })
+    render(<RespaldosProgramados token={TOKEN} />)
+    await eliminarConfirmado('nocturno')
+    expect((await screen.findByRole('alert')).textContent).toContain('No se pudo conectar con el servidor')
+  })
+
+  it('«Reinstalar tareas» envía POST /respaldos/programados/reinstalar sin confirmar y avisa con el conteo', async () => {
+    preparar(async () => ok({ mensaje: '2 programaciones reinstaladas', reinstaladas: 2, fallidas: [] }), [LISTA, LISTA])
+    render(<RespaldosProgramados token={TOKEN} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reinstalar tareas' }))
+
+    expect((await screen.findByRole('status')).textContent).toContain('2 programaciones reinstaladas')
+    expect(mutaciones()).toHaveLength(1)
+    expect(mutaciones()[0][0]).toBe('/respaldos/programados/reinstalar')
+    expect(mutaciones()[0][1].method).toBe('POST')
+    expect(mutaciones()[0][1].headers.Authorization).toBe(`Bearer ${TOKEN}`)
+    expect(screen.queryByRole('group')).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+    await waitFor(() => expect(gets()).toHaveLength(2))
+  })
+
+  it('con fallidas muestra además un aviso de error con cada nombre y su mensaje', async () => {
+    preparar(
+      async () =>
+        ok({
+          mensaje: '1 programación reinstalada; 2 fallaron',
+          reinstaladas: 1,
+          fallidas: [
+            { nombre: 'semanal', mensaje: 'schtasks denegado' },
+            { nombre: 'mensual', mensaje: 'directorio ausente' },
+          ],
+        }),
+      [LISTA, LISTA],
+    )
+    render(<RespaldosProgramados token={TOKEN} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reinstalar tareas' }))
+
+    expect((await screen.findByRole('status')).textContent).toContain('1 programación reinstalada; 2 fallaron')
+    const alerta = (await screen.findByRole('alert')).textContent ?? ''
+    expect(alerta).toContain('semanal')
+    expect(alerta).toContain('schtasks denegado')
+    expect(alerta).toContain('mensual')
+    expect(alerta).toContain('directorio ausente')
+  })
+
+  it('Reinstalar ante 500 muestra mensaje, explicación y log', async () => {
+    preparar(async () =>
+      fallo(500, { mensaje: 'No se pudieron reinstalar las tareas', explicacion: 'cron no responde', log: 'crontab: x' }),
+    )
+    render(<RespaldosProgramados token={TOKEN} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reinstalar tareas' }))
+
+    const alerta = (await screen.findByRole('alert')).textContent
+    expect(alerta).toContain('No se pudieron reinstalar las tareas')
+    expect(alerta).toContain('cron no responde')
+    expect(alerta).toContain('crontab: x')
+  })
+
+  it('Reinstalar ante 403 y con el backend caído muestra los avisos habituales', async () => {
+    preparar(async () => fallo(403, { detail: 'Se requiere sesión SYSDBA' }))
+    render(<RespaldosProgramados token={TOKEN} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Reinstalar tareas' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('Se requiere sesión SYSDBA')
+    cleanup()
+
+    preparar(async () => {
+      throw new TypeError('Failed to fetch')
+    })
+    render(<RespaldosProgramados token={TOKEN} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Reinstalar tareas' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('No se pudo conectar con el servidor')
+  })
+
+  it('mientras corre cualquier acción quedan deshabilitados Ejecutar, Eliminar y Reinstalar', async () => {
+    let liberar: (v: unknown) => void = () => {}
+    preparar(() => new Promise((r) => (liberar = r)), [LISTA, LISTA])
+    render(<RespaldosProgramados token={TOKEN} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reinstalar tareas' }))
+
+    await waitFor(() => expect(deshabilitado(screen.getByRole('button', { name: 'Reinstalar tareas' }))).toBe(true))
+    for (const nombre of ['Ejecutar nocturno', 'Ejecutar semanal', 'Eliminar nocturno', 'Eliminar semanal']) {
+      expect(deshabilitado(screen.getByRole('button', { name: nombre }))).toBe(true)
+    }
+    liberar(ok({ mensaje: 'listo', reinstaladas: 0, fallidas: [] }))
+    await waitFor(() => expect(deshabilitado(screen.getByRole('button', { name: 'Reinstalar tareas' }))).toBe(false))
+    expect(deshabilitado(screen.getByRole('button', { name: 'Eliminar nocturno' }))).toBe(false)
+    expect(deshabilitado(screen.getByRole('button', { name: 'Ejecutar nocturno' }))).toBe(false)
+  })
+
+  it('mientras corre Eliminar también quedan deshabilitados los demás botones', async () => {
+    let liberar: (v: unknown) => void = () => {}
+    preparar(() => new Promise((r) => (liberar = r)))
+    render(<RespaldosProgramados token={TOKEN} />)
+
+    await eliminarConfirmado('nocturno')
+
+    await waitFor(() => expect(deshabilitado(screen.getByRole('button', { name: 'Reinstalar tareas' }))).toBe(true))
+    expect(deshabilitado(screen.getByRole('button', { name: 'Ejecutar semanal' }))).toBe(true)
+    expect(deshabilitado(screen.getByRole('button', { name: 'Eliminar semanal' }))).toBe(true)
+    liberar(ok({ mensaje: 'Programación nocturno eliminada' }))
+    await screen.findByRole('status')
+  })
+
+  it('dos clics en el mismo tick envían una sola petición', async () => {
+    preparar(async () => ok({ mensaje: 'listo', reinstaladas: 0, fallidas: [] }), [LISTA, LISTA])
+    render(<RespaldosProgramados token={TOKEN} />)
+    const boton = await screen.findByRole('button', { name: 'Reinstalar tareas' })
+
+    act(() => {
+      boton.click()
+      boton.click()
+    })
+
+    await screen.findByRole('status')
+    expect(mutaciones()).toHaveLength(1)
+  })
+
+  it('si la recarga falla, su aviso no tapa el del resultado de la acción', async () => {
+    preparar(async () => ok({ mensaje: 'Programación nocturno eliminada' }), [
+      LISTA,
+      fallo(500, { mensaje: 'No se pudo listar', explicacion: 'Oracle no responde' }),
+    ])
+    render(<RespaldosProgramados token={TOKEN} />)
+
+    await eliminarConfirmado('nocturno')
+
+    expect((await screen.findByRole('status')).textContent).toContain('Programación nocturno eliminada')
+    expect((await screen.findByRole('alert')).textContent).toContain('No se pudo listar')
+  })
+})
