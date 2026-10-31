@@ -341,3 +341,26 @@ def test_escribir_archivo_con_chmod_fallido_lanza_operacion_entorno_fallida():
 
     with pytest.raises(OperacionEntornoFallida, match="Operation not permitted"):
         EntornoContenedor("c", proceso).escribir_archivo(EntornoContenedor.tipo_ruta("/u01/a.sh"), "x", ejecutable=True)
+
+
+def test_ejecutar_archivo_corre_sh_con_la_ruta_citada_y_devuelve_la_salida():
+    llamadas = []
+
+    def proceso(args, entrada=None):
+        llamadas.append(args)
+        return Salida(codigo=3, texto="salida del script")
+
+    ruta = EntornoContenedor.tipo_ruta("/u01/mi respaldo/a.sh")
+
+    salida = EntornoContenedor("oracle-test", proceso, cli="podman").ejecutar_archivo(ruta)
+
+    assert salida == Salida(codigo=3, texto="salida del script")
+    assert llamadas == [["podman", "exec", "oracle-test", "sh", "/u01/mi respaldo/a.sh"]]
+
+
+def test_ejecutar_archivo_con_codigo_127_lanza_herramienta_no_disponible():
+    def proceso(args, entrada=None):
+        return Salida(codigo=127, texto="exec: sh: not found")
+
+    with pytest.raises(HerramientaNoDisponible, match="sh"):
+        EntornoContenedor("c", proceso).ejecutar_archivo(EntornoContenedor.tipo_ruta("/u01/a.sh"))

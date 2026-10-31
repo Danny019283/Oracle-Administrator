@@ -78,6 +78,13 @@ class EntornoContenedor(EntornoOracle):
             if salida.codigo != 0:
                 raise OperacionEntornoFallida(salida.texto)
 
+    def ejecutar_archivo(self, ruta: PurePath) -> Salida:
+        salida = self._ejecutar([self._cli, "exec", self._contenedor, "sh", str(ruta)])
+        # 127 de exec: sh no existe dentro del contenedor
+        if salida.codigo == 127:
+            raise HerramientaNoDisponible("sh")
+        return salida
+
     def ejecutar(self, comando: ComandoHerramienta) -> Salida:
         ruta = f"/tmp/{comando.prefijo}_{uuid4().hex}{comando.extension}"
         docker = [self._cli, "exec", self._contenedor]

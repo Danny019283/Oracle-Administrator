@@ -203,3 +203,34 @@ def test_escribir_archivo_con_error_de_es_lanza_operacion_entorno_fallida(tmp_pa
 
     with pytest.raises(OperacionEntornoFallida):
         entorno().escribir_archivo(tmp_path / "es_un_archivo" / "a.sh", "x", ejecutable=False)
+
+
+def test_ejecutar_archivo_en_linux_lanza_sh_con_la_ruta_y_devuelve_la_salida(tmp_path):
+    llamadas = []
+
+    def ejecutor(args, entrada=None, variables=None):
+        llamadas.append(args)
+        return Salida(codigo=2, texto="listo")
+
+    salida = EntornoLocal(SistemaLinux(), ejecutor).ejecutar_archivo(tmp_path / "a.sh")
+
+    assert salida == Salida(codigo=2, texto="listo")
+    assert llamadas == [["sh", str(tmp_path / "a.sh")]]
+
+
+def test_ejecutar_archivo_en_linux_ejecuta_el_script_real_y_junta_stdout_y_stderr(tmp_path):
+    script = tmp_path / "a.sh"
+    script.write_text("echo salida; echo error >&2; exit 4\n")
+
+    salida = entorno().ejecutar_archivo(script)
+
+    assert salida.codigo == 4
+    assert "salida" in salida.texto and "error" in salida.texto
+
+
+def test_ejecutar_archivo_con_herramienta_ausente_lanza_herramienta_no_disponible(tmp_path):
+    def ejecutor(args, entrada=None, variables=None):
+        raise HerramientaNoDisponible(args[0])
+
+    with pytest.raises(HerramientaNoDisponible, match="sh"):
+        EntornoLocal(SistemaLinux(), ejecutor).ejecutar_archivo(tmp_path / "a.sh")

@@ -280,3 +280,13 @@ def test_escribir_archivo_con_error_de_es_en_windows_lanza_operacion_entorno_fal
 
     with pytest.raises(OperacionEntornoFallida, match="Acceso denegado"):
         entorno(estado).escribir_archivo(PureWindowsPath(r"C:\oracle\a.rman"), "x", ejecutable=False)
+
+
+def test_ejecutar_archivo_en_windows_lanza_cmd_c_con_la_ruta_y_devuelve_la_salida(estado):
+    proceso = ProcesoFalso(estado)
+    ruta = PureWindowsPath(r"C:\oracle\scripts_programados\a.bat")
+
+    salida = entorno(estado, proceso).ejecutar_archivo(ruta)
+
+    assert salida == Salida(codigo=0, texto="ok")
+    assert proceso.llamadas[0][0] == ["cmd", "/c", str(ruta)]

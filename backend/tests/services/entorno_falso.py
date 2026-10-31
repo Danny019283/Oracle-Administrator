@@ -1,6 +1,12 @@
 from pathlib import PurePosixPath
 
-from src.services.entorno_oracle import ArchivoNoLegible, EntornoOracle, OperacionEntornoFallida, Salida
+from src.services.entorno_oracle import (
+    ArchivoNoLegible,
+    EntornoOracle,
+    HerramientaNoDisponible,
+    OperacionEntornoFallida,
+    Salida,
+)
 
 RUTA_TEMPORAL = "/tmp/herramienta.tmp"
 
@@ -21,6 +27,8 @@ class EntornoFalso(EntornoOracle):
         fallo_listado=None,
         fallo_borrado=None,
         fallo_escritura=None,
+        salidas_archivo=None,
+        herramienta_ausente=None,
     ):
         self.codigo = codigo
         self.texto = texto
@@ -41,6 +49,11 @@ class EntornoFalso(EntornoOracle):
         # fallo_escritura: texto con el que escribir_archivo lanza OperacionEntornoFallida
         self.fallo_escritura = fallo_escritura
         self.escrituras = []
+        # salidas_archivo: ruta -> Salida de ejecutar_archivo; sin ella se usa codigo/texto
+        self.salidas_archivo = salidas_archivo or {}
+        # herramienta_ausente: nombre con el que ejecutar_archivo lanza HerramientaNoDisponible
+        self.herramienta_ausente = herramienta_ausente
+        self.ejecuciones = []
 
     def crear_carpeta(self, ruta):
         self.carpetas.append(ruta)
@@ -75,6 +88,12 @@ class EntornoFalso(EntornoOracle):
         if self.fallo_escritura is not None:
             raise OperacionEntornoFallida(self.fallo_escritura)
         self.escrituras.append((ruta, texto, ejecutable))
+
+    def ejecutar_archivo(self, ruta):
+        self.ejecuciones.append(ruta)
+        if self.herramienta_ausente is not None:
+            raise HerramientaNoDisponible(self.herramienta_ausente)
+        return self.salidas_archivo.get(ruta, Salida(codigo=self.codigo, texto=self.texto))
 
     def ejecutar(self, comando):
         self.herramientas.append(

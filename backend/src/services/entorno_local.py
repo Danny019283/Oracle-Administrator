@@ -54,6 +54,9 @@ class SistemaLinux:
         archivo.write_text(texto)
         archivo.chmod(0o750 if ejecutable else 0o640)
 
+    def comando_script(self, ruta: PurePath) -> list[str]:
+        return ["sh", str(ruta)]
+
     def dar_permisos_a_oracle(self, ruta: PurePath, sid: str, ejecutar: Callable[..., Salida]) -> None:
         proceso = f"ora_pmon_{sid}"
         try:
@@ -106,6 +109,9 @@ class SistemaWindows:
         archivo = self._a_path(ruta)
         archivo.parent.mkdir(parents=True, exist_ok=True)
         archivo.write_text(texto)
+
+    def comando_script(self, ruta: PurePath) -> list[str]:
+        return ["cmd", "/c", str(ruta)]
 
     def dar_permisos_a_oracle(self, ruta: PurePath, sid: str, ejecutar: Callable[..., Salida]) -> None:
         clave = f"HKLM\\SYSTEM\\CurrentControlSet\\Services\\OracleService{sid}"
@@ -163,6 +169,9 @@ class EntornoLocal(EntornoOracle):
             self._sistema.escribir_archivo(ruta, texto, ejecutable)
         except OSError as error:
             raise OperacionEntornoFallida(str(error)) from error
+
+    def ejecutar_archivo(self, ruta: PurePath) -> Salida:
+        return self._ejecutar(self._sistema.comando_script(ruta))
 
     def ejecutar(self, comando: ComandoHerramienta) -> Salida:
         ruta = self.tipo_ruta(tempfile.gettempdir()) / f"{comando.prefijo}_{uuid4().hex}{comando.extension}"

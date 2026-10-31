@@ -79,6 +79,11 @@ class EntornoOracle(ABC):
         Permisos privados al grupo: 0750 si `ejecutable`, 0640 si no."""
 
     @abstractmethod
+    def ejecutar_archivo(self, ruta: PurePath) -> Salida:
+        """Ejecuta el script del entorno (`sh` o `cmd /c`) y devuelve su código y su salida (stdout+stderr);
+        lanza HerramientaNoDisponible si el intérprete no existe."""
+
+    @abstractmethod
     def ejecutar(self, comando: ComandoHerramienta) -> Salida:
         """Escribe `comando.script` en un temporal privado (sin que aparezca en los argumentos
         del proceso), ejecuta `comando.nombre` con `comando.args(ruta_del_temporal)` y siempre lo borra."""
