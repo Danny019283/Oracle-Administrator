@@ -1,7 +1,8 @@
 import re
+import shlex
 from collections.abc import Collection
 from dataclasses import dataclass
-from pathlib import PurePath
+from pathlib import PurePath, PureWindowsPath
 
 from src.services.respaldo import errores_destino
 
@@ -89,3 +90,45 @@ def script_rman(politica: str, ruta_destino: PurePath) -> str:
         raise ValueError(f"Política desconocida: {politica}")
     cuerpo = _CUERPOS_RMAN[politica].format(f=ruta_destino / "&1_%d_%s_%p.dbf")
     return f"RUN {{\n  ALLOCATE CHANNEL ch1 DEVICE TYPE DISK;\n{cuerpo}  RELEASE CHANNEL ch1;\n}}\n"
+
+
+_NOMBRE = re.compile(r"[A-Za-z0-9_-]+")
+_SID = re.compile(r"[A-Za-z0-9_]+")
+# ORACLE_HOME absoluto (POSIX o con unidad) sin caracteres con significado para sh o cmd
+_HOME = re.compile(r"(/|[A-Za-z]:[\\/])[^\"'\r\n$`%&|<>^!;]*")
+
+
+def extension_envoltorio(ruta: PurePath) -> str:
+    return ".bat" if isinstance(ruta, PureWindowsPath) else ".sh"
+
+
+def envoltorio(nombre: str, sid: str, oracle_home: str, ruta_rman: PurePath, ruta_destino: PurePath) -> str:
+    """Lanza RMAN con `target /` (sin contraseñas); el cron/schtasks no heredan el entorno."""
+    if not (isinstance(nombre, str) and _NOMBRE.fullmatch(nombre)):
+        raise ValueError("Nombre no válido para el envoltorio")
+    if not (isinstance(sid, str) and _SID.fullmatch(sid)):
+        raise ValueError("ORACLE_SID no válido")
+    if not (isinstance(oracle_home, str) and _HOME.fullmatch(oracle_home)):
+        raise ValueError("ORACLE_HOME no válido")
+    if extension_envoltorio(ruta_rman) == ".sh":
+        return (
+            "#!/bin/sh\n"
+            f"export ORACLE_SID={shlex.quote(sid)}\n"
+            f"export ORACLE_HOME={shlex.quote(oracle_home)}\n"
+            'export PATH="$ORACLE_HOME/bin:$PATH"\n'
+            f'BASE="{nombre}_$(date +%Y%m%d_%H%M%S)"\n'
+            f'rman target / cmdfile={ruta_rman} log={ruta_destino}/$BASE.log using "$BASE"\n'
+            "exit $?\n"
+        )
+    lineas = [
+        "@echo off",
+        f"set ORACLE_SID={sid}",
+        f"set ORACLE_HOME={oracle_home}",
+        r"set PATH=%ORACLE_HOME%\bin;%PATH%",
+        """for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss"') do set TS=%%i""",
+        f"set BASE={nombre}_%TS%",
+        f'rman target / cmdfile="{ruta_rman}" log="{ruta_destino}\\%BASE%.log" using %BASE%',
+        "exit /b %errorlevel%",
+        "",
+    ]
+    return "\r\n".join(lineas)
