@@ -29,6 +29,7 @@ class EntornoFalso(EntornoOracle):
         fallo_escritura=None,
         salidas_archivo=None,
         herramienta_ausente=None,
+        variables_entorno=None,
     ):
         self.codigo = codigo
         self.texto = texto
@@ -54,6 +55,9 @@ class EntornoFalso(EntornoOracle):
         # herramienta_ausente: nombre con el que ejecutar_archivo lanza HerramientaNoDisponible
         self.herramienta_ausente = herramienta_ausente
         self.ejecuciones = []
+        # variables_entorno: nombre -> valor de variable_de_entorno; las consultas quedan en `consultas_entorno`
+        self.variables_entorno = variables_entorno or {}
+        self.consultas_entorno = []
 
     def crear_carpeta(self, ruta):
         self.carpetas.append(ruta)
@@ -94,6 +98,10 @@ class EntornoFalso(EntornoOracle):
         if self.herramienta_ausente is not None:
             raise HerramientaNoDisponible(self.herramienta_ausente)
         return self.salidas_archivo.get(ruta, Salida(codigo=self.codigo, texto=self.texto))
+
+    def variable_de_entorno(self, nombre):
+        self.consultas_entorno.append(nombre)
+        return self.variables_entorno.get(nombre)
 
     def ejecutar(self, comando):
         self.herramientas.append(

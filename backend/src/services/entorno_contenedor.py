@@ -11,6 +11,7 @@ from src.services.entorno_oracle import (
     HerramientaNoDisponible,
     OperacionEntornoFallida,
     Salida,
+    validar_nombre_variable,
 )
 
 Ejecutor = Callable[..., Salida]
@@ -84,6 +85,14 @@ class EntornoContenedor(EntornoOracle):
         if salida.codigo == 127:
             raise HerramientaNoDisponible("sh")
         return salida
+
+    def variable_de_entorno(self, nombre: str) -> str | None:
+        validar_nombre_variable(nombre)
+        salida = self._ejecutar([self._cli, "exec", self._contenedor, "printenv", nombre])
+        # 127 de exec: printenv no existe dentro del contenedor
+        if salida.codigo == 127:
+            raise HerramientaNoDisponible("printenv")
+        return salida.texto.strip() or None if salida.codigo == 0 else None
 
     def ejecutar(self, comando: ComandoHerramienta) -> Salida:
         ruta = f"/tmp/{comando.prefijo}_{uuid4().hex}{comando.extension}"

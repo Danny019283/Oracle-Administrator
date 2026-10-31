@@ -290,3 +290,11 @@ def test_ejecutar_archivo_en_windows_lanza_cmd_c_con_la_ruta_y_devuelve_la_salid
 
     assert salida == Salida(codigo=0, texto="ok")
     assert proceso.llamadas[0][0] == ["cmd", "/c", str(ruta)]
+
+
+def test_variable_de_entorno_en_windows_lee_el_entorno_del_sistema(estado):
+    sistema = SistemaWindows(variables={"ORACLE_HOME": r"C:\app\oracle"})
+    local = EntornoLocal(sistema, ProcesoFalso(estado))
+
+    assert local.variable_de_entorno("ORACLE_HOME") == r"C:\app\oracle"
+    assert local.variable_de_entorno("NO_EXISTE") is None

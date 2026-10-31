@@ -1,7 +1,7 @@
 import os
 import re
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path, PurePath, PureWindowsPath
 from uuid import uuid4
 
@@ -13,6 +13,7 @@ from src.services.entorno_oracle import (
     HerramientaNoDisponible,
     OperacionEntornoFallida,
     Salida,
+    validar_nombre_variable,
 )
 from src.services.procesos import ejecutar_proceso
 
@@ -29,6 +30,12 @@ class SistemaLinux:
     """Implementador del Bridge: lo que depende del SO donde corre Oracle (Linux)."""
 
     tipo_ruta = Path
+
+    def __init__(self, variables: Mapping[str, str] = os.environ):
+        self._variables = variables
+
+    def variable(self, nombre: str) -> str | None:
+        return self._variables.get(nombre)
 
     def leer_archivo(self, ruta: PurePath) -> str:
         return Path(ruta).read_text(errors="replace")
@@ -86,8 +93,12 @@ class SistemaWindows:
 
     tipo_ruta = PureWindowsPath
 
-    def __init__(self, a_path: Callable[[PurePath], Path] = Path):
+    def __init__(self, a_path: Callable[[PurePath], Path] = Path, variables: Mapping[str, str] = os.environ):
         self._a_path = a_path
+        self._variables = variables
+
+    def variable(self, nombre: str) -> str | None:
+        return self._variables.get(nombre)
 
     def leer_archivo(self, ruta: PurePath) -> str:
         return self._a_path(ruta).read_text(errors="replace")
@@ -172,6 +183,10 @@ class EntornoLocal(EntornoOracle):
 
     def ejecutar_archivo(self, ruta: PurePath) -> Salida:
         return self._ejecutar(self._sistema.comando_script(ruta))
+
+    def variable_de_entorno(self, nombre: str) -> str | None:
+        validar_nombre_variable(nombre)
+        return self._sistema.variable(nombre) or None
 
     def ejecutar(self, comando: ComandoHerramienta) -> Salida:
         ruta = self.tipo_ruta(tempfile.gettempdir()) / f"{comando.prefijo}_{uuid4().hex}{comando.extension}"

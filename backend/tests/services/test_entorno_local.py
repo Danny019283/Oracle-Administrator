@@ -234,3 +234,19 @@ def test_ejecutar_archivo_con_herramienta_ausente_lanza_herramienta_no_disponibl
 
     with pytest.raises(HerramientaNoDisponible, match="sh"):
         EntornoLocal(SistemaLinux(), ejecutor).ejecutar_archivo(tmp_path / "a.sh")
+
+
+def test_variable_de_entorno_en_linux_lee_el_entorno_del_sistema():
+    local = EntornoLocal(SistemaLinux({"ORACLE_HOME": "/u01/app/oracle"}))
+
+    assert local.variable_de_entorno("ORACLE_HOME") == "/u01/app/oracle"
+    assert local.variable_de_entorno("NO_EXISTE") is None
+
+
+def test_variable_de_entorno_en_linux_trata_el_valor_vacio_como_ausente():
+    assert EntornoLocal(SistemaLinux({"ORACLE_HOME": ""})).variable_de_entorno("ORACLE_HOME") is None
+
+
+def test_variable_de_entorno_en_linux_con_nombre_invalido_lanza_value_error():
+    with pytest.raises(ValueError):
+        EntornoLocal(SistemaLinux({"a b": "x"})).variable_de_entorno("a b")

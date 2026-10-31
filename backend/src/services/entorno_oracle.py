@@ -1,3 +1,4 @@
+import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -47,6 +48,12 @@ class HerramientaNoDisponible(Exception):
         self.herramienta = herramienta
 
 
+def validar_nombre_variable(nombre: str) -> None:
+    # \Z y no $: $ aceptaría un salto de línea final
+    if not re.match(r"[A-Z][A-Z0-9_]*\Z", nombre):
+        raise ValueError(f"Nombre de variable de entorno no válido: {nombre!r}")
+
+
 class EntornoOracle(ABC):
     """Puerto: dónde corren las herramientas de Oracle (expdp, rman, sqlplus).
     Los servicios solo conocen esta interfaz, no el entorno concreto."""
@@ -82,6 +89,11 @@ class EntornoOracle(ABC):
     def ejecutar_archivo(self, ruta: PurePath) -> Salida:
         """Ejecuta el script del entorno (`sh` o `cmd /c`) y devuelve su código y su salida (stdout+stderr);
         lanza HerramientaNoDisponible si el intérprete no existe."""
+
+    @abstractmethod
+    def variable_de_entorno(self, nombre: str) -> str | None:
+        """Valor de la variable en el servidor de Oracle, o None si no existe o está vacía;
+        lanza ValueError si el nombre no cumple `^[A-Z][A-Z0-9_]*$`, sin ejecutar nada."""
 
     @abstractmethod
     def ejecutar(self, comando: ComandoHerramienta) -> Salida:

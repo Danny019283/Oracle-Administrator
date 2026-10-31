@@ -364,3 +364,36 @@ def test_ejecutar_archivo_con_codigo_127_lanza_herramienta_no_disponible():
 
     with pytest.raises(HerramientaNoDisponible, match="sh"):
         EntornoContenedor("c", proceso).ejecutar_archivo(EntornoContenedor.tipo_ruta("/u01/a.sh"))
+
+
+def test_variable_de_entorno_ejecuta_printenv_y_devuelve_el_valor():
+    llamadas = []
+
+    def proceso(args, entrada=None):
+        llamadas.append(args)
+        return Salida(codigo=0, texto="/opt/oracle/product/21c/dbhome_1\n")
+
+    valor = EntornoContenedor("oracle-test", proceso, cli="podman").variable_de_entorno("ORACLE_HOME")
+
+    assert valor == "/opt/oracle/product/21c/dbhome_1"
+    assert llamadas == [["podman", "exec", "oracle-test", "printenv", "ORACLE_HOME"]]
+
+
+@pytest.mark.parametrize("salida", [Salida(1, ""), Salida(0, "\n"), Salida(0, "")])
+def test_variable_de_entorno_con_codigo_distinto_de_cero_o_salida_vacia_devuelve_none(salida):
+    assert EntornoContenedor("c", lambda args, entrada=None: salida).variable_de_entorno("NO_EXISTE") is None
+
+
+@pytest.mark.parametrize("nombre", ["", "oracle_home", "1A", "A B", "A;rm -rf /", "-x", "A\nB"])
+def test_variable_de_entorno_con_nombre_invalido_lanza_value_error_sin_ejecutar_nada(nombre):
+    proceso = ProcesoFalso()
+
+    with pytest.raises(ValueError):
+        EntornoContenedor("c", proceso).variable_de_entorno(nombre)
+
+    assert proceso.llamadas == []
+
+
+def test_variable_de_entorno_con_codigo_127_lanza_herramienta_no_disponible():
+    with pytest.raises(HerramientaNoDisponible, match="printenv"):
+        EntornoContenedor("c", lambda args, entrada=None: Salida(127, "not found")).variable_de_entorno("ORACLE_HOME")
