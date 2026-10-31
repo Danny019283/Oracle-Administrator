@@ -262,16 +262,6 @@ describe('programar respaldo', () => {
     expect(screen.queryByLabelText('Política')).toBeNull()
   })
 
-  it('«Programar» aún no envía nada', async () => {
-    montar()
-    await screen.findByRole('option', { name: /RESPALDO/ })
-    fireEvent.click(check())
-
-    fireEvent.click(screen.getByRole('button', { name: 'Programar' }))
-
-    expect(fetchFalso.mock.calls.filter(([, o]) => o?.method === 'POST')).toHaveLength(0)
-  })
-
   it('los cambios del formulario se reflejan en pantalla', () => {
     montar()
     fireEvent.click(check())
@@ -281,6 +271,237 @@ describe('programar respaldo', () => {
 
     expect((screen.getByLabelText('Cada cuántas horas') as HTMLInputElement).value).toBe('2')
     expect(screen.queryByLabelText('Hora')).toBeNull()
+  })
+})
+
+describe('enviar la programación', () => {
+  const EXITO_PROG = {
+    mensaje: 'Respaldo programado',
+    id: 1,
+    ruta_script: '/opt/oracle/Respaldos/scripts_programados/noche.sh',
+    ruta_rman: '/opt/oracle/Respaldos/scripts_programados/noche.rman',
+  }
+  const URL = '/respaldos/programados'
+
+  const rellenar = async (nombre = 'noche') => {
+    await screen.findByRole('option', { name: /RESPALDO/ })
+    fireEvent.change(screen.getByLabelText('Directorio'), { target: { value: 'RESPALDO' } })
+    fireEvent.change(screen.getByLabelText('Nombre del respaldo'), { target: { value: nombre } })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Programar respaldo' }))
+  }
+  const cambiar = (etiqueta: string, value: string) =>
+    fireEvent.change(screen.getByLabelText(etiqueta), { target: { value } })
+  const programar = () => fireEvent.click(screen.getByRole('button', { name: 'Programar' }))
+  const cuerpoEnviado = async () => {
+    await waitFor(() => expect(llamadasPost(URL)).toHaveLength(1))
+    return JSON.parse(llamadasPost(URL)[0][1].body)
+  }
+
+  it('diario: envía la hora, sin día y con el intervalo por defecto', async () => {
+    montar({ respaldo: respuesta(EXITO_PROG) })
+    await rellenar()
+    cambiar('Hora', '02:30')
+
+    programar()
+
+    const [, opciones] = (await cuerpoEnviado(), llamadasPost(URL)[0])
+    expect(opciones.headers).toMatchObject({ ...CABECERAS, 'Content-Type': 'application/json' })
+    expect(JSON.parse(opciones.body)).toEqual({
+      nombre: 'noche', directorio: 'RESPALDO', politica: 'FULL', frecuencia: 'DIARIO',
+      hora: '02:30', dia: null, intervalo_horas: 2,
+    })
+    expect(llamadasPost('/respaldos/full')).toHaveLength(0)
+  })
+
+  it('semanal: envía el día de la semana', async () => {
+    montar({ respaldo: respuesta(EXITO_PROG) })
+    await rellenar()
+    cambiar('Política', 'INCREMENTAL')
+    cambiar('Frecuencia', 'SEMANAL')
+    cambiar('Día de la semana', '3')
+
+    programar()
+
+    expect(await cuerpoEnviado()).toEqual({
+      nombre: 'noche', directorio: 'RESPALDO', politica: 'INCREMENTAL', frecuencia: 'SEMANAL',
+      hora: '23:00', dia: 3, intervalo_horas: 2,
+    })
+  })
+
+  it('mensual: envía el día del mes', async () => {
+    montar({ respaldo: respuesta(EXITO_PROG) })
+    await rellenar()
+    cambiar('Frecuencia', 'MENSUAL')
+    cambiar('Día del mes', '15')
+
+    programar()
+
+    expect(await cuerpoEnviado()).toEqual({
+      nombre: 'noche', directorio: 'RESPALDO', politica: 'FULL', frecuencia: 'MENSUAL',
+      hora: '23:00', dia: 15, intervalo_horas: 2,
+    })
+  })
+
+  it('cada N horas: sin hora ni día y con el intervalo', async () => {
+    montar({ respaldo: respuesta(EXITO_PROG) })
+    await rellenar()
+    cambiar('Política', 'TRANSACCIONAL')
+    cambiar('Frecuencia', 'HORAS')
+    cambiar('Cada cuántas horas', '6')
+
+    programar()
+
+    expect(await cuerpoEnviado()).toEqual({
+      nombre: 'noche', directorio: 'RESPALDO', politica: 'TRANSACCIONAL', frecuencia: 'HORAS',
+      hora: null, dia: null, intervalo_horas: 6,
+    })
+  })
+
+  it('éxito: muestra el mensaje y la ruta, y limpia nombre y programación conservando el resto', async () => {
+    montar({ respaldo: respuesta(EXITO_PROG) })
+    await rellenar()
+    cambiar('Frecuencia', 'MENSUAL')
+    cambiar('Día del mes', '15')
+
+    programar()
+
+    const estado = await screen.findByRole('status')
+    expect(estado.textContent).toContain('Respaldo programado')
+    expect(estado.textContent).toContain('/opt/oracle/Respaldos/scripts_programados/noche.sh')
+    expect((screen.getByLabelText('Nombre del respaldo') as HTMLInputElement).value).toBe('')
+    expect((screen.getByLabelText('Frecuencia') as HTMLSelectElement).value).toBe('DIARIO')
+    expect((screen.getByLabelText('Hora') as HTMLInputElement).value).toBe('23:00')
+    expect((screen.getByLabelText('Directorio') as HTMLSelectElement).value).toBe('RESPALDO')
+    expect((screen.getByRole('checkbox', { name: 'Programar respaldo' }) as HTMLInputElement).checked).toBe(true)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('422 con errores: los lista y no da por programado', async () => {
+    montar({ respaldo: respuesta({ errores: ['Nombre no válido', 'La hora no es válida'] }, 422) })
+    await rellenar()
+
+    programar()
+
+    const alerta = await screen.findByRole('alert')
+    expect(alerta.textContent).toContain('Nombre no válido')
+    expect(alerta.textContent).toContain('La hora no es válida')
+    expect(screen.queryByRole('status')).toBeNull()
+    expect((screen.getByLabelText('Nombre del respaldo') as HTMLInputElement).value).toBe('noche')
+  })
+
+  it('422 de pydantic con detail en lista no rompe la pantalla', async () => {
+    montar({ respaldo: respuesta({ detail: [{ loc: ['body'], msg: 'x', type: 'y' }] }, 422) })
+    await rellenar()
+
+    programar()
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'Los datos de la programación no son válidos',
+    )
+  })
+
+  it('409 por NOARCHIVELOG: muestra mensaje y explicación y ofrece «Activar ARCHIVELOG»', async () => {
+    montar({
+      respaldo: respuesta(
+        {
+          mensaje: 'La base de datos no está en ARCHIVELOG: actívalo para poder respaldar',
+          explicacion: 'Activa el modo ARCHIVELOG',
+        },
+        409,
+      ),
+    })
+    await rellenar()
+    await screen.findByText('La base de datos está en modo ARCHIVELOG')
+
+    programar()
+
+    const alerta = await screen.findByRole('alert')
+    expect(alerta.textContent).toContain('no está en ARCHIVELOG')
+    expect(alerta.textContent).toContain('Activa el modo ARCHIVELOG')
+    expect(screen.getByRole('button', { name: 'Activar ARCHIVELOG' })).toBeTruthy()
+  })
+
+  it('409 por nombre repetido: solo el mensaje y sin «Activar ARCHIVELOG»', async () => {
+    montar({ respaldo: respuesta({ mensaje: 'Ya existe una programación llamada noche' }, 409) })
+    await rellenar()
+
+    programar()
+
+    const alerta = await screen.findByRole('alert')
+    expect(alerta.textContent).toBe('Ya existe una programación llamada noche')
+    expect(screen.queryByRole('button', { name: 'Activar ARCHIVELOG' })).toBeNull()
+  })
+
+  it('500: muestra mensaje, explicación y log', async () => {
+    montar({
+      respaldo: respuesta(
+        {
+          mensaje: 'No se pudo programar el respaldo',
+          explicacion: 'No se pudo escribir el script',
+          log: 'Permission denied',
+        },
+        500,
+      ),
+    })
+    await rellenar()
+
+    programar()
+
+    const alerta = await screen.findByRole('alert')
+    expect(alerta.textContent).toContain('No se pudo programar el respaldo')
+    expect(alerta.textContent).toContain('No se pudo escribir el script')
+    expect(alerta.querySelector('pre')?.textContent).toBe('Permission denied')
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('403: muestra «Se requiere sesión SYSDBA»', async () => {
+    montar({ respaldo: respuesta({ detail: 'Se requiere sesión SYSDBA' }, 403) })
+    await rellenar()
+
+    programar()
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Se requiere sesión SYSDBA')
+  })
+
+  it('backend caído: muestra el aviso de conexión', async () => {
+    montar({ respaldo: new TypeError('Failed to fetch') })
+    await rellenar()
+
+    programar()
+
+    const alerta = await screen.findByRole('alert')
+    expect(alerta.textContent).toContain(MENSAJE_CONEXION)
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('mientras corre muestra el progreso y deshabilita el botón', async () => {
+    let terminar: (r: Respuesta) => void = () => {}
+    fetchFalso = vi.fn(async (url: string, opciones?: { method?: string }) => {
+      if (opciones?.method === 'POST') return new Promise<Respuesta>((r) => (terminar = r))
+      if (url === '/respaldos/full/estado') return respuesta({ archivelog: true })
+      return respuesta(DIRECTORIOS)
+    })
+    vi.stubGlobal('fetch', fetchFalso)
+    render(<RespaldoFull token={TOKEN} />)
+    await rellenar()
+
+    programar()
+
+    await screen.findByText('Respaldando...')
+    expect((screen.getByRole('button', { name: 'Programar' }) as HTMLButtonElement).disabled).toBe(true)
+    terminar(respuesta(EXITO_PROG))
+    await waitFor(() => expect(screen.queryByText('Respaldando...')).toBeNull())
+  })
+
+  it('con el check desmarcado «Respaldar» sigue enviando solo a /respaldos/full', async () => {
+    montar()
+    await rellenar()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Programar respaldo' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Respaldar' }))
+
+    await waitFor(() => expect(llamadasPost('/respaldos/full')).toHaveLength(1))
+    expect(llamadasPost(URL)).toHaveLength(0)
   })
 })
 

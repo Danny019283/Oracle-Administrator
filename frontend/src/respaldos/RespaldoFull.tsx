@@ -21,15 +21,21 @@ type CuerpoDeError = {
   errores?: string[]
   mensaje?: string
   explicacion?: string
-  detail?: string
+  detail?: string | unknown[]
   log?: string
 }
 
 // Los errores de la API traen `mensaje` + `explicacion` (+ `log`), `errores` (422) o `detail`.
+// `detail` como lista es un 422 de pydantic: no se muestra crudo.
 const comoError = (cuerpo: CuerpoDeError): Resultado => ({
   tipo: 'error',
   mensajes:
-    cuerpo.errores ?? [cuerpo.mensaje, cuerpo.explicacion, cuerpo.detail].filter((m): m is string => !!m),
+    cuerpo.errores ??
+    [
+      cuerpo.mensaje,
+      cuerpo.explicacion,
+      Array.isArray(cuerpo.detail) ? 'Los datos de la programación no son válidos' : cuerpo.detail,
+    ].filter((m): m is string => !!m),
   log: cuerpo.log,
 })
 
@@ -45,7 +51,6 @@ export function RespaldoFull({ token }: Props) {
   const [confirmando, setConfirmando] = useState(false)
   const [respaldando, setRespaldando] = useState(false)
   const [programando, setProgramando] = useState(false)
-  // El envío llega en el check 25; aquí solo queda el estado listo.
   const [programacion, setProgramacion] = useState<Programacion>(PROGRAMACION_INICIAL)
 
   useEffect(() => {
@@ -70,7 +75,7 @@ export function RespaldoFull({ token }: Props) {
   }, [token])
 
   // Devuelve el cuerpo de la respuesta correcta, o null si hubo un error ya mostrado en pantalla.
-  const enviar = async (url: string, cuerpo?: object) => {
+  const enviar = async (url: string, cuerpo?: object, alFallar?: (cuerpo: CuerpoDeError) => void) => {
     setResultado(null)
     setErrorConexion(null)
     setRespaldando(true)
@@ -82,7 +87,10 @@ export function RespaldoFull({ token }: Props) {
       })
       if (respuesta.ok) return respuesta.cuerpo
       if (respuesta.status === 403) setSinSysdba(true)
-      else if (respuesta.status !== 401) setResultado(comoError(respuesta.cuerpo))
+      else if (respuesta.status !== 401) {
+        setResultado(comoError(respuesta.cuerpo))
+        alFallar?.(respuesta.cuerpo)
+      }
     } catch (error) {
       if (error instanceof ErrorConexion) setErrorConexion(avisoDeConexion(error))
     } finally {
@@ -100,6 +108,36 @@ export function RespaldoFull({ token }: Props) {
         log: cuerpo.log,
         advertencia: cuerpo.advertencia,
       })
+    }
+  }
+
+  const programar = async () => {
+    const { politica, frecuencia, hora, diaSemana, diaMes, cadaHoras } = programacion
+    const cuerpo = await enviar(
+      '/respaldos/programados',
+      {
+        nombre,
+        directorio,
+        politica,
+        frecuencia,
+        hora: frecuencia === 'HORAS' ? null : hora,
+        dia: frecuencia === 'SEMANAL' ? diaSemana : frecuencia === 'MENSUAL' ? diaMes : null,
+        intervalo_horas: frecuencia === 'HORAS' ? cadaHoras : PROGRAMACION_INICIAL.cadaHoras,
+      },
+      // Un 409 por NOARCHIVELOG deja visible el bloque para activarlo.
+      (error) => {
+        if (error.mensaje?.includes('ARCHIVELOG')) setArchivelog(false)
+      },
+    )
+    if (cuerpo) {
+      setResultado({
+        tipo: 'ok',
+        mensaje: `${cuerpo.mensaje}: ${cuerpo.ruta_script}`,
+        log: '',
+        advertencia: null,
+      })
+      setNombre('')
+      setProgramacion(PROGRAMACION_INICIAL)
     }
   }
 
@@ -190,7 +228,7 @@ export function RespaldoFull({ token }: Props) {
       <button
         type="button"
         className="accion"
-        onClick={programando ? undefined : respaldar}
+        onClick={programando ? programar : respaldar}
         disabled={respaldando || sinSysdba}
       >
         {programando ? 'Programar' : 'Respaldar'}
