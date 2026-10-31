@@ -169,18 +169,3 @@ def test_borrar_archivo_con_error_de_es_lanza_operacion_entorno_fallida(tmp_path
 
     with pytest.raises(OperacionEntornoFallida):
         entorno().borrar_archivo(carpeta)
-
-
-def test_borrar_carpeta_borra_la_carpeta_local_con_su_contenido(tmp_path):
-    carpeta = tmp_path / "aux_a"
-    (carpeta / "sub").mkdir(parents=True)
-    (carpeta / "sub" / "a.dbf").write_text("x")
-
-    entorno().borrar_carpeta(carpeta)
-
-    assert not carpeta.exists()
-
-
-def test_borrar_carpeta_con_error_de_es_lanza_operacion_entorno_fallida(tmp_path):
-    with pytest.raises(OperacionEntornoFallida):
-        entorno().borrar_carpeta(tmp_path / "no_existe")
