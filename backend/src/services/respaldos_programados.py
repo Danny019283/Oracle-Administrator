@@ -1,5 +1,6 @@
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 from datetime import datetime
 from typing import Any
 
@@ -13,10 +14,11 @@ from src.services.politica_respaldo import (
     envoltorio,
     extension_envoltorio,
     script_rman,
+    validar_programacion,
 )
 from src.services.programador_tareas import ProgramadorTareas, nombre_tarea
-from src.services.respaldo import RespaldoFallido
-from src.services.respaldo_full import en_archivelog
+from src.services.respaldo import RespaldoFallido, SolicitudInvalida
+from src.services.respaldo_full import SinArchivelog, en_archivelog
 from src.services.rman_runner import ejecutar_rman
 
 TABLA = "SYSTEM.RESPALDOS_PROGRAMADOS"
@@ -160,6 +162,26 @@ class ProgramacionCreada:
     ruta_rman: str
 
 
+class ProgramacionDuplicada(Exception):
+    def __init__(self):
+        super().__init__("Ya existe una programación con ese nombre")
+
+
+# el envoltorio .sh usa la ruta sin entrecomillar; el .bat sí, así que allí los espacios valen
+_PROHIBIDOS = set("'\"$`;&|<>()*?!%\n\r")
+
+
+def errores_ruta_directorio(ruta: str, tipo_ruta: type) -> list[str]:
+    prohibidos = _PROHIBIDOS | ({" "} if issubclass(tipo_ruta, PurePosixPath) else set())
+    malos = sorted({c for c in ruta if c in prohibidos})
+    if not malos:
+        return []
+    return [
+        "La ruta del directorio contiene caracteres no admitidos para un respaldo programado: "
+        + ", ".join(repr(c) for c in malos)
+    ]
+
+
 def _ruta_directorio(directorios: Sequence[Directorio], prog: Programacion, entorno: EntornoOracle):
     # la ruta sale siempre de all_directories, nunca del cliente (RN-5)
     for d in directorios:
@@ -185,9 +207,18 @@ def crear(
     sid: str,
     etiqueta_entorno: str,
 ) -> ProgramacionCreada:
+    errores = validar_programacion(prog, [d.nombre for d in directorios])
+    if errores:
+        raise SolicitudInvalida(errores)
     destino = _ruta_directorio(directorios, prog, entorno)
+    errores = errores_ruta_directorio(str(destino), entorno.tipo_ruta)
+    if errores:
+        raise SolicitudInvalida(errores)
+    if not en_archivelog(consulta):
+        raise SinArchivelog()
+    if prog.nombre.lower() in {p.nombre.lower() for p in listar(consulta)}:
+        raise ProgramacionDuplicada()
     carpeta = destino / "scripts_programados"
-    en_archivelog(consulta)
     asegurar_tabla(sentencia)
     aplicar_politica_global(entorno, sid)
 

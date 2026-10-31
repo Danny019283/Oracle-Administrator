@@ -64,6 +64,8 @@ class Consulta:
         if "log_mode" in sql:
             self.registro.eventos.append("archivelog")
             return [("ARCHIVELOG",)]
+        if "ORDER BY ID" in sql:
+            return []  # listado previo (nombre repetido): aún no hay programaciones
         return [(7,)]
 
 
